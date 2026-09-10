@@ -349,10 +349,10 @@ export default function PatientCareRecordScreen() {
             transported_to: pcr.transported_to || prev.transported_to,
             received_by: pcr.received_by || prev.received_by,
             
-            patient_signature: pcr.patient_signature || prev.patient_signature,
+            patient_signature: pcr.patient_signature || pcr.waiver_signature || prev.patient_signature,
             witness_name: pcr.witness_name || prev.witness_name,
             witness_signature: pcr.witness_signature || prev.witness_signature,
-            waiver_signature: pcr.waiver_signature || prev.waiver_signature,
+            waiver_signature: pcr.waiver_signature || pcr.patient_signature || prev.waiver_signature,
           } : {})
         }));
       }
@@ -562,10 +562,10 @@ export default function PatientCareRecordScreen() {
         transported: formData.transported,
         transported_to: formData.transported_to,
         received_by: formData.received_by,
-        patient_signature: formData.patient_signature,
+        patient_signature: formData.patient_signature || formData.waiver_signature,
         witness_name: formData.witness_name,
         witness_signature: formData.witness_signature,
-        waiver_signature: formData.waiver_signature,
+        waiver_signature: formData.waiver_signature || formData.patient_signature,
       };
       await updatePcr(activeDispatch.id, payload);
       return true;
@@ -1232,11 +1232,19 @@ export default function PatientCareRecordScreen() {
           </View>
           
           {formData.waiver_signature ? (
-            <View style={{ backgroundColor: '#f0fdf4', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#bbf7d0' }}>
-              <Check size={20} color="#16a34a" />
-              <Text style={{ fontSize: 16, fontWeight: '700', color: '#16a34a', marginLeft: 8, flex: 1 }}>Waiver Signed</Text>
-              <TouchableOpacity onPress={() => setShowWaiverModal(true)} style={{ backgroundColor: '#dcfce7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}>
-                <Text style={{ color: '#15803d', fontWeight: '700', fontSize: 12 }}>RE-SIGN</Text>
+            <View style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef3c7' : '#f0fdf4', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fde68a' : '#bbf7d0' }}>
+              <Check size={20} color={formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#d97706' : '#16a34a'} />
+              <Text style={{ fontSize: 15, fontWeight: '700', color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#b45309' : '#16a34a', marginLeft: 8, flex: 1 }}>
+                {formData.waiver_signature === 'UNABLE_TO_SIGN' ? 'Marked Unable to Sign (Unconscious)' : 'Waiver Signed'}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => {
+                  setFormData(prev => ({ ...prev, waiver_signature: '', patient_signature: '' }));
+                  setShowWaiverModal(true);
+                }} 
+                style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef9c3' : '#dcfce7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+              >
+                <Text style={{ color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#a16207' : '#15803d', fontWeight: '700', fontSize: 12 }}>RE-SIGN</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -1319,8 +1327,10 @@ export default function PatientCareRecordScreen() {
               <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Signatures Attached</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
                 {formData.waiver_signature ? (
-                  <View style={{ backgroundColor: '#ecfdf5', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#a7f3d0' }}>
-                    <Text style={{ color: '#059669', fontWeight: '800', fontSize: 13 }}>✓ WAIVER</Text>
+                  <View style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef3c7' : '#ecfdf5', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fde68a' : '#a7f3d0' }}>
+                    <Text style={{ color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#b45309' : '#059669', fontWeight: '800', fontSize: 13 }}>
+                      {formData.waiver_signature === 'UNABLE_TO_SIGN' ? '⚠ UNABLE TO SIGN' : '✓ WAIVER'}
+                    </Text>
                   </View>
                 ) : null}
                 {formData.witness_signature ? (
@@ -1477,11 +1487,13 @@ export default function PatientCareRecordScreen() {
               <TouchableOpacity 
                 style={[styles.checkbox, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxActive, { marginBottom: 16 }]} 
                 onPress={() => {
-                  if (formData.waiver_signature === 'UNABLE_TO_SIGN') {
-                    setFormData({...formData, waiver_signature: ''});
-                  } else {
-                    setFormData({...formData, waiver_signature: 'UNABLE_TO_SIGN'});
-                  }
+                  setFormData(prev => {
+                    if (prev.waiver_signature === 'UNABLE_TO_SIGN') {
+                      return { ...prev, waiver_signature: '', patient_signature: '' };
+                    } else {
+                      return { ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' };
+                    }
+                  });
                 }}
               >
                 <Text style={[styles.checkboxText, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxTextActive]}>
@@ -1492,7 +1504,10 @@ export default function PatientCareRecordScreen() {
               {formData.waiver_signature === 'UNABLE_TO_SIGN' ? (
                 <TouchableOpacity 
                   style={[styles.signButton, { marginTop: 10 }]} 
-                  onPress={() => setShowWaiverModal(false)}
+                  onPress={() => {
+                    setFormData(prev => ({ ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' }));
+                    setShowWaiverModal(false);
+                  }}
                 >
                   <Text style={styles.signButtonText}>Confirm & Close</Text>
                 </TouchableOpacity>
@@ -1500,7 +1515,7 @@ export default function PatientCareRecordScreen() {
                 <SignaturePad 
                   descriptionText="Please sign below:"
                   onOK={(sig) => { 
-                    setFormData({...formData, waiver_signature: sig}); 
+                    setFormData(prev => ({ ...prev, waiver_signature: sig, patient_signature: sig })); 
                     setShowWaiverModal(false); 
                   }} 
                   onEmpty={() => {}} 
@@ -1510,11 +1525,6 @@ export default function PatientCareRecordScreen() {
               <TouchableOpacity 
                 style={styles.modalCancelBtn}
                 onPress={() => {
-                  // If they cancel and it was marked unable to sign, revert it to empty
-                  // (if they just toggled it and then cancelled)
-                  if (formData.waiver_signature === 'UNABLE_TO_SIGN') {
-                     setFormData({...formData, waiver_signature: ''});
-                  }
                   setShowWaiverModal(false);
                 }}
               >
