@@ -40,12 +40,10 @@ export const MapView = forwardRef<MapboxGL.Camera, MapViewProps>(({
           ref={ref}
           defaultSettings={{
             centerCoordinate: defaultCenter,
-            zoomLevel: 14,
+            zoomLevel: 15,
           }}
-          zoomLevel={14}
-          centerCoordinate={defaultCenter}
           animationMode="flyTo"
-          animationDuration={2000}
+          animationDuration={1500}
         />
         {showsUserLocation && (
           <MapboxGL.UserLocation visible={true} showsUserHeadingIndicator={true} />

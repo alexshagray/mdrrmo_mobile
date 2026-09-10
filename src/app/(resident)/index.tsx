@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '@/shared/components';
@@ -10,6 +10,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { MapPin, Bell, FileSearch } from 'lucide-react-native';
 import { useAuth } from '@/shared/hooks';
 import { getMyReports } from '@/shared/api/incidents';
+import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
 
 // ─── Quick-action button ─────────────────────────────────────────────────────
 function QuickAction({
@@ -105,41 +106,46 @@ function SectionHeader({ title, actionLabel, onAction }: { title: string; action
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { residentRefreshTrigger } = useResidentAlert();
   const userName = user?.first_name || user?.name || 'Resident';
 
   const [recentReport, setRecentReport] = useState<any>(null);
   const [loadingReports, setLoadingReports] = useState(true);
 
+  const fetchIncidents = useCallback(async () => {
+    try {
+      setLoadingReports(true);
+      const res = await getMyReports();
+      const incidents = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
+      
+      if (incidents.length > 0) {
+        const latest = incidents[0];
+        setRecentReport({
+          id: `RPT-${latest.id}`,
+          type: latest.incident_type?.name || 'Emergency',
+          status: latest.incident_status,
+          time: new Date(latest.created_at).toLocaleDateString() || 'Recently',
+          location: latest.location || 'Unknown location',
+        });
+      } else {
+        setRecentReport(null);
+      }
+    } catch (e) {
+      console.error("Failed to fetch reports", e);
+    } finally {
+      setLoadingReports(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      const fetchIncidents = async () => {
-        try {
-          setLoadingReports(true);
-          const res = await getMyReports();
-          const incidents = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
-          
-          if (incidents.length > 0) {
-            const latest = incidents[0];
-            setRecentReport({
-              id: `RPT-${latest.id}`,
-              type: latest.incident_type?.name || 'Emergency',
-              status: latest.incident_status,
-              time: new Date(latest.created_at).toLocaleDateString() || 'Recently',
-              location: latest.location || 'Unknown location',
-            });
-          } else {
-            setRecentReport(null);
-          }
-        } catch (e) {
-          console.error("Failed to fetch reports", e);
-        } finally {
-          setLoadingReports(false);
-        }
-      };
-
       fetchIncidents();
-    }, [])
+    }, [fetchIncidents])
   );
+
+  useEffect(() => {
+    fetchIncidents();
+  }, [residentRefreshTrigger, fetchIncidents]);
 
   return (
     <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>

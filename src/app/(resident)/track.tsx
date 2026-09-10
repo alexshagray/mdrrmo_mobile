@@ -3,10 +3,12 @@ import { View, Text, ActivityIndicator, TouchableOpacity, Animated, Alert, Linki
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
-import { FloatingPanel, MapView, StatusChip, Card, Avatar, LocationPermissionModal } from '@/shared/components';
+import { FloatingPanel, MapView, StatusChip, Card, Avatar, LocationPermissionModal, IncidentMarker, AmbulanceMarker } from '@/shared/components';
 import { TimelineCard } from '@/responder/components/common/TimelineCard';
 import { Clock, MapPin, Activity, Phone, ShieldCheck } from 'lucide-react-native';
 import { getMyReports, callResponderApi } from '@/shared/api/incidents';
+import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
+import { useRealtime } from '@/shared/hooks';
 
 const AllClearState = () => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -82,28 +84,83 @@ export default function TrackScreen() {
   const [activeIncident, setActiveIncident] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
+  const { residentRefreshTrigger } = useResidentAlert();
+  const { echo } = useRealtime() as { echo: any };
+
+  const fetchIncidents = useCallback(async () => {
+    try {
+      const res = await getMyReports();
+      const incidents = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
+      const active = incidents.find((inc: any) => 
+        ['pending', 'verified', 'assigned', 'responding'].includes(inc.incident_status)
+      );
+      setActiveIncident(active || null);
+    } catch (e) {
+      console.error("Failed to fetch reports", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      const fetchIncidents = async () => {
-        setIsLoading(true);
-        try {
-          const res = await getMyReports();
-          const incidents = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
-          const active = incidents.find((inc: any) => 
-            ['pending', 'verified', 'assigned', 'responding'].includes(inc.incident_status)
-          );
-          setActiveIncident(active || null);
-        } catch (e) {
-          console.error("Failed to fetch reports", e);
-        } finally {
-          setIsLoading(false);
-        }
-      };
-
+      setIsLoading(true);
       fetchIncidents();
-    }, [])
+    }, [fetchIncidents])
   );
+
+  // Auto-refresh when WebSocket alerts arrive
+  useEffect(() => {
+    fetchIncidents();
+  }, [residentRefreshTrigger, fetchIncidents]);
+
+  // Listen directly on the active incident channel for immediate real-time state changes
+  useEffect(() => {
+    if (!echo || !activeIncident?.id) return;
+
+    const channel = echo.private(`incident.${activeIncident.id}`);
+
+    const handleStatusUpdate = (e: any) => {
+      console.log('TrackScreen received DispatchStatusUpdated:', e);
+      const status = e.dispatch?.dispatch_status;
+      if (status === 'cancelled') {
+        setActiveIncident(null);
+        Alert.alert(
+          'Mission Cancelled',
+          'The emergency response dispatch for your report was cancelled by the dispatcher.'
+        );
+      } else if (status === 'completed') {
+        setActiveIncident(null);
+      } else {
+        fetchIncidents();
+      }
+    };
+
+    const handleDispatchCreatedOrAccepted = (e: any) => {
+      console.log('TrackScreen received DispatchCreated/Accepted:', e);
+      fetchIncidents();
+    };
+
+    channel.listen('DispatchStatusUpdated', handleStatusUpdate);
+    channel.listen('.DispatchStatusUpdated', handleStatusUpdate);
+    channel.listen('DispatchCompleted', handleStatusUpdate);
+    channel.listen('.DispatchCompleted', handleStatusUpdate);
+    channel.listen('DispatchCreated', handleDispatchCreatedOrAccepted);
+    channel.listen('.DispatchCreated', handleDispatchCreatedOrAccepted);
+    channel.listen('DispatchAccepted', handleDispatchCreatedOrAccepted);
+    channel.listen('.DispatchAccepted', handleDispatchCreatedOrAccepted);
+
+    return () => {
+      channel.stopListening('DispatchStatusUpdated');
+      channel.stopListening('.DispatchStatusUpdated');
+      channel.stopListening('DispatchCompleted');
+      channel.stopListening('.DispatchCompleted');
+      channel.stopListening('DispatchCreated');
+      channel.stopListening('.DispatchCreated');
+      channel.stopListening('DispatchAccepted');
+      channel.stopListening('.DispatchAccepted');
+    };
+  }, [echo, activeIncident?.id, fetchIncidents]);
 
   if (isLoading) {
     return (
@@ -166,9 +223,35 @@ export default function TrackScreen() {
 
   const isResponding = ['assigned', 'responding'].includes(activeIncident.incident_status);
 
+  const incidentLat = parseFloat(activeIncident.incident_latitude);
+  const incidentLng = parseFloat(activeIncident.incident_longitude);
+  const hasIncidentCoords = !isNaN(incidentLat) && !isNaN(incidentLng) && incidentLat !== 0 && incidentLng !== 0;
+
+  const activeDispatch = activeIncident?.active_dispatch;
+  const ambulanceLat = activeDispatch?.last_latitude ? parseFloat(activeDispatch.last_latitude) : null;
+  const ambulanceLng = activeDispatch?.last_longitude ? parseFloat(activeDispatch.last_longitude) : null;
+  const hasAmbulanceCoords = ambulanceLat !== null && ambulanceLng !== null && !isNaN(ambulanceLat) && !isNaN(ambulanceLng);
+
   return (
     <View className="flex-1 bg-transparent">
-      <MapView className="absolute inset-0" />
+      <MapView 
+        className="absolute inset-0"
+        initialRegion={hasIncidentCoords ? { latitude: incidentLat, longitude: incidentLng } : undefined}
+      >
+        {hasIncidentCoords && (
+          <IncidentMarker
+            id={`incident-${activeIncident.id}`}
+            coordinate={{ latitude: incidentLat, longitude: incidentLng }}
+            title={activeIncident.incident_type?.name || 'Emergency Location'}
+          />
+        )}
+        {hasAmbulanceCoords && (
+          <AmbulanceMarker
+            coordinate={{ latitude: ambulanceLat!, longitude: ambulanceLng! }}
+            title={activeDispatch?.ambulance?.vehicle_name || 'MDRRMO Ambulance'}
+          />
+        )}
+      </MapView>
       
       <SafeAreaView className="flex-1 justify-between" edges={['top']}>
         {/* Top Floating Status */}
@@ -194,59 +277,71 @@ export default function TrackScreen() {
         </View>
 
         {/* Bottom Floating Panel - Only show if assigned or responding */}
-        {isResponding && (
-          <FloatingPanel className="h-[60%] mb-24 p-0 overflow-hidden bg-white border border-slate-100 rounded-t-[36px] shadow-2xl">
-            {/* Header: Unit Info & ETA */}
-            <View className="px-6 py-5 border-b border-slate-100 flex-row items-center justify-between">
-              <View className="flex-row items-center flex-1">
-                <View className="w-12 h-12 bg-emerald-50 rounded-2xl justify-center items-center mr-4 border border-emerald-100/50">
-                  <Activity size={22} color="#059669" strokeWidth={2.25} />
-                </View>
-                <View>
-                  <Text className="text-slate-900 text-xl font-black tracking-tight">Unit Alpha</Text>
-                  <Text className="text-slate-500 text-sm font-medium mt-0.5">Ambulance 1</Text>
-                </View>
-              </View>
-              
-              <View className="bg-amber-100 px-3 py-2 rounded-xl border border-amber-200/50 flex-row items-center shadow-sm">
-                <Clock size={14} color="#B45309" strokeWidth={2.25} />
-                <Text className="text-amber-700 font-black text-xs ml-1.5 tracking-wider uppercase">
-                  5 Min ETA
-                </Text>
-              </View>
-            </View>
+        {isResponding && (() => {
+          const activeDispatch = activeIncident?.active_dispatch;
+          const unitName = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
+          const ambulanceDesc = activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number || 'Emergency Vehicle';
+          const leaderName = activeDispatch?.team_leader 
+            ? `${activeDispatch.team_leader.first_name} ${activeDispatch.team_leader.last_name}`
+            : (activeDispatch?.driver ? `${activeDispatch.driver.first_name} ${activeDispatch.driver.last_name}` : 'MDRRMO Crew');
+          const leaderRole = activeDispatch?.team_leader ? 'Team Leader' : 'Crew Responder';
+          const dispatchStatus = activeDispatch?.dispatch_status || activeIncident?.incident_status;
+          const etaText = dispatchStatus === 'arrived_on_scene' ? 'On Scene' : (dispatchStatus === 'en_route' ? 'En Route' : 'Assigned');
 
-            {/* Responding Crew */}
-            <View className="px-6 py-5 border-b border-slate-100">
-              <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-4">
-                Responding Crew
-              </Text>
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center">
-                  <Avatar name="John Doe" size="md" />
-                  <View className="ml-3.5">
-                    <Text className="text-slate-900 text-base font-bold tracking-tight">John Doe</Text>
-                    <Text className="text-slate-500 text-xs font-medium mt-0.5">Team Leader</Text>
+          return (
+            <FloatingPanel className="h-[60%] mb-24 p-0 overflow-hidden bg-white border border-slate-100 rounded-t-[36px] shadow-2xl">
+              {/* Header: Unit Info & ETA */}
+              <View className="px-6 py-5 border-b border-slate-100 flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-12 h-12 bg-emerald-50 rounded-2xl justify-center items-center mr-4 border border-emerald-100/50">
+                    <Activity size={22} color="#059669" strokeWidth={2.25} />
+                  </View>
+                  <View>
+                    <Text className="text-slate-900 text-xl font-black tracking-tight">{unitName}</Text>
+                    <Text className="text-slate-500 text-sm font-medium mt-0.5">{ambulanceDesc}</Text>
                   </View>
                 </View>
-                <TouchableOpacity 
-                  className="w-10 h-10 bg-slate-50 rounded-full justify-center items-center border border-slate-200/60 shadow-sm active:bg-slate-100"
-                  onPress={handleCallResponder}
-                >
-                   <Phone size={18} color="#64748B" strokeWidth={2.25} />
-                </TouchableOpacity>
+                
+                <View className="bg-amber-100 px-3 py-2 rounded-xl border border-amber-200/50 flex-row items-center shadow-sm">
+                  <Clock size={14} color="#B45309" strokeWidth={2.25} />
+                  <Text className="text-amber-700 font-black text-xs ml-1.5 tracking-wider uppercase">
+                    {etaText}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            {/* Timeline */}
-            <View className="p-6 bg-slate-50/50 flex-1">
-               <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-4">
-                Incident Timeline
-               </Text>
-               <TimelineCard />
-            </View>
-          </FloatingPanel>
-        )}
+              {/* Responding Crew */}
+              <View className="px-6 py-5 border-b border-slate-100">
+                <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-4">
+                  Responding Crew
+                </Text>
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center">
+                    <Avatar name={leaderName} size="md" />
+                    <View className="ml-3.5">
+                      <Text className="text-slate-900 text-base font-bold tracking-tight">{leaderName}</Text>
+                      <Text className="text-slate-500 text-xs font-medium mt-0.5">{leaderRole}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity 
+                    className="w-10 h-10 bg-slate-50 rounded-full justify-center items-center border border-slate-200/60 shadow-sm active:bg-slate-100"
+                    onPress={handleCallResponder}
+                  >
+                     <Phone size={18} color="#64748B" strokeWidth={2.25} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Timeline */}
+              <View className="p-6 bg-slate-50/50 flex-1">
+                 <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-4">
+                  Incident Timeline
+                 </Text>
+                 <TimelineCard />
+              </View>
+            </FloatingPanel>
+          );
+        })()}
       </SafeAreaView>
 
       <LocationPermissionModal 

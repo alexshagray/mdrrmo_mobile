@@ -5,7 +5,9 @@ import { useRouter as useExpoRouter, useLocalSearchParams as useExpoSearchParams
 import * as Location from 'expo-location';
 import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
-import { ArrowLeft, Navigation, X, Crosshair, AlertTriangle, Layers, Map as MapIcon } from 'lucide-react-native';
+import { ArrowLeft, Navigation, X, Crosshair, AlertTriangle, Layers, Map as MapIcon, Ambulance, CheckCircle } from 'lucide-react-native';
+import { useLiveDispatchTracking } from '@/shared/hooks';
+import { updateDispatchStatus } from '@/shared/api/dispatches';
 
 // Helper: Haversine distance between two coords in meters
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -46,6 +48,34 @@ export default function NavigationScreen() {
   const destination = {
     latitude: parseFloat(Array.isArray(params.lat) ? params.lat[0] : params.lat as string) || 8.5138,
     longitude: parseFloat(Array.isArray(params.lng) ? params.lng[0] : params.lng as string) || 124.5775,
+  };
+
+  const dispatchId = Array.isArray(params.dispatchId) ? params.dispatchId[0] : params.dispatchId;
+  const [trackingStatus, setTrackingStatus] = useState('en_route');
+  useLiveDispatchTracking(dispatchId, trackingStatus);
+
+  const [isArriving, setIsArriving] = useState(false);
+
+  const handleArrived = async () => {
+    if (isArriving) return;
+    setIsArriving(true);
+    try {
+      if (dispatchId) {
+        await updateDispatchStatus(dispatchId, 'arrived_on_scene');
+      }
+      // Stop en-route tracking and route display
+      setTrackingStatus('arrived_on_scene');
+      setRouteCoords([]);
+      setRouteInfo(null);
+
+      // Automatically return to Home/Dashboard
+      router.replace('/(responder)');
+    } catch (e: any) {
+      console.error('Error updating status to arrived_on_scene:', e);
+      router.replace('/(responder)');
+    } finally {
+      setIsArriving(false);
+    }
   };
 
   const [location, setLocation] = useState<Location.LocationObjectCoords | {latitude: number; longitude: number; heading: number} | null>(null);
@@ -305,10 +335,19 @@ export default function NavigationScreen() {
             )}
 
             <TouchableOpacity 
-              onPress={() => router.back()}
-              className="w-full bg-red-500/10 py-5 rounded-2xl border border-red-500/30 items-center justify-center"
+              onPress={handleArrived}
+              disabled={isArriving}
+              activeOpacity={0.85}
+              style={styles.btnArrived}
             >
-              <Text className="text-red-400 font-black text-sm tracking-[0.2em]">END NAVIGATION</Text>
+              {isArriving ? (
+                <ActivityIndicator color="#ffffff" size="small" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ambulance size={22} color="#ffffff" style={{ marginRight: 10 }} />
+                  <Text style={styles.btnArrivedText}>ARRIVED ON SCENE</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -316,3 +355,25 @@ export default function NavigationScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  btnArrived: {
+    width: '100%',
+    backgroundColor: '#059669',
+    paddingVertical: 18,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  btnArrivedText: {
+    color: '#ffffff',
+    fontWeight: '900',
+    fontSize: 16,
+    letterSpacing: 1.2,
+  },
+});

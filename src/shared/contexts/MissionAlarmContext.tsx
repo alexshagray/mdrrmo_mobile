@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Vibration } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, X } from 'lucide-react-native';
+import { AlertTriangle, X, MapPin, Activity } from 'lucide-react-native';
 import { updatePushTokenApi } from '../api/auth';
 import { useAuth } from '../auth/authContext';
 import { useRealtime } from '../hooks/useRealtime';
@@ -21,17 +21,20 @@ Notifications.setNotificationHandler({
 interface MissionAlarmContextType {
   incomingMission: any;
   clearMission: () => void;
+  missionRefreshTrigger: number;
 }
 
 const MissionAlarmContext = createContext<MissionAlarmContextType>({
   incomingMission: null,
   clearMission: () => {},
+  missionRefreshTrigger: 0,
 });
 
 const { width, height } = Dimensions.get('window');
 
 export function MissionAlarmProvider({ children }: { children: React.ReactNode }) {
   const [incomingMission, setIncomingMission] = useState<any>(null);
+  const [missionRefreshTrigger, setMissionRefreshTrigger] = useState<number>(0);
   const [sound, setSound] = useState<AudioPlayer | null>(null);
   const { user, isAuthenticated } = useAuth();
   const { echo } = useRealtime();
@@ -82,6 +85,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const data = notification.request.content.data;
       if (data?.type === 'new_mission' && data?.dispatch_id) {
         setIncomingMission(data);
+        setMissionRefreshTrigger(prev => prev + 1);
       }
     });
 
@@ -89,6 +93,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const data = response.notification.request.content.data;
       if (data?.type === 'new_mission' && data?.dispatch_id) {
         setIncomingMission(data);
+        setMissionRefreshTrigger(prev => prev + 1);
       }
     });
 
@@ -103,45 +108,108 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     if (!echo || !user?.id) return;
 
     const channel = (echo as any).private(`responder.${user.id}`);
-    channel.listen('DispatchCreated', (e: any) => {
-       console.log('DispatchCreated received via WS:', e);
-       setIncomingMission({ dispatch_id: e.dispatch?.id, type: 'new_mission' });
-    });
+
+    const handleMissionEvent = (e: any) => {
+      console.log('Realtime dispatch event received on responder channel:', e);
+      const dispatchId = e.dispatch?.id || e.id;
+      setIncomingMission({
+        dispatch_id: dispatchId,
+        dispatch: e.dispatch,
+        type: 'new_mission',
+      });
+      setMissionRefreshTrigger(prev => prev + 1);
+    };
+
+    const handleStatusEvent = (e: any) => {
+      console.log('Realtime dispatch status updated:', e);
+      setMissionRefreshTrigger(prev => prev + 1);
+    };
+
+    channel.listen('DispatchCreated', handleMissionEvent);
+    channel.listen('.DispatchCreated', handleMissionEvent);
+    channel.listen('DispatchStatusUpdated', handleStatusEvent);
+    channel.listen('.DispatchStatusUpdated', handleStatusEvent);
 
     return () => {
       channel.stopListening('DispatchCreated');
+      channel.stopListening('.DispatchCreated');
+      channel.stopListening('DispatchStatusUpdated');
+      channel.stopListening('.DispatchStatusUpdated');
     };
   }, [echo, user]);
 
-  // Audio Playback
+  // Audio & Haptic Siren Playback
   useEffect(() => {
+    let activePlayer: AudioPlayer | null = null;
+    let isCancelled = false;
+
     async function playAlarm() {
-      if (incomingMission && !sound) {
+      if (incomingMission) {
         try {
+          // Vibrate phone continuously in emergency pulse pattern
+          Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
+
           await setAudioModeAsync({
             playsInSilentMode: true,
             shouldPlayInBackground: true,
           });
-          const player = createAudioPlayer(
-            require('../../../assets/sounds/alarm.mp3'),
-          );
-          player.loop = true;
-          player.volume = 1.0;
-          player.play();
-          setSound(player);
+
+          if (!isCancelled) {
+            const player = createAudioPlayer(
+              require('../../../assets/sounds/alarm.mp3'),
+            );
+            player.loop = true;
+            player.volume = 1.0;
+            player.play();
+            activePlayer = player;
+            setSound(player);
+          }
         } catch (e) {
           console.log('Error playing alarm:', e);
         }
-      } else if (!incomingMission && sound) {
-        sound.pause();
-        sound.release();
-        setSound(null);
+      } else {
+        Vibration.cancel();
+        if (sound) {
+          try {
+            sound.pause();
+            if (typeof sound.remove === 'function') {
+              sound.remove();
+            }
+          } catch (e) {
+            console.log('Error stopping sound:', e);
+          }
+          setSound(null);
+        }
       }
     }
+
     playAlarm();
+
+    return () => {
+      isCancelled = true;
+      Vibration.cancel();
+      if (activePlayer) {
+        try {
+          activePlayer.pause();
+          if (typeof activePlayer.remove === 'function') {
+            activePlayer.remove();
+          }
+        } catch (e) {}
+      }
+    };
   }, [incomingMission]);
 
   const clearMission = () => {
+    Vibration.cancel();
+    if (sound) {
+      try {
+        sound.pause();
+        if (typeof sound.remove === 'function') {
+          sound.remove();
+        }
+      } catch (e) {}
+      setSound(null);
+    }
     setIncomingMission(null);
   };
 
@@ -150,20 +218,43 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     router.push('/(responder)/dispatch');
   };
 
+  const dispatchInfo = incomingMission?.dispatch;
+  const incidentLocation = dispatchInfo?.incident?.location || dispatchInfo?.incident?.barangay || 'Emergency Location';
+  const incidentType = dispatchInfo?.incident?.incident_type?.name || 'Emergency Dispatch';
+
   return (
-    <MissionAlarmContext.Provider value={{ incomingMission, clearMission }}>
+    <MissionAlarmContext.Provider value={{ incomingMission, clearMission, missionRefreshTrigger }}>
       {children}
       {incomingMission && (
         <View style={styles.overlay}>
           <View style={styles.modalContainer}>
+            <TouchableOpacity style={styles.closeBtn} onPress={clearMission}>
+              <X size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
             <View style={styles.iconContainer}>
               <AlertTriangle size={48} color="#EF4444" />
             </View>
             <Text style={styles.title}>NEW MISSION ASSIGNED</Text>
             <Text style={styles.subtitle}>You have been assigned to a new emergency dispatch.</Text>
+
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <Activity size={16} color="#EF4444" />
+                <Text style={styles.infoTextBold}>{incidentType}</Text>
+              </View>
+              <View style={[styles.infoRow, { marginTop: 6 }]}>
+                <MapPin size={16} color="#64748B" />
+                <Text style={styles.infoText} numberOfLines={2}>{incidentLocation}</Text>
+              </View>
+            </View>
             
             <TouchableOpacity style={styles.button} onPress={handleOpenMission}>
               <Text style={styles.buttonText}>OPEN MISSION DETAILS</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.dismissBtn} onPress={clearMission}>
+              <Text style={styles.dismissText}>Silence / Dismiss</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -178,7 +269,7 @@ const styles = StyleSheet.create({
   overlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(220, 38, 38, 0.95)',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     zIndex: 9999,
     justifyContent: 'center',
     alignItems: 'center',
@@ -186,38 +277,75 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: 'white',
-    padding: 30,
-    borderRadius: 24,
-    width: width * 0.85,
+    padding: 24,
+    borderRadius: 28,
+    width: width * 0.88,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 20,
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 24,
+    position: 'relative',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: '#FEE2E2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+    marginTop: 8,
   },
   title: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#1E293B',
-    marginBottom: 10,
+    color: '#0F172A',
+    marginBottom: 8,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 22,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  infoCard: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoTextBold: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginLeft: 8,
+    flex: 1,
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#475569',
+    marginLeft: 8,
+    flex: 1,
   },
   button: {
     backgroundColor: '#EF4444',
@@ -226,10 +354,25 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     alignItems: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   buttonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  dismissBtn: {
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  dismissText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8',
   },
 });

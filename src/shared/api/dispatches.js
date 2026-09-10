@@ -33,6 +33,18 @@ export const updateDispatchStatus = async (dispatchId, status, coords = null) =>
   return response.data;
 };
 
+export const updateDispatchLocation = async (dispatchId, { latitude, longitude, heading = null, accuracy = null, timestamp = null }) => {
+  const payload = {
+    latitude,
+    longitude,
+    heading,
+    accuracy,
+    timestamp: timestamp || new Date().toISOString()
+  };
+  const response = await apiClient.post(`/responder/dispatches/${dispatchId}/location`, payload);
+  return response.data;
+};
+
 export const updatePcr = async (dispatchId, pcrData) => {
   const response = await apiClient.post(`/responder/dispatches/${dispatchId}/pcr`, pcrData);
   return response.data;

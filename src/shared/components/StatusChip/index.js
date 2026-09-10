@@ -17,10 +17,14 @@ export function StatusChip({ status, type = 'dispatch', className = '' }) {
       case 'assigned':
         config = { bg: 'bg-blue-100', text: 'text-blue-800', icon: <Clock size={12} color="#1E40AF" />, label: 'Assigned' };
         break;
+      case 'accepted':
+        config = { bg: 'bg-indigo-100', text: 'text-indigo-800', icon: <CheckCircle size={12} color="#3730A3" />, label: 'Accepted' };
+        break;
       case 'en_route':
         config = { bg: 'bg-amber-100', text: 'text-amber-800', icon: <AlertIcon size={12} color="#92400E" />, label: 'En Route' };
         break;
       case 'arrived':
+      case 'arrived_on_scene':
         config = { bg: 'bg-green-100', text: 'text-green-800', icon: <CheckCircle size={12} color="#166534" />, label: 'On Scene' };
         break;
       case 'completed':

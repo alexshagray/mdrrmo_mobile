@@ -62,7 +62,15 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
         activeOpacity={0.8}
         className="bg-blue-600 py-4 px-6 rounded-2xl flex-row items-center justify-center border border-blue-500/50 shadow-sm shadow-blue-500/30"
       >
-        <Text className="text-blue-50 font-black tracking-widest text-xs mr-2">VIEW MISSION DETAILS</Text>
+        <Text className="text-blue-50 font-black tracking-widest text-xs mr-2">
+          {data.status === 'assigned'
+            ? 'REVIEW & ACCEPT'
+            : data.status === 'accepted' || data.status === 'en_route'
+            ? 'OPEN MAP & NAVIGATE'
+            : data.status === 'arrived_on_scene'
+            ? 'CREATE PATIENT CARE RECORD'
+            : 'VIEW MISSION DETAILS'}
+        </Text>
         <ArrowRight size={16} color="#EFF6FF" />
       </TouchableOpacity>
     </View>

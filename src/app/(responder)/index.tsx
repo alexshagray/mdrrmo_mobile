@@ -10,10 +10,12 @@ import { DispatchCard } from '@/responder/components/cards/DispatchCard';
 import { getActiveDispatches, acceptDispatch } from '@/shared/api/dispatches';
 import { getCrewMembers, updateDutyStatus } from '@/shared/api/crew';
 import { useAuth } from '@/shared/auth/authContext';
+import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { user, isOnDuty, toggleDutyStatus } = useAuth();
+  const { missionRefreshTrigger } = useMissionAlarm();
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [crewData, setCrewData] = useState<any>(null);
@@ -62,6 +64,12 @@ export default function DashboardScreen() {
       fetchCrew();
     }, [])
   );
+
+  // Auto-refresh when real-time mission assignment or status change arrives via WebSockets
+  useEffect(() => {
+    fetchDispatches();
+    fetchCrew();
+  }, [missionRefreshTrigger]);
 
   const onRefresh = async () => {
     setRefreshing(true);

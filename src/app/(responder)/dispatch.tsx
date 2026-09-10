@@ -1,19 +1,21 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   View, Text, TouchableOpacity, Alert, Modal, ActivityIndicator, 
-  Animated, PanResponder, Dimensions, ScrollView, StyleSheet, Platform 
+  Animated, PanResponder, Dimensions, ScrollView, StyleSheet, Platform,
+  Linking 
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
 import * as Location from 'expo-location';
-import { Button, StatusChip } from '@/shared/components';
-import { ArrowLeft, Navigation, AlertTriangle, MapPin, Clock, User, Phone, Ambulance, FileText } from 'lucide-react-native';
+import { StatusChip } from '@/shared/components';
+import { ArrowLeft, Navigation, AlertTriangle, MapPin, Clock, User, Phone, PhoneCall, Ambulance, FileText, Crosshair, CheckCircle } from 'lucide-react-native';
 
 import { getActiveDispatches, acceptDispatch, updateDispatchStatus } from '@/shared/api/dispatches';
-import { useGpsStatusTransition, useRealtime } from '@/shared/hooks';
+import { useGpsStatusTransition, useLiveDispatchTracking, useRealtime } from '@/shared/hooks';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
+import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // Sizes for the draggable panel
@@ -141,26 +143,34 @@ export default function DispatchScreen() {
     }
   }, [dispatch, isLoading]);
 
+  const { missionRefreshTrigger } = useMissionAlarm();
+
+  const fetchDispatch = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getActiveDispatches();
+      if (data.data && data.data.length > 0) {
+         setDispatch(data.data[0]);
+      } else {
+         setDispatch(null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      const fetchDispatch = async () => {
-        setIsLoading(true);
-        try {
-          const data = await getActiveDispatches();
-          if (data.data && data.data.length > 0) {
-             setDispatch(data.data[0]);
-          } else {
-             setDispatch(null);
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          setIsLoading(false);
-        }
-      };
       fetchDispatch();
-    }, [])
+    }, [fetchDispatch])
   );
+
+  // Auto-refresh when real-time mission assignment or status arrives via WebSockets
+  useEffect(() => {
+    fetchDispatch();
+  }, [missionRefreshTrigger, fetchDispatch]);
 
   // Track User Location for the custom puck
   useEffect(() => {
@@ -185,40 +195,54 @@ export default function DispatchScreen() {
     return () => { if (locationSub) locationSub.remove(); };
   }, []);
 
-  const lat = dispatch?.incident?.latitude ?? dispatch?.incident?.incident_latitude;
-  const lng = dispatch?.incident?.longitude ?? dispatch?.incident?.incident_longitude;
-  const parsedLat = parseFloat(lat);
-  const parsedLng = parseFloat(lng);
+  const rawLat = dispatch?.incident?.incident_latitude ?? dispatch?.incident?.latitude ?? dispatch?.incident?.reporter_latitude;
+  const rawLng = dispatch?.incident?.incident_longitude ?? dispatch?.incident?.longitude ?? dispatch?.incident?.reporter_longitude;
+  const parsedLat = parseFloat(rawLat);
+  const parsedLng = parseFloat(rawLng);
+  const hasValidCoords = !isNaN(parsedLat) && !isNaN(parsedLng) && parsedLat !== 0 && parsedLng !== 0;
 
   useGpsStatusTransition(
     dispatch?.id, 
     dispatch?.dispatch_status, 
-    { latitude: parsedLat, longitude: parsedLng },
+    { latitude: hasValidCoords ? parsedLat : 8.5138, longitude: hasValidCoords ? parsedLng : 124.5775 },
     50
   );
 
-  // Center map on incident when loaded
+  useLiveDispatchTracking(dispatch?.id, dispatch?.dispatch_status);
+
+  // Center map directly on incident pin when loaded
   useEffect(() => {
-    if (mapRef.current && parsedLat && parsedLng) {
-      setTimeout(() => {
+    if (hasValidCoords && mapRef.current) {
+      const timer = setTimeout(() => {
         mapRef.current?.setCamera({
           centerCoordinate: [parsedLng, parsedLat],
-          zoomLevel: 14,
-          animationDuration: 1500
+          zoomLevel: 15.5,
+          animationDuration: 1200
         });
-      }, 500);
+      }, 400);
+      return () => clearTimeout(timer);
     }
-  }, [parsedLat, parsedLng]);
+  }, [parsedLat, parsedLng, hasValidCoords]);
 
-  const handleAccept = async () => {
-    if (!dispatch) return;
-    try {
-      await acceptDispatch(dispatch.id);
-      setDispatch({ ...dispatch, dispatch_status: 'accepted' });
-      Alert.alert('Success', 'Dispatch accepted.');
-    } catch (e) {
-      Alert.alert('Error', 'Failed to accept dispatch.');
+  const handleRecenterIncident = () => {
+    if (mapRef.current && hasValidCoords) {
+      mapRef.current?.setCamera({
+        centerCoordinate: [parsedLng, parsedLat],
+        zoomLevel: 15.5,
+        animationDuration: 1000
+      });
     }
+  };
+
+  const handleCallPhone = (phoneNumber?: string) => {
+    if (!phoneNumber) {
+      Alert.alert('No Phone Number', 'No contact phone number is available for this caller.');
+      return;
+    }
+    const cleanPhone = phoneNumber.replace(/[^0-9+]/g, '');
+    Linking.openURL(`tel:${cleanPhone}`).catch(() => {
+      Alert.alert('Call Error', 'Could not open device phone dialer.');
+    });
   };
 
   const handleDecline = () => {
@@ -237,36 +261,56 @@ export default function DispatchScreen() {
     }
   };
 
-  const handleNavigate = async () => {
-    if (!dispatch) return;
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isStartingNav, setIsStartingNav] = useState(false);
+
+  const handleAccept = async () => {
+    if (!dispatch || isAccepting) return;
+    setIsAccepting(true);
     try {
-      if (dispatch.dispatch_status === 'accepted') {
-        await updateDispatchStatus(dispatch.id, 'en_route');
-        setDispatch({ ...dispatch, dispatch_status: 'en_route' });
+      await acceptDispatch(dispatch.id);
+      setDispatch((prev: any) => ({ ...prev, dispatch_status: 'accepted' }));
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to accept dispatch.');
+    } finally {
+      setIsAccepting(false);
+    }
+  };
+
+  const handleOpenMap = async () => {
+    if (!dispatch || isStartingNav) return;
+    setIsStartingNav(true);
+    try {
+      if (dispatch.dispatch_status === 'accepted' || dispatch.dispatch_status === 'assigned') {
+        try {
+          await updateDispatchStatus(dispatch.id, 'en_route');
+        } catch (e) {
+          // Continue to navigation screen
+        }
+        setDispatch((prev: any) => ({ ...prev, dispatch_status: 'en_route' }));
       }
       
       router.push({
         pathname: '/(responder)/navigation',
         params: {
-          lat: lat,
-          lng: lng,
+          lat: rawLat,
+          lng: rawLng,
           dispatchId: dispatch.id
         }
       });
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to start navigation.');
-    }
-  };
-
-  const handleManualArrive = async () => {
-    if (!dispatch) return;
-    try {
-      await updateDispatchStatus(dispatch.id, 'arrived_on_scene');
-      setDispatch({ ...dispatch, dispatch_status: 'arrived_on_scene' });
-      Alert.alert('Success', 'You have arrived on scene. You may now create the Patient Care Record.');
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update status.');
+      router.push({
+        pathname: '/(responder)/navigation',
+        params: {
+          lat: rawLat,
+          lng: rawLng,
+          dispatchId: dispatch.id
+        }
+      });
+    } finally {
+      setIsStartingNav(false);
     }
   };
 
@@ -310,16 +354,28 @@ export default function DispatchScreen() {
   const resident = incident.resident || {};
   const incidentType = incident.incident_type || {}; 
 
+  const exactLocationName = 
+    incident.place_of_incident || 
+    incident.incident_address || 
+    (incident.location_code ? `Location Marker ${incident.location_code}` : null) || 
+    incident.address || 
+    'Pinpointed Emergency Incident Location';
+
   return (
     <View className="flex-1 bg-slate-100">
       <View 
         className="absolute left-0 right-0" 
         style={{ top: insets.top, height: SCREEN_HEIGHT - MIN_PANEL_HEIGHT - insets.top + 30 }}
       >
-        <MapView ref={mapRef} className="flex-1" showsUserLocation={false}>
+        <MapView 
+          ref={mapRef} 
+          className="flex-1" 
+          showsUserLocation={false}
+          initialRegion={hasValidCoords ? { latitude: parsedLat, longitude: parsedLng } : undefined}
+        >
           
           {/* Custom Incident Marker */}
-          {(!isNaN(parsedLat) && !isNaN(parsedLng)) ? (
+          {hasValidCoords ? (
             <MapboxGL.PointAnnotation id="dispatchDestination" coordinate={[parsedLng, parsedLat]}>
               <View className="items-center justify-center w-24 h-24 bg-red-500/10 rounded-full">
                 <View className="w-20 h-20 bg-red-500/20 rounded-full items-center justify-center absolute" />
@@ -346,6 +402,17 @@ export default function DispatchScreen() {
           ) : null}
 
         </MapView>
+
+        {/* Floating Recenter Map Button */}
+        {hasValidCoords && (
+          <TouchableOpacity 
+            onPress={handleRecenterIncident}
+            style={{ position: 'absolute', right: 16, bottom: 40 }}
+            className="w-11 h-11 bg-white/95 rounded-full items-center justify-center shadow-lg border border-slate-200"
+          >
+            <Crosshair size={20} color="#EF4444" />
+          </TouchableOpacity>
+        )}
       </View>
       
       <View className="absolute top-0 left-0 right-0 px-4 flex-row items-center justify-between pointer-events-box-none" style={{ paddingTop: insets.top + 8 }}>
@@ -377,20 +444,36 @@ export default function DispatchScreen() {
 
           <View className="bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-5">
             <View className="flex-row items-start mb-4">
-              <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-3 mt-1">
+              <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-3 mt-1 shrink-0">
                 <MapPin size={16} color="#3B82F6" />
               </View>
               <View className="flex-1">
-                <Text className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Exact Location</Text>
-                <Text className="text-slate-800 font-semibold">{incident.address || 'Location not specified'}</Text>
-                <Text className="text-slate-400 text-xs mt-1">{lat}, {lng}</Text>
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-slate-500 text-xs font-bold uppercase tracking-wider">Exact Location</Text>
+                  {incident.location_code ? (
+                    <View className="bg-blue-100 px-2 py-0.5 rounded">
+                      <Text className="text-blue-700 font-mono font-bold text-[10px]">{incident.location_code}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text className="text-slate-900 font-bold text-base leading-snug">
+                  {exactLocationName}
+                </Text>
+                {incident.location_code && incident.place_of_incident && (
+                  <Text className="text-slate-600 text-xs mt-0.5">
+                    Location Code: <Text className="font-mono font-bold text-blue-600">{incident.location_code}</Text>
+                  </Text>
+                )}
+                <Text className="text-slate-400 font-mono text-xs mt-1.5">
+                  📍 {hasValidCoords ? `${parsedLat.toFixed(6)}, ${parsedLng.toFixed(6)}` : 'Coordinates pending'}
+                </Text>
               </View>
             </View>
             
             <View className="h-[1px] bg-slate-200 w-full my-1" />
 
             <View className="flex-row items-start mt-4">
-              <View className="w-8 h-8 rounded-full bg-orange-100 items-center justify-center mr-3 mt-1">
+              <View className="w-8 h-8 rounded-full bg-orange-100 items-center justify-center mr-3 mt-1 shrink-0">
                 <Clock size={16} color="#F59E0B" />
               </View>
               <View className="flex-1">
@@ -408,30 +491,100 @@ export default function DispatchScreen() {
           </View>
 
           <Text className="text-slate-800 font-bold text-lg mb-3">Reporter & Patient</Text>
-          <View className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm mb-6 space-y-4">
-            <View className="flex-row items-center">
-              <View className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center mr-3">
-                <User size={20} color="#64748B" />
+          
+          {/* Conditional: Phone Call Caller vs Resident Mobile App vs Station Walk-In */}
+          {incident.caller_phone_number ? (
+            <View className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm mb-6">
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
+                    <Phone size={20} color="#2563EB" />
+                  </View>
+                  <View>
+                    <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Report Source</Text>
+                    <Text className="text-slate-800 font-bold text-sm">Phone / SIM Call</Text>
+                  </View>
+                </View>
+                <View className="bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+                  <Text className="text-blue-700 text-[10px] font-bold">Cellular Call</Text>
+                </View>
               </View>
-              <View>
-                <Text className="text-slate-500 text-xs font-bold uppercase">Reported By</Text>
-                <Text className="text-slate-800 font-semibold">
-                  {resident.first_name ? `${resident.first_name} ${resident.last_name}` : 'Dispatch / Station Walk-In'}
+
+              <View className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                <Text className="text-slate-500 text-xs font-semibold">Caller Contact Number:</Text>
+                <Text className="text-slate-900 font-bold font-mono text-base">{incident.caller_phone_number}</Text>
+                {resident?.first_name ? (
+                  <Text className="text-emerald-600 text-xs font-semibold mt-1">
+                    ✓ Registered Resident: {resident.first_name} {resident.last_name}
+                  </Text>
+                ) : null}
+              </View>
+
+              <TouchableOpacity
+                onPress={() => handleCallPhone(incident.caller_phone_number)}
+                className="mt-3 bg-emerald-600 active:bg-emerald-700 py-3 px-4 rounded-xl flex-row items-center justify-center shadow-sm shadow-emerald-500/30"
+              >
+                <PhoneCall size={16} color="#FFFFFF" />
+                <Text className="text-white font-black text-xs uppercase tracking-wider ml-2">
+                  Call Caller ({incident.caller_phone_number})
                 </Text>
-              </View>
+              </TouchableOpacity>
             </View>
-            {resident.phone_number && (
-              <View className="flex-row items-center mt-3">
+          ) : (resident?.first_name || resident?.name) ? (
+            <View className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm mb-6">
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <View className="w-10 h-10 rounded-full bg-purple-100 items-center justify-center mr-3">
+                    <User size={20} color="#7C3AED" />
+                  </View>
+                  <View>
+                    <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Report Source</Text>
+                    <Text className="text-slate-800 font-bold text-sm">Resident Mobile App</Text>
+                  </View>
+                </View>
+                <View className="bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full">
+                  <Text className="text-purple-700 text-[10px] font-bold">App Resident</Text>
+                </View>
+              </View>
+
+              <View className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-1">
+                <Text className="text-slate-500 text-xs font-semibold">Resident Profile Name:</Text>
+                <Text className="text-slate-900 font-bold text-base">
+                  {resident.first_name ? `${resident.first_name} ${resident.last_name}` : resident.name}
+                </Text>
+                {resident.phone_number ? (
+                  <Text className="text-slate-600 font-mono text-xs mt-0.5">
+                    Phone: {resident.phone_number}
+                  </Text>
+                ) : null}
+              </View>
+
+              {resident.phone_number ? (
+                <TouchableOpacity
+                  onPress={() => handleCallPhone(resident.phone_number)}
+                  className="mt-3 bg-emerald-600 active:bg-emerald-700 py-3 px-4 rounded-xl flex-row items-center justify-center shadow-sm shadow-emerald-500/30"
+                >
+                  <PhoneCall size={16} color="#FFFFFF" />
+                  <Text className="text-white font-black text-xs uppercase tracking-wider ml-2">
+                    Call Resident ({resident.phone_number})
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : (
+            <View className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm mb-6">
+              <View className="flex-row items-center">
                 <View className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center mr-3">
-                  <Phone size={20} color="#64748B" />
+                  <User size={20} color="#64748B" />
                 </View>
                 <View>
-                  <Text className="text-slate-500 text-xs font-bold uppercase">Contact</Text>
-                  <Text className="text-slate-800 font-semibold">{resident.phone_number}</Text>
+                  <Text className="text-slate-500 text-xs font-bold uppercase">Reported By</Text>
+                  <Text className="text-slate-800 font-semibold">Dispatch / Station Walk-In</Text>
+                  <Text className="text-slate-400 text-xs mt-0.5">Assisted directly by Command Center</Text>
                 </View>
               </View>
-            )}
-          </View>
+            </View>
+          )}
 
           <Text className="text-slate-800 font-bold text-lg mb-3">Assigned Units</Text>
           <View className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm mb-6 flex-row items-center">
@@ -449,40 +602,69 @@ export default function DispatchScreen() {
         
       </Animated.View>
       
-      {/* Floating Action Footer (Moved outside to ensure visibility above tab bar) */}
-      <View className="absolute left-0 right-0 px-4 flex-row justify-between pointer-events-box-none" style={{ bottom: 95 }}>
+      {/* Floating Action Footer: Simplified New Workflow */}
+      <View style={styles.actionFooter}>
          {dispatch.dispatch_status === 'arrived_on_scene' ? (
            <TouchableOpacity 
              onPress={() => router.push('/(responder)/patient')}
-             className="bg-blue-600 px-4 py-4 rounded-2xl flex-row items-center justify-center w-full shadow-lg shadow-blue-500/30 pointer-events-auto"
+             activeOpacity={0.85}
+             style={styles.btnCreatePcr}
            >
-             <FileText size={22} color="#EFF6FF" className="mr-3" />
-             <View className="items-start">
-               <Text className="text-blue-50 font-black tracking-widest text-center text-[13px]">CREATE PATIENT CARE RECORD</Text>
-               <Text className="text-blue-200 font-bold text-[10px] uppercase tracking-wider mt-0.5">Or Search Existing Patient</Text>
+             <FileText size={22} color="#EFF6FF" style={{ marginRight: 12 }} />
+             <View>
+               <Text style={styles.btnCreatePcrText}>CREATE PATIENT CARE RECORD</Text>
+               <Text style={styles.btnCreatePcrSubtext}>Or Search Existing Patient</Text>
              </View>
            </TouchableOpacity>
+         ) : dispatch.dispatch_status === 'accepted' || dispatch.dispatch_status === 'en_route' ? (
+           <TouchableOpacity 
+             onPress={handleOpenMap}
+             disabled={isStartingNav}
+             activeOpacity={0.85}
+             style={styles.btnOpenMapFull}
+           >
+             {isStartingNav ? (
+               <ActivityIndicator color="#ffffff" size="small" />
+             ) : (
+               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                 <Navigation size={22} color="#FFFFFF" style={{ marginRight: 10 }} />
+                 <Text style={styles.btnOpenMapText}>OPEN MAP</Text>
+               </View>
+             )}
+           </TouchableOpacity>
          ) : (
-           <View className="flex-row w-full space-x-3 pointer-events-auto bg-white/80 backdrop-blur-md p-3 rounded-3xl border border-slate-200 shadow-xl">
-             <Button variant="ghost" title="DECLINE" className="flex-1 bg-slate-100" onPress={handleDecline} />
-             {dispatch.dispatch_status === 'assigned' ? (
-                <Button variant="primary" title="ACCEPT DISPATCH" className="flex-1 shadow-sm" onPress={handleAccept} />
-             ) : dispatch.dispatch_status === 'accepted' ? (
-                <Button variant="primary" title="NAVIGATE" className="flex-1 shadow-lg shadow-emerald-500/40 bg-emerald-500" onPress={handleNavigate} />
-             ) : dispatch.dispatch_status === 'en_route' ? (
-                <View className="flex-1 flex-row space-x-2">
-                  <Button variant="primary" title="MAP" className="flex-1 shadow-sm bg-slate-800" onPress={handleNavigate} />
-                  <Button variant="primary" title="ARRIVED" className="flex-1 shadow-lg bg-blue-600" onPress={handleManualArrive} />
-                </View>
-             ) : null}
+           /* Assigned State: Shows DECLINE and ACCEPT */
+           <View style={styles.actionCard}>
+             <TouchableOpacity 
+               onPress={handleDecline}
+               activeOpacity={0.8}
+               style={styles.btnDecline}
+             >
+               <Text style={styles.btnDeclineText}>DECLINE</Text>
+             </TouchableOpacity>
+             <TouchableOpacity 
+               onPress={handleAccept}
+               disabled={isAccepting}
+               activeOpacity={0.8}
+               style={styles.btnAccept}
+             >
+               {isAccepting ? (
+                 <ActivityIndicator color="#ffffff" size="small" />
+               ) : (
+                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                   <CheckCircle size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                   <Text style={styles.btnAcceptText}>ACCEPT</Text>
+                 </View>
+               )}
+             </TouchableOpacity>
            </View>
          )}
       </View>
 
       {/* Premium Decline Confirmation Modal */}
       <Modal animationType="fade" transparent={true} visible={showDeclineModal} onRequestClose={() => setShowDeclineModal(false)}>
-        <View className="flex-1 justify-center items-center bg-slate-900/60 p-4">
-          <View className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-200">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
             <View className="items-center mb-4">
               <View className="w-16 h-16 bg-red-100 rounded-full items-center justify-center mb-4">
                 <AlertTriangle size={32} color="#EF4444" />
@@ -490,12 +672,12 @@ export default function DispatchScreen() {
               <Text className="text-xl font-bold text-slate-800 text-center mb-2">Decline Dispatch?</Text>
               <Text className="text-slate-500 text-center font-medium">Are you sure you want to decline this mission? This action will notify the command center.</Text>
             </View>
-            <View className="flex-row justify-between space-x-3 mt-2">
-              <TouchableOpacity onPress={() => setShowDeclineModal(false)} className="flex-1 py-3.5 bg-slate-100 rounded-xl items-center">
-                <Text className="text-slate-600 font-bold">CANCEL</Text>
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity onPress={() => setShowDeclineModal(false)} activeOpacity={0.8} style={styles.btnModalCancel}>
+                <Text style={styles.btnModalCancelText}>CANCEL</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={confirmDecline} className="flex-1 py-3.5 bg-red-500 rounded-xl items-center shadow-sm shadow-red-500/30">
-                <Text className="text-white font-bold">YES, DECLINE</Text>
+              <TouchableOpacity onPress={confirmDecline} activeOpacity={0.8} style={styles.btnModalConfirm}>
+                <Text style={styles.btnTextWhite}>YES, DECLINE</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -508,5 +690,219 @@ export default function DispatchScreen() {
 const styles = StyleSheet.create({
   bottomSheet: {
     height: MAX_PANEL_HEIGHT,
+  },
+  actionFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 95,
+    paddingHorizontal: 16,
+    pointerEvents: 'box-none',
+  },
+  actionCard: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    padding: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    pointerEvents: 'auto',
+  },
+  btnCreatePcr: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+    pointerEvents: 'auto',
+  },
+  btnCreatePcrText: {
+    color: '#eff6ff',
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    fontSize: 13,
+  },
+  btnCreatePcrSubtext: {
+    color: '#bfdbfe',
+    fontWeight: '700',
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  btnOpenMap: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#1e293b',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnArrive: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#2563eb',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  btnDecline: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnDeclineText: {
+    color: '#334155',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  btnAccept: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#2563eb',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  btnAcceptText: {
+    color: '#ffffff',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.8,
+  },
+  btnOpenMapFull: {
+    width: '100%',
+    backgroundColor: '#059669',
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+    pointerEvents: 'auto',
+  },
+  btnOpenMapText: {
+    color: '#ffffff',
+    fontWeight: '900',
+    fontSize: 16,
+    letterSpacing: 1.2,
+  },
+  btnNavigate: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#059669',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  btnNavigateText: {
+    color: '#ffffff',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.8,
+  },
+  btnTextWhite: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    padding: 16,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  btnModalCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnModalCancelText: {
+    color: '#475569',
+    fontWeight: '700',
+  },
+  btnModalConfirm: {
+    flex: 1,
+    paddingVertical: 14,
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
 });

@@ -8,6 +8,7 @@ import { SignaturePad, BodyDiagram } from '@/shared/components';
 import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation } from 'lucide-react-native';
 import { searchPatients, createPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch } from '@/shared/api/dispatches';
+import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 
 function debounce(func: Function, wait: number) {
   let timeout: any;
@@ -219,10 +220,11 @@ export default function PatientCareRecordScreen() {
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [complaintSearch, setComplaintSearch] = useState('');
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
+  const { missionRefreshTrigger } = useMissionAlarm();
 
   useEffect(() => {
     loadActiveDispatch();
-  }, []);
+  }, [missionRefreshTrigger]);
 
   const loadActiveDispatch = async () => {
     try {
@@ -233,10 +235,16 @@ export default function PatientCareRecordScreen() {
         setIsWalkIn(false);
 
         const pcr = dispatch.patient_care_record;
-        const patient = pcr?.patient;
+        const resident = dispatch.incident?.resident;
+        const residentProfile = resident?.resident_profile;
+        const existingPatient = pcr?.patient;
 
-        // Auto-populate incident location from report coordinates or existing PCR
-        let defaultPlaceOfIncident = pcr?.place_of_incident || dispatch.incident?.location || '';
+        // Auto-populate incident location from place of incident, report coordinates, or existing PCR
+        let defaultPlaceOfIncident = pcr?.place_of_incident 
+          || dispatch.incident?.place_of_incident 
+          || dispatch.incident?.location 
+          || '';
+
         if (!defaultPlaceOfIncident && dispatch.incident) {
           const incLat = parseFloat(dispatch.incident.incident_latitude ?? dispatch.incident.latitude);
           const incLng = parseFloat(dispatch.incident.incident_longitude ?? dispatch.incident.longitude);
@@ -249,7 +257,57 @@ export default function PatientCareRecordScreen() {
           }
         }
 
-        const defaultHomeAddress = patient ? (patient.address || `${patient.street || ''} ${patient.barangay?.name || ''}`) : '';
+        // Comprehensive address resolution (from existing patient record, PCR, or resident profile)
+        const residentBarangay = residentProfile?.barangay?.barangay_name || residentProfile?.barangay?.name || '';
+        const residentAddressParts = [residentProfile?.house_no, residentProfile?.street, residentBarangay].filter(Boolean);
+        const residentHomeAddress = residentAddressParts.join(', ');
+
+        const defaultHomeAddress = (
+          pcr?.incident_address || 
+          existingPatient?.address || 
+          existingPatient?.street || 
+          residentHomeAddress || 
+          resident?.address || 
+          ''
+        );
+
+        // Auto-fill Chief Complaint from what the dispatcher entered (or incident type)
+        const defaultChiefComplaint = pcr?.chief_complaint 
+          || dispatch.incident?.chief_complaint 
+          || dispatch.incident?.incident_type?.name 
+          || '';
+
+        // Auto-fill Nature of Call based on incident type or existing field
+        const incidentTypeName = (dispatch.incident?.incident_type?.name || '').toLowerCase();
+        let defaultNatureOfCall = pcr?.nature_of_call || dispatch.incident?.nature_of_call || '';
+        if (!defaultNatureOfCall) {
+          if (incidentTypeName.includes('transport')) defaultNatureOfCall = 'transport';
+          else if (incidentTypeName.includes('standby')) defaultNatureOfCall = 'standby';
+          else if (incidentTypeName.includes('medical assistance') || incidentTypeName.includes('walk-in')) defaultNatureOfCall = 'medical assistance';
+          else if (incidentTypeName.includes('non-emergency')) defaultNatureOfCall = 'non-emergency';
+          else defaultNatureOfCall = 'emergency';
+        }
+
+        // Comprehensive demographic resolution
+        const resolvedBirthdate = existingPatient?.birthdate || residentProfile?.birthdate || '';
+        const resolvedAge = resolvedBirthdate 
+          ? String(calculateAge(resolvedBirthdate)) 
+          : (existingPatient?.age ? String(existingPatient.age) : (pcr?.age ? String(pcr.age) : ''));
+
+        const resolvedGender = existingPatient?.gender || pcr?.gender || residentProfile?.gender || 'male';
+
+        const resolvedContact = (
+          pcr?.contact_number || 
+          existingPatient?.contact_number || 
+          resident?.phone_number || 
+          dispatch.incident?.caller_phone_number || 
+          ''
+        );
+
+        const resolvedPatientId = pcr?.patient_id || existingPatient?.id || null;
+        const resolvedFirstName = existingPatient?.first_name || resident?.first_name || '';
+        const resolvedLastName = existingPatient?.last_name || resident?.last_name || '';
+        const resolvedFullName = `${resolvedFirstName} ${resolvedLastName}`.trim();
 
         setFormData(prev => ({
           ...prev,
@@ -262,23 +320,23 @@ export default function PatientCareRecordScreen() {
             dispatch.emt ? `${dispatch.emt.first_name} ${dispatch.emt.last_name}` : null
           ].filter(Boolean).join(', '),
           place_of_incident: defaultPlaceOfIncident || prev.place_of_incident,
-          incident_address: pcr?.incident_address || defaultHomeAddress || prev.incident_address,
-          
-          ...(pcr ? {
-            patient_id: pcr.patient_id || prev.patient_id,
-            first_name: patient?.first_name || prev.first_name,
-            last_name: patient?.last_name || prev.last_name,
-            birthdate: patient?.birthdate || prev.birthdate,
-            gender: patient?.gender || prev.gender,
-            contact_number: pcr.contact_number || prev.contact_number,
-            address: patient ? (patient.address || `${patient.street || ''} ${patient.barangay?.name || ''}`) : prev.address,
-            searchQuery: patient ? `${patient.first_name} ${patient.last_name}` : prev.searchQuery,
+          incident_address: pcr?.incident_address || dispatch.incident?.incident_address || defaultHomeAddress || prev.incident_address,
+          address: defaultHomeAddress || prev.address,
+          chief_complaint: defaultChiefComplaint || prev.chief_complaint,
+          nature_of_call: defaultNatureOfCall || prev.nature_of_call,
 
-            nature_of_call: pcr.nature_of_call || prev.nature_of_call,
-            chief_complaint: pcr.chief_complaint || prev.chief_complaint,
-            civil_status: pcr.civil_status || prev.civil_status,
-            age: pcr.age ? String(pcr.age) : prev.age,
-            
+          // Auto-populated Patient Demographics
+          patient_id: resolvedPatientId || prev.patient_id,
+          first_name: resolvedFirstName || prev.first_name,
+          last_name: resolvedLastName || prev.last_name,
+          birthdate: resolvedBirthdate || prev.birthdate,
+          gender: resolvedGender || prev.gender,
+          age: resolvedAge || prev.age,
+          contact_number: resolvedContact || prev.contact_number,
+          searchQuery: resolvedFullName || prev.searchQuery,
+          civil_status: pcr?.civil_status || existingPatient?.civil_status || prev.civil_status || 'single',
+
+          ...(pcr ? {
             assessment_findings: pcr.assessment || prev.assessment_findings,
             assessment_markers: pcr.assessment_markers || prev.assessment_markers,
             
@@ -415,19 +473,19 @@ export default function PatientCareRecordScreen() {
 
   const selectPatient = (patient: any) => {
     setFormData(prev => {
-      const calculatedAge = patient.birthdate ? calculateAge(patient.birthdate) : prev.age;
-      const homeAddress = (patient.address || `${patient.street || ''} ${patient.barangay?.name || ''}`).trim();
+      const calculatedAge = patient.birthdate ? calculateAge(patient.birthdate) : (patient.age ? String(patient.age) : prev.age);
+      const homeAddress = (patient.address || patient.incident_address || `${patient.street || ''} ${patient.barangay?.name || ''}`).trim();
       return {
         ...prev,
         patient_id: patient.id || patient.patient_id, // Handle API response variation
         first_name: patient.first_name,
         last_name: patient.last_name,
         birthdate: patient.birthdate || '',
-        gender: patient.gender || 'male',
-        contact_number: patient.contact_number || '',
+        gender: patient.gender || prev.gender || 'male',
+        contact_number: patient.contact_number || prev.contact_number || '',
         address: homeAddress,
         incident_address: homeAddress || prev.incident_address, // Resident Home Address
-        civil_status: patient.civil_status || prev.civil_status,
+        civil_status: patient.civil_status || prev.civil_status || 'single',
         age: calculatedAge,
         searchQuery: `${patient.first_name} ${patient.last_name}`
       };
@@ -436,21 +494,43 @@ export default function PatientCareRecordScreen() {
   };
 
   const handleCreatePatient = async () => {
-    if (!formData.searchQuery) return;
+    const query = formData.searchQuery?.trim();
+    if (!query) return;
     setIsSearching(true);
     try {
-      const parts = formData.searchQuery.split(' ');
-      const first_name = parts[0];
+      const parts = query.split(/\s+/);
+      const first_name = parts[0] || 'Unknown';
       const last_name = parts.slice(1).join(' ') || 'Unknown';
       
-      const res = await createPatient({ first_name, last_name });
-      if (res && res.patient_id) {
-        selectPatient({ ...res, first_name, last_name });
+      const payload: any = {
+        first_name,
+        last_name,
+      };
+
+      if (formData.gender) payload.gender = formData.gender;
+      if (formData.age) payload.age = parseInt(formData.age, 10);
+      if (formData.incident_address) payload.address = formData.incident_address;
+      if (formData.contact_number) payload.contact_number = formData.contact_number;
+
+      const res = await createPatient(payload);
+      if (res && (res.patient_id || res.id)) {
+        selectPatient({
+          ...res,
+          id: res.patient_id || res.id,
+          first_name,
+          last_name,
+          gender: formData.gender,
+          age: formData.age,
+          address: formData.incident_address,
+          contact_number: formData.contact_number,
+          civil_status: formData.civil_status,
+        });
         Alert.alert('Success', 'Patient created successfully!');
       }
-    } catch (error) {
-      console.log('Error creating patient', error);
-      Alert.alert('Error', 'Failed to create patient.');
+    } catch (error: any) {
+      console.log('Error creating patient', error?.response?.data || error?.message || error);
+      const msg = error?.response?.data?.message || 'Failed to create patient.';
+      Alert.alert('Error', msg);
     } finally {
       setIsSearching(false);
     }
@@ -465,6 +545,7 @@ export default function PatientCareRecordScreen() {
 
       const payload = {
         patient_id: formData.patient_id,
+        gender: formData.gender,
         contact_number: formData.contact_number,
         nature_of_call: formData.nature_of_call,
         chief_complaint: formData.chief_complaint,
@@ -584,8 +665,10 @@ export default function PatientCareRecordScreen() {
       setActiveDispatch(null);
       setStep(1);
       setFormData(initialFormData);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to submit PCR.');
+    } catch (e: any) {
+      console.log('PCR Submit Error:', e.response?.data || e.message);
+      const errorMsg = e.response?.data?.message || e.message || 'Failed to submit PCR.';
+      Alert.alert('Error', errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -668,7 +751,10 @@ export default function PatientCareRecordScreen() {
       {searchResults.map(p => (
         <TouchableOpacity key={p.id} style={styles.resultItem} onPress={() => { selectPatient(p); setErrors({...errors, patient_id: ''}); }}>
           <Text style={styles.resultName}>{p.first_name} {p.last_name}</Text>
-          <Text style={styles.resultSub}>Patient ID: PAT-{p.id} • {p.gender}</Text>
+          <Text style={styles.resultSub}>Patient ID: PAT-{p.id} • {p.gender ? p.gender.charAt(0).toUpperCase() + p.gender.slice(1) : 'Gender N/A'}{p.age ? ` • ${p.age} yrs` : ''}</Text>
+          {(p.address || p.street) && (
+            <Text style={styles.resultSub} numberOfLines={1}>{p.address || `${p.street || ''} ${p.barangay?.name || ''}`.trim()}</Text>
+          )}
         </TouchableOpacity>
       ))}
       {!isSearching && formData.searchQuery.length >= 2 && searchResults.length === 0 && !formData.patient_id && (

@@ -7,6 +7,7 @@ import { View } from 'react-native';
 import '../../global.css';
 
 import { MissionAlarmProvider } from '@/shared/contexts/MissionAlarmContext';
+import { ResidentAlertProvider } from '@/shared/contexts/ResidentAlertContext';
 
 function RootLayoutNav() {
   const { user, role, isLoading, isAuthenticated } = useAuth();
@@ -37,29 +38,31 @@ function RootLayoutNav() {
     }
   }, [isAuthenticated, isLoading, role, segments]);
 
-  if (isLoading) {
+  if (isLoading || !rootNavigationState?.key) {
     return <Loading fullScreen message="Restoring Session..." />;
   }
 
   return (
-    <>
-      {isOffline && <OfflineBanner />}
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="login" />
-        <Stack.Screen name="forgot-password" />
-        <Stack.Screen name="(responder)" />
-        <Stack.Screen name="(resident)" />
-      </Stack>
-    </>
+    <MissionAlarmProvider>
+      <ResidentAlertProvider>
+        {isOffline && <OfflineBanner />}
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="register" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="(responder)" />
+          <Stack.Screen name="(resident)" />
+        </Stack>
+      </ResidentAlertProvider>
+    </MissionAlarmProvider>
   );
 }
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <MissionAlarmProvider>
-        <RootLayoutNav />
-      </MissionAlarmProvider>
+      <RootLayoutNav />
     </AuthProvider>
   );
 }

@@ -30,10 +30,14 @@ import {
   CircleCheck,
   Send,
   XCircle,
+  RotateCcw,
 } from 'lucide-react-native';
 
 import { submitEmergencyReport, getMyReports, updateReporterLocation } from '@/shared/api/incidents';
 import { locationService } from '@/shared/services/locationService';
+import { useAuth } from '@/shared/auth/authContext';
+import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
+import { useRealtime } from '@/shared/hooks';
 
 // ─── Emergency type config ────────────────────────────────────────────────────
 const TYPES = [
@@ -151,6 +155,58 @@ export default function ReportScreen() {
   const [inputFocused, setInputFocused] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const router = useRouter();
+  const { user } = useAuth();
+  const { residentRefreshTrigger } = useResidentAlert();
+  const { echo } = useRealtime() as { echo: any };
+
+  const fetchIncidents = useCallback(async () => {
+    try {
+      const res = await getMyReports();
+      const incidents = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res)
+        ? res
+        : [];
+      const active = incidents.find((inc: any) => {
+        // If incident itself is resolved, rejected, or cancelled -> not active
+        if (['resolved', 'rejected', 'cancelled'].includes(inc.incident_status)) {
+          return false;
+        }
+
+        // If the incident has dispatches and the mission was cancelled with no active live dispatches
+        if (Array.isArray(inc.dispatches) && inc.dispatches.length > 0) {
+          const hasLiveDispatch = inc.dispatches.some((d: any) =>
+            ['assigned', 'accepted', 'en_route', 'arrived_on_scene'].includes(d.dispatch_status)
+          );
+          const hasCancelledDispatch = inc.dispatches.some((d: any) => d.dispatch_status === 'cancelled');
+
+          if (hasCancelledDispatch && !hasLiveDispatch) {
+            return false;
+          }
+        }
+
+        // If marked assigned or responding, it must have an active live dispatch
+        if (['assigned', 'responding'].includes(inc.incident_status)) {
+          if (
+            inc.active_dispatch &&
+            ['assigned', 'accepted', 'en_route', 'arrived_on_scene'].includes(
+              inc.active_dispatch.dispatch_status
+            )
+          ) {
+            return true;
+          }
+          return false;
+        }
+
+        return ['pending', 'verified'].includes(inc.incident_status);
+      });
+      setActiveIncident(active || null);
+    } catch (e) {
+      console.error('Failed to fetch reports', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   // Location Tracking for Active Incident
   useEffect(() => {
@@ -191,30 +247,69 @@ export default function ReportScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const fetchIncidents = async () => {
-        setIsLoading(true);
-        try {
-          const res = await getMyReports();
-          const incidents = Array.isArray(res.data)
-            ? res.data
-            : Array.isArray(res)
-            ? res
-            : [];
-          const active = incidents.find((inc: any) =>
-            ['pending', 'verified', 'assigned', 'responding'].includes(
-              inc.incident_status
-            )
-          );
-          setActiveIncident(active || null);
-        } catch (e) {
-          console.error('Failed to fetch reports', e);
-        } finally {
-          setIsLoading(false);
-        }
-      };
+      setIsLoading(true);
       fetchIncidents();
-    }, [])
+    }, [fetchIncidents])
   );
+
+  // Auto-refresh when WebSocket alerts arrive
+  useEffect(() => {
+    fetchIncidents();
+  }, [residentRefreshTrigger, fetchIncidents]);
+
+  // Real-time Echo listeners for immediate transition back to report form on cancellation
+  useEffect(() => {
+    if (!echo) return;
+
+    let residentChannel: any = null;
+    if (user?.id) {
+      residentChannel = echo.private(`resident.${user.id}`);
+      const handleResidentStatusUpdated = (e: any) => {
+        console.log('ReportScreen resident channel received DispatchStatusUpdated:', e);
+        const status = e.dispatch?.dispatch_status;
+        if (status === 'cancelled' || status === 'completed') {
+          setActiveIncident(null);
+        }
+        fetchIncidents();
+      };
+      residentChannel.listen('DispatchStatusUpdated', handleResidentStatusUpdated);
+      residentChannel.listen('.DispatchStatusUpdated', handleResidentStatusUpdated);
+      residentChannel.listen('DispatchCompleted', handleResidentStatusUpdated);
+      residentChannel.listen('.DispatchCompleted', handleResidentStatusUpdated);
+    }
+
+    let incidentChannel: any = null;
+    if (activeIncident?.id) {
+      incidentChannel = echo.private(`incident.${activeIncident.id}`);
+      const handleIncidentStatusUpdated = (e: any) => {
+        console.log('ReportScreen incident channel received DispatchStatusUpdated:', e);
+        const status = e.dispatch?.dispatch_status;
+        if (status === 'cancelled' || status === 'completed') {
+          setActiveIncident(null);
+        }
+        fetchIncidents();
+      };
+      incidentChannel.listen('DispatchStatusUpdated', handleIncidentStatusUpdated);
+      incidentChannel.listen('.DispatchStatusUpdated', handleIncidentStatusUpdated);
+      incidentChannel.listen('DispatchCompleted', handleIncidentStatusUpdated);
+      incidentChannel.listen('.DispatchCompleted', handleIncidentStatusUpdated);
+    }
+
+    return () => {
+      if (residentChannel) {
+        residentChannel.stopListening('DispatchStatusUpdated');
+        residentChannel.stopListening('.DispatchStatusUpdated');
+        residentChannel.stopListening('DispatchCompleted');
+        residentChannel.stopListening('.DispatchCompleted');
+      }
+      if (incidentChannel) {
+        incidentChannel.stopListening('DispatchStatusUpdated');
+        incidentChannel.stopListening('.DispatchStatusUpdated');
+        incidentChannel.stopListening('DispatchCompleted');
+        incidentChannel.stopListening('.DispatchCompleted');
+      }
+    };
+  }, [echo, user?.id, activeIncident?.id, fetchIncidents]);
 
   const handlePickPhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -345,6 +440,32 @@ export default function ReportScreen() {
           >
             <Navigation size={18} color="#FFFFFF" strokeWidth={2.5} />
             <Text style={styles.trackBtnText}>Track Responder</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.refreshReportBtn}
+            onPress={() => fetchIncidents()}
+            activeOpacity={0.85}
+          >
+            <RotateCcw size={16} color="#6366F1" strokeWidth={2.2} />
+            <Text style={styles.refreshReportBtnText}>Refresh Status</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.dismissBtn}
+            onPress={() => {
+              Alert.alert(
+                'Report New Emergency',
+                'If this emergency mission was cancelled or concluded, you can return to the emergency report form.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Return to Report Form', onPress: () => setActiveIncident(null) }
+                ]
+              );
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.dismissBtnText}>Dismiss / Report New Emergency</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -596,6 +717,36 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  refreshReportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    borderRadius: 14,
+    gap: 8,
+    alignSelf: 'stretch',
+    marginTop: 12,
+  },
+  refreshReportBtnText: {
+    color: '#475569',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dismissBtn: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissBtnText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
   scrollContent: {
     paddingHorizontal: 16,
