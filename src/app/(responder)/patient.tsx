@@ -22,7 +22,16 @@ function debounce(func: Function, wait: number) {
   };
 }
 
-const formatTimeForApi = (dateString: string | null) => {
+const formatTime24ForApi = (dateString: string | null) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return '';
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+};
+
+const formatTime12ForVitals = (dateString: string | null) => {
   if (!dateString) return '';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return '';
@@ -30,8 +39,27 @@ const formatTimeForApi = (dateString: string | null) => {
   const m = d.getMinutes().toString().padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12;
-  h = h ? h : 12; // the hour '0' should be '12'
+  h = h ? h : 12;
   return `${h.toString().padStart(2, '0')}:${m} ${ampm}`;
+};
+
+const normalizeTimeTo24 = (timeStr: string | null | undefined): string | null => {
+  if (!timeStr || !timeStr.trim()) return null;
+  const trimmed = timeStr.trim();
+  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+    const [h, m] = trimmed.split(':');
+    return `${h.padStart(2, '0')}:${m}`;
+  }
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+  if (match) {
+    let h = parseInt(match[1], 10);
+    const m = match[2];
+    const isPm = match[3].toLowerCase() === 'pm';
+    if (isPm && h < 12) h += 12;
+    if (!isPm && h === 12) h = 0;
+    return `${h.toString().padStart(2, '0')}:${m}`;
+  }
+  return null;
 };
 
 const formatTimeInput = (text: string) => {
@@ -311,9 +339,9 @@ export default function PatientCareRecordScreen() {
 
         setFormData(prev => ({
           ...prev,
-          dispatch_time: formatTimeForApi(dispatch.created_at),
-          en_route_time: formatTimeForApi(dispatch.en_route_at),
-          on_scene_time: formatTimeForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
+          dispatch_time: formatTime24ForApi(dispatch.created_at),
+          en_route_time: formatTime24ForApi(dispatch.en_route_at),
+          on_scene_time: formatTime24ForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
           responders: [
             dispatch.team_leader ? `${dispatch.team_leader.first_name} ${dispatch.team_leader.last_name}` : null,
             dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : null,
@@ -437,9 +465,9 @@ export default function PatientCareRecordScreen() {
 
       setFormData(prev => ({
         ...prev,
-        dispatch_time: formatTimeForApi(res.data.created_at),
-        en_route_time: formatTimeForApi(res.data.en_route_at),
-        on_scene_time: formatTimeForApi(res.data.arrived_on_scene_at || res.data.arrived_at),
+        dispatch_time: formatTime24ForApi(res.data.created_at),
+        en_route_time: formatTime24ForApi(res.data.en_route_at),
+        on_scene_time: formatTime24ForApi(res.data.arrived_on_scene_at || res.data.arrived_at),
         place_of_incident: locationDetails,
       }));
       setShowWalkInModal(false);
@@ -559,12 +587,12 @@ export default function PatientCareRecordScreen() {
         glasgow_coma_scale: formData.glasgow_coma_scale,
         disposition: formData.disposition,
         special_instructions: formData.special_instructions,
-        dispatch_time: formData.dispatch_time,
-        en_route_time: formData.en_route_time,
-        on_scene_time: formData.on_scene_time,
-        transport_time: formData.transport_time,
-        arrived_hf_time: formData.arrived_hf_time,
-        departed_hf_time: formData.departed_hf_time,
+        dispatch_time: normalizeTimeTo24(formData.dispatch_time),
+        en_route_time: normalizeTimeTo24(formData.en_route_time),
+        on_scene_time: normalizeTimeTo24(formData.on_scene_time),
+        transport_time: normalizeTimeTo24(formData.transport_time),
+        arrived_hf_time: normalizeTimeTo24(formData.arrived_hf_time),
+        departed_hf_time: normalizeTimeTo24(formData.departed_hf_time),
         transported: formData.transported,
         transported_to: formData.transported_to,
         received_by: formData.received_by,
@@ -694,7 +722,7 @@ export default function PatientCareRecordScreen() {
     
     // Auto-set time on first entry for this take if time is empty
     if (field !== 'time' && !newVitals[takeIdx].time) {
-      newVitals[takeIdx].time = formatTimeForApi(new Date().toISOString());
+      newVitals[takeIdx].time = formatTime12ForVitals(new Date().toISOString());
     }
     
     setFormData({ ...formData, vital_signs: newVitals });

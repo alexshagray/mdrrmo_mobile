@@ -20,7 +20,7 @@ function RootLayoutNav() {
     if (isLoading || !rootNavigationState?.key) return;
 
     const inAuthGroup = segments[0] === '(responder)' || segments[0] === '(resident)';
-    const isLogin = segments[0] === 'login' || segments[0] === 'forgot-password';
+    const isLogin = segments[0] === 'login' || segments[0] === 'forgot-password' || segments[0] === 'reset-password';
 
     if (!isAuthenticated && (inAuthGroup || !segments[0])) {
       // Redirect to login if not authenticated
@@ -51,6 +51,7 @@ function RootLayoutNav() {
           <Stack.Screen name="login" />
           <Stack.Screen name="register" />
           <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
           <Stack.Screen name="(responder)" />
           <Stack.Screen name="(resident)" />
         </Stack>

@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
     height: 48,
   },
   background: {
-    ...StyleSheet.absoluteFillObject,
+    ...(StyleSheet.absoluteFill as object),
     backgroundColor: 'rgba(99, 102, 241, 0.1)', // bg-resident-primary/10 equivalent
     borderRadius: 14,
   }

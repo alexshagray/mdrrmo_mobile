@@ -34,13 +34,38 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
 
     const channel = (echo as any).private(`resident.${user.id}`);
 
+    const handleIncidentVerified = (e: any) => {
+      console.log('IncidentVerified received on resident channel:', e);
+      setResidentRefreshTrigger(prev => prev + 1);
+      setActiveAlert({
+        type: 'verified',
+        title: 'INCIDENT APPROVED',
+        subtitle: 'Your emergency report has been verified by the Dispatcher. A responder is being assigned to your incident.',
+        incident: e.incident,
+      });
+    };
+
+    const handleIncidentRejected = (e: any) => {
+      console.log('IncidentRejected received on resident channel:', e);
+      setResidentRefreshTrigger(prev => prev + 1);
+      const reason = e.incident?.rejection_reason;
+      setActiveAlert({
+        type: 'rejected',
+        title: 'INCIDENT NOT APPROVED',
+        subtitle: reason 
+          ? `Your emergency report was not approved for dispatch. Reason: ${reason}`
+          : 'Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.',
+        incident: e.incident,
+      });
+    };
+
     const handleDispatchCreated = (e: any) => {
       console.log('DispatchCreated received on resident channel:', e);
       setResidentRefreshTrigger(prev => prev + 1);
       setActiveAlert({
-        type: 'acknowledged',
-        title: 'HELP IS ON THE WAY!',
-        subtitle: 'Your emergency request has been acknowledged and assigned by MDRRMO.',
+        type: 'assigned',
+        title: 'RESPONDER ASSIGNED',
+        subtitle: 'A responder has been assigned to your emergency report.',
         dispatch: e.dispatch,
       });
     };
@@ -51,7 +76,7 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
       setActiveAlert({
         type: 'accepted',
         title: 'RESPONDER CONFIRMED',
-        subtitle: 'The emergency response team has confirmed your request and is en route.',
+        subtitle: 'The response team has confirmed your emergency and is preparing to depart.',
         dispatch: e.dispatch,
       });
     };
@@ -61,7 +86,14 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
       setResidentRefreshTrigger(prev => prev + 1);
 
       const status = e.dispatch?.dispatch_status;
-      if (status === 'cancelled') {
+      if (status === 'en_route') {
+        setActiveAlert({
+          type: 'en_route',
+          title: 'RESPONDER IS ON THE WAY',
+          subtitle: 'Your assigned responder is currently traveling to your location.',
+          dispatch: e.dispatch,
+        });
+      } else if (status === 'cancelled') {
         setActiveAlert({
           type: 'cancelled',
           title: 'DISPATCH CANCELLED',
@@ -89,6 +121,10 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
       });
     };
 
+    channel.listen('IncidentVerified', handleIncidentVerified);
+    channel.listen('.IncidentVerified', handleIncidentVerified);
+    channel.listen('IncidentRejected', handleIncidentRejected);
+    channel.listen('.IncidentRejected', handleIncidentRejected);
     channel.listen('DispatchCreated', handleDispatchCreated);
     channel.listen('.DispatchCreated', handleDispatchCreated);
     channel.listen('DispatchAccepted', handleDispatchAccepted);
@@ -99,6 +135,10 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
     channel.listen('.DispatchCompleted', handleCompleted);
 
     return () => {
+      channel.stopListening('IncidentVerified');
+      channel.stopListening('.IncidentVerified');
+      channel.stopListening('IncidentRejected');
+      channel.stopListening('.IncidentRejected');
       channel.stopListening('DispatchCreated');
       channel.stopListening('.DispatchCreated');
       channel.stopListening('DispatchAccepted');
@@ -193,12 +233,20 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
     router.push('/(resident)/track');
   };
 
+  const handleViewStatus = () => {
+    clearAlert();
+    router.push('/(resident)/report');
+  };
+
   const handleCallHotline = () => {
     clearAlert();
     Linking.openURL('tel:+639123456789');
   };
 
   const isCancelled = activeAlert?.type === 'cancelled';
+  const isRejected = activeAlert?.type === 'rejected';
+  const isEnRouteOrArrived = activeAlert?.type === 'en_route' || activeAlert?.type === 'arrived';
+  const isApprovalOrAssigned = activeAlert?.type === 'verified' || activeAlert?.type === 'assigned' || activeAlert?.type === 'accepted';
   const dispatch = activeAlert?.dispatch;
   const ambulanceName = dispatch?.ambulance?.vehicle_name || dispatch?.ambulance?.plate_number || 'MDRRMO Unit';
   const teamName = dispatch?.team ? `Team ${dispatch.team}` : 'Response Unit';
@@ -213,22 +261,22 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
               <X size={20} color="#94A3B8" />
             </TouchableOpacity>
 
-            <View style={[styles.iconContainer, isCancelled ? styles.iconCancelled : styles.iconSuccess]}>
-              {isCancelled ? (
+            <View style={[styles.iconContainer, (isCancelled || isRejected) ? styles.iconCancelled : styles.iconSuccess]}>
+              {(isCancelled || isRejected) ? (
                 <ShieldAlert size={44} color="#DC2626" />
               ) : (
                 <CheckCircle size={44} color="#16A34A" />
               )}
             </View>
 
-            <Text style={[styles.title, isCancelled && { color: '#DC2626' }]}>
+            <Text style={[styles.title, (isCancelled || isRejected) && { color: '#DC2626' }]}>
               {activeAlert.title}
             </Text>
             <Text style={styles.subtitle}>
               {activeAlert.subtitle}
             </Text>
 
-            {!isCancelled && dispatch && (
+            {!isCancelled && !isRejected && dispatch && (
               <View style={styles.infoCard}>
                 <View style={styles.infoRow}>
                   <Ambulance size={18} color="#2563EB" />
@@ -253,10 +301,28 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
                   <Text style={styles.dismissText}>Dismiss Notification</Text>
                 </TouchableOpacity>
               </View>
-            ) : (
+            ) : isRejected ? (
+              <View style={{ width: '100%', gap: 10 }}>
+                <TouchableOpacity style={[styles.callButton, { backgroundColor: '#475569' }]} onPress={handleViewStatus}>
+                  <Text style={styles.callButtonText}>VIEW DETAILS</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dismissBtn} onPress={clearAlert}>
+                  <Text style={styles.dismissText}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            ) : isEnRouteOrArrived ? (
               <View style={{ width: '100%', gap: 10 }}>
                 <TouchableOpacity style={styles.trackButton} onPress={handleTrackLive}>
                   <Text style={styles.trackButtonText}>TRACK RESPONDER LIVE</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dismissBtn} onPress={clearAlert}>
+                  <Text style={styles.dismissText}>Understood</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ width: '100%', gap: 10 }}>
+                <TouchableOpacity style={[styles.trackButton, { backgroundColor: '#2563EB' }]} onPress={handleViewStatus}>
+                  <Text style={styles.trackButtonText}>VIEW REPORT STATUS</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.dismissBtn} onPress={clearAlert}>
                   <Text style={styles.dismissText}>Understood</Text>

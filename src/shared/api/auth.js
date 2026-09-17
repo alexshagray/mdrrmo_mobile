@@ -24,3 +24,13 @@ export const updatePushTokenApi = async (token) => {
   const response = await apiClient.post('/auth/push-token', { token });
   return response.data;
 };
+
+export const forgotPasswordApi = async (email) => {
+  const response = await apiClient.post('/auth/forgot-password', { email });
+  return response.data;
+};
+
+export const resetPasswordApi = async (payload) => {
+  const response = await apiClient.post('/auth/reset-password', payload);
+  return response.data;
+};

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { 
   View, Text, TouchableOpacity, Alert, Modal, ActivityIndicator, 
   Animated, PanResponder, Dimensions, ScrollView, StyleSheet, Platform,
@@ -175,24 +175,35 @@ export default function DispatchScreen() {
   // Track User Location for the custom puck
   useEffect(() => {
     let locationSub: Location.LocationSubscription | null = null;
+    let isMounted = true;
+
     const startLocationTracking = async () => {
       try {
         let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
+        if (status === 'granted' && isMounted) {
           const lastLoc = await Location.getLastKnownPositionAsync();
-          if (lastLoc) setUserLocation(lastLoc.coords);
+          if (lastLoc && isMounted) setUserLocation(lastLoc.coords);
           
-          locationSub = await Location.watchPositionAsync(
+          const sub = await Location.watchPositionAsync(
             { accuracy: Location.Accuracy.Balanced, timeInterval: 3000, distanceInterval: 10 },
-            (loc) => { setUserLocation(loc.coords); }
+            (loc) => { if (isMounted) setUserLocation(loc.coords); }
           );
+
+          if (isMounted) {
+            locationSub = sub;
+          } else {
+            sub.remove();
+          }
         }
       } catch (e) {
         console.warn("Could not track user location in dispatch screen.");
       }
     };
     startLocationTracking();
-    return () => { if (locationSub) locationSub.remove(); };
+    return () => {
+      isMounted = false;
+      if (locationSub) locationSub.remove();
+    };
   }, []);
 
   const rawLat = dispatch?.incident?.incident_latitude ?? dispatch?.incident?.latitude ?? dispatch?.incident?.reporter_latitude;
@@ -201,10 +212,15 @@ export default function DispatchScreen() {
   const parsedLng = parseFloat(rawLng);
   const hasValidCoords = !isNaN(parsedLat) && !isNaN(parsedLng) && parsedLat !== 0 && parsedLng !== 0;
 
+  const targetCoords = useMemo(() => ({
+    latitude: hasValidCoords ? parsedLat : 8.5138,
+    longitude: hasValidCoords ? parsedLng : 124.5775,
+  }), [hasValidCoords, parsedLat, parsedLng]);
+
   useGpsStatusTransition(
     dispatch?.id, 
     dispatch?.dispatch_status, 
-    { latitude: hasValidCoords ? parsedLat : 8.5138, longitude: hasValidCoords ? parsedLng : 124.5775 },
+    targetCoords,
     50
   );
 

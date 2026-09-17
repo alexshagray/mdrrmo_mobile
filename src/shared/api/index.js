@@ -1,10 +1,9 @@
 export * from './auth';
+export * from './incidents';
+export * from './residents';
+export * from './notifications';
 
-// Exporting placeholder modules for future implementation
-export const incidentsApi = {};
 export const dispatchesApi = {};
 export const patientsApi = {};
 export const respondersApi = {};
-export const residentsApi = {};
 export const ambulancesApi = {};
-export const notificationsApi = {};

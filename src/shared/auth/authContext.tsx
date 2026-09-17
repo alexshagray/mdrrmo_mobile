@@ -16,6 +16,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   isOnDuty: boolean;
   toggleDutyStatus: (status: boolean) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -31,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
   isOnDuty: true,
   toggleDutyStatus: async () => {},
+  refreshUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -220,6 +222,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshUser = async () => {
+    try {
+      const userData = await getUserApi();
+      const resolvedUser = userData?.user || userData;
+      if (resolvedUser && resolvedUser.id) {
+        setUser(resolvedUser);
+        if (resolvedUser.role) setRole(resolvedUser.role);
+        await saveSession({ user: resolvedUser, role: resolvedUser.role || role }, true);
+      }
+    } catch (e) {
+      console.error('refreshUser error:', e);
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -233,7 +249,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
       isOnDuty,
-      toggleDutyStatus
+      toggleDutyStatus,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

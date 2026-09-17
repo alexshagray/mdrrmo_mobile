@@ -64,7 +64,7 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus) {
         }
 
         // 2. Watch position continuously
-        subscription = await Location.watchPositionAsync(
+        const sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
             timeInterval: 4000,
@@ -105,6 +105,12 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus) {
             }
           }
         );
+
+        if (isCancelled) {
+          sub.remove();
+        } else {
+          subscription = sub;
+        }
       } catch (err) {
         console.warn('Live dispatch tracking error:', err);
         setIsTracking(false);

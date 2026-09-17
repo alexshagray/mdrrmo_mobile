@@ -91,6 +91,20 @@ export default function ResponderLayout() {
           tabBarStyle: { display: 'none' } // Hides the bottom bar when navigating
         }}
       />
+      <Tabs.Screen
+        name="account-security"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' }
+        }}
+      />
+      <Tabs.Screen
+        name="help-support"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' }
+        }}
+      />
     </Tabs>
   );
 }

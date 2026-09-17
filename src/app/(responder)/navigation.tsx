@@ -120,19 +120,24 @@ export default function NavigationScreen() {
 
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
+    let isMounted = true;
 
     const startTracking = async () => {
       try {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission Denied', 'Location permission is required for navigation.');
-          router.back();
+          if (isMounted) {
+            Alert.alert('Permission Denied', 'Location permission is required for navigation.');
+            router.back();
+          }
           return;
         }
 
         let isFirstLocation = true;
 
         const lastKnown = await Location.getLastKnownPositionAsync();
+        if (!isMounted) return;
+
         if (lastKnown) {
           setLocation(lastKnown.coords);
           fetchRoute(lastKnown.coords.latitude, lastKnown.coords.longitude, destination.latitude, destination.longitude);
@@ -144,13 +149,14 @@ export default function NavigationScreen() {
           isFirstLocation = false;
         }
 
-        locationSubscription = await Location.watchPositionAsync(
+        const sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.Balanced,
             timeInterval: 3000,
             distanceInterval: 10,
           },
           (loc) => {
+            if (!isMounted) return;
             setLocation(loc.coords);
             
             if (isFpvModeRef.current && mapRef.current) {
@@ -171,6 +177,12 @@ export default function NavigationScreen() {
             }
           }
         );
+
+        if (isMounted) {
+          locationSubscription = sub;
+        } else {
+          sub.remove();
+        }
       } catch (err) {
         console.error("Location Tracking Error:", err);
       }
@@ -179,6 +191,7 @@ export default function NavigationScreen() {
     startTracking();
 
     return () => {
+      isMounted = false;
       if (locationSubscription) {
         locationSubscription.remove();
       }
