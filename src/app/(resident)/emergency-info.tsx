@@ -101,22 +101,22 @@ export default function EmergencyInfoScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0B1120]" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         {/* Top App Bar */}
-        <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-[#0F172A]/90">
+        <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-xl bg-slate-800 items-center justify-center border border-slate-700 active:bg-slate-700"
+            className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-200/80 active:bg-slate-200"
             activeOpacity={0.7}
           >
-            <ArrowLeft size={20} color="#F8FAFC" />
+            <ArrowLeft size={18} color="#0F172A" />
           </TouchableOpacity>
           <View className="items-center">
-            <Text className="text-white text-base font-bold tracking-tight">Emergency Information</Text>
+            <Text className="text-slate-900 text-base font-bold tracking-tight">Emergency Information</Text>
             <Text className="text-slate-400 text-xs">Medical & Contacts</Text>
           </View>
           <View className="w-10" />
@@ -124,8 +124,8 @@ export default function EmergencyInfoScreen() {
 
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color="#EF4444" />
-            <Text className="text-slate-400 text-sm mt-3">Loading emergency data...</Text>
+            <ActivityIndicator size="large" color="#E11D48" />
+            <Text className="text-slate-500 text-sm mt-3 font-medium">Loading emergency data...</Text>
           </View>
         ) : (
           <ScrollView
@@ -135,45 +135,54 @@ export default function EmergencyInfoScreen() {
             keyboardShouldPersistTaps="handled"
           >
             {/* Informational Guidance Alert */}
-            <View className="flex-row items-start bg-blue-950/40 border border-blue-800/40 rounded-2xl p-4 mb-5">
-              <Info size={20} color="#60A5FA" className="mt-0.5" />
+            <View className="flex-row items-start bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-5">
+              <Info size={18} color="#2563EB" style={{ marginTop: 2 }} />
               <View className="ml-3 flex-1">
-                <Text className="text-blue-200 text-xs font-semibold leading-relaxed">
+                <Text className="text-blue-900 text-xs font-bold leading-relaxed">
                   Optional Emergency Record
                 </Text>
-                <Text className="text-slate-400 text-[11px] leading-relaxed mt-0.5">
-                  All fields in this section are optional. Providing these details may assist MDRRMO emergency medical responders during critical field care operations.
+                <Text className="text-slate-600 text-[11px] leading-relaxed mt-0.5">
+                  All fields in this section are optional. Providing these details helps MDRRMO emergency responders during critical field care.
                 </Text>
               </View>
             </View>
 
             {/* Feedback Banners */}
             {successMessage ? (
-              <View className="flex-row items-center bg-emerald-950/60 border border-emerald-700/50 rounded-2xl p-4 mb-5">
-                <CheckCircle2 size={20} color="#10B981" />
-                <Text className="text-emerald-300 text-xs font-semibold ml-2.5 flex-1">
+              <View className="flex-row items-center bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-5">
+                <CheckCircle2 size={18} color="#059669" />
+                <Text className="text-emerald-800 text-xs font-semibold ml-2.5 flex-1">
                   {successMessage}
                 </Text>
               </View>
             ) : null}
 
             {errorMessage ? (
-              <View className="flex-row items-center bg-red-950/60 border border-red-700/50 rounded-2xl p-4 mb-5">
-                <AlertCircle size={20} color="#EF4444" />
-                <Text className="text-red-300 text-xs font-semibold ml-2.5 flex-1">
+              <View className="flex-row items-center bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-5">
+                <AlertCircle size={18} color="#E11D48" />
+                <Text className="text-rose-800 text-xs font-semibold ml-2.5 flex-1">
                   {errorMessage}
                 </Text>
               </View>
             ) : null}
 
             {/* Section: Emergency Contact Person */}
-            <View className="bg-[#0F172A]/80 border border-slate-800 rounded-3xl p-5 mb-5 shadow-lg">
+            <View
+              className="bg-white border border-slate-200/80 rounded-3xl p-5 mb-5"
+              style={{
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.04,
+                shadowRadius: 10,
+                elevation: 2,
+              }}
+            >
               <View className="flex-row items-center mb-4">
-                <View className="w-9 h-9 rounded-xl bg-rose-500/10 items-center justify-center border border-rose-500/20 mr-3">
-                  <Phone size={18} color="#F43F5E" />
+                <View className="w-9 h-9 rounded-xl bg-rose-50 items-center justify-center border border-rose-200/60 mr-3">
+                  <Phone size={18} color="#E11D48" />
                 </View>
                 <View>
-                  <Text className="text-white font-bold text-base">Emergency Contact Person</Text>
+                  <Text className="text-slate-900 font-bold text-base">Emergency Contact Person</Text>
                   <Text className="text-slate-400 text-xs">Primary contact in case of emergency</Text>
                 </View>
               </View>
@@ -181,39 +190,39 @@ export default function EmergencyInfoScreen() {
               {/* Contact Name */}
               <View className="mb-3.5">
                 <View className="flex-row justify-between items-center mb-1.5 ml-1">
-                  <Text className="text-slate-300 text-xs font-semibold">Contact Full Name</Text>
-                  <Text className="text-slate-500 text-[11px]">Optional</Text>
+                  <Text className="text-slate-700 text-xs font-bold">Contact Full Name</Text>
+                  <Text className="text-slate-400 text-[11px]">Optional</Text>
                 </View>
                 <TextInput
                   value={contactName}
                   onChangeText={setContactName}
                   placeholder="e.g. Maria Dela Cruz"
-                  placeholderTextColor="#475569"
-                  className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm focus:border-rose-500"
+                  placeholderTextColor="#94A3B8"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:border-rose-500 focus:bg-white"
                 />
               </View>
 
               {/* Contact Number */}
               <View className="mb-3.5">
                 <View className="flex-row justify-between items-center mb-1.5 ml-1">
-                  <Text className="text-slate-300 text-xs font-semibold">Contact Phone Number</Text>
-                  <Text className="text-slate-500 text-[11px]">Optional</Text>
+                  <Text className="text-slate-700 text-xs font-bold">Contact Phone Number</Text>
+                  <Text className="text-slate-400 text-[11px]">Optional</Text>
                 </View>
                 <TextInput
                   value={contactNumber}
                   onChangeText={setContactNumber}
                   placeholder="e.g. 0918 765 4321"
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#94A3B8"
                   keyboardType="phone-pad"
-                  className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm focus:border-rose-500"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:border-rose-500 focus:bg-white"
                 />
               </View>
 
               {/* Relationship Pills */}
               <View>
                 <View className="flex-row justify-between items-center mb-1.5 ml-1">
-                  <Text className="text-slate-300 text-xs font-semibold">Relationship</Text>
-                  <Text className="text-slate-500 text-[11px]">Optional</Text>
+                  <Text className="text-slate-700 text-xs font-bold">Relationship</Text>
+                  <Text className="text-slate-400 text-[11px]">Optional</Text>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} className="py-1">
                   <View className="flex-row gap-2">
@@ -223,14 +232,14 @@ export default function EmergencyInfoScreen() {
                         onPress={() => setRelationship(rel === relationship ? '' : rel)}
                         className={`px-3.5 py-2 rounded-xl border ${
                           relationship === rel
-                            ? 'bg-rose-500/20 border-rose-500'
-                            : 'bg-slate-900 border-slate-800'
+                            ? 'bg-rose-50 border-rose-500'
+                            : 'bg-slate-50 border-slate-200'
                         }`}
                         activeOpacity={0.7}
                       >
                         <Text
                           className={`text-xs font-bold ${
-                            relationship === rel ? 'text-rose-400' : 'text-slate-400'
+                            relationship === rel ? 'text-rose-700' : 'text-slate-600'
                           }`}
                         >
                           {rel}
@@ -243,13 +252,22 @@ export default function EmergencyInfoScreen() {
             </View>
 
             {/* Section: Medical Profile */}
-            <View className="bg-[#0F172A]/80 border border-slate-800 rounded-3xl p-5 mb-6 shadow-lg">
+            <View
+              className="bg-white border border-slate-200/80 rounded-3xl p-5 mb-6"
+              style={{
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.04,
+                shadowRadius: 10,
+                elevation: 2,
+              }}
+            >
               <View className="flex-row items-center mb-4">
-                <View className="w-9 h-9 rounded-xl bg-red-500/10 items-center justify-center border border-red-500/20 mr-3">
-                  <HeartPulse size={18} color="#EF4444" />
+                <View className="w-9 h-9 rounded-xl bg-red-50 items-center justify-center border border-red-200/60 mr-3">
+                  <HeartPulse size={18} color="#DC2626" />
                 </View>
                 <View>
-                  <Text className="text-white font-bold text-base">Medical Background</Text>
+                  <Text className="text-slate-900 font-bold text-base">Medical Background</Text>
                   <Text className="text-slate-400 text-xs">Assists EMT and triage responders</Text>
                 </View>
               </View>
@@ -258,10 +276,10 @@ export default function EmergencyInfoScreen() {
               <View className="mb-4">
                 <View className="flex-row justify-between items-center mb-2 ml-1">
                   <View className="flex-row items-center">
-                    <Droplet size={14} color="#EF4444" />
-                    <Text className="text-slate-300 text-xs font-semibold ml-1.5">Blood Type</Text>
+                    <Droplet size={14} color="#DC2626" />
+                    <Text className="text-slate-700 text-xs font-bold ml-1.5">Blood Type</Text>
                   </View>
-                  <Text className="text-slate-500 text-[11px]">Optional</Text>
+                  <Text className="text-slate-400 text-[11px]">Optional</Text>
                 </View>
                 <View className="flex-row flex-wrap gap-2">
                   {BLOOD_TYPES.map((bt) => (
@@ -270,14 +288,14 @@ export default function EmergencyInfoScreen() {
                       onPress={() => setBloodType(bt === bloodType ? '' : bt)}
                       className={`px-3.5 py-2 rounded-xl border ${
                         bloodType === bt
-                          ? 'bg-red-500/25 border-red-500'
-                          : 'bg-slate-900 border-slate-800'
+                          ? 'bg-red-50 border-red-500'
+                          : 'bg-slate-50 border-slate-200'
                       }`}
                       activeOpacity={0.7}
                     >
                       <Text
                         className={`text-xs font-bold ${
-                          bloodType === bt ? 'text-red-400' : 'text-slate-400'
+                          bloodType === bt ? 'text-red-700' : 'text-slate-600'
                         }`}
                       >
                         {bt}
@@ -291,21 +309,21 @@ export default function EmergencyInfoScreen() {
               <View className="mb-4">
                 <View className="flex-row justify-between items-center mb-1.5 ml-1">
                   <View className="flex-row items-center">
-                    <AlertTriangle size={14} color="#F59E0B" />
-                    <Text className="text-slate-300 text-xs font-semibold ml-1.5">
+                    <AlertTriangle size={14} color="#D97706" />
+                    <Text className="text-slate-700 text-xs font-bold ml-1.5">
                       Known Allergies
                     </Text>
                   </View>
-                  <Text className="text-slate-500 text-[11px]">Optional</Text>
+                  <Text className="text-slate-400 text-[11px]">Optional</Text>
                 </View>
                 <TextInput
                   value={allergies}
                   onChangeText={setAllergies}
                   placeholder="e.g. Penicillin, Aspirin, Seafood, Latex..."
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#94A3B8"
                   multiline
                   numberOfLines={2}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm focus:border-red-500 text-top"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:border-red-500 focus:bg-white text-top"
                 />
               </View>
 
@@ -313,21 +331,21 @@ export default function EmergencyInfoScreen() {
               <View>
                 <View className="flex-row justify-between items-center mb-1.5 ml-1">
                   <View className="flex-row items-center">
-                    <FileText size={14} color="#3B82F6" />
-                    <Text className="text-slate-300 text-xs font-semibold ml-1.5">
+                    <FileText size={14} color="#2563EB" />
+                    <Text className="text-slate-700 text-xs font-bold ml-1.5">
                       Important Medical Conditions
                     </Text>
                   </View>
-                  <Text className="text-slate-500 text-[11px]">Optional</Text>
+                  <Text className="text-slate-400 text-[11px]">Optional</Text>
                 </View>
                 <TextInput
                   value={medicalNotes}
                   onChangeText={setMedicalNotes}
                   placeholder="e.g. Asthma, Hypertension, Diabetes, Pacemaker implant..."
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#94A3B8"
                   multiline
                   numberOfLines={3}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-white text-sm focus:border-red-500 text-top"
+                  className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-slate-900 text-sm focus:border-red-500 focus:bg-white text-top"
                 />
               </View>
             </View>
@@ -336,23 +354,23 @@ export default function EmergencyInfoScreen() {
             <View className="flex-row gap-3">
               <TouchableOpacity
                 onPress={() => router.back()}
-                className="flex-1 bg-slate-800/80 border border-slate-700 py-4 rounded-2xl items-center justify-center active:bg-slate-700"
+                className="flex-1 bg-white border border-slate-200 py-3.5 rounded-2xl items-center justify-center active:bg-slate-100"
                 activeOpacity={0.7}
               >
-                <Text className="text-slate-300 font-bold text-sm">Cancel</Text>
+                <Text className="text-slate-700 font-bold text-sm">Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleSave}
                 disabled={isSaving}
-                className="flex-1 bg-rose-600 py-4 rounded-2xl flex-row items-center justify-center shadow-lg shadow-rose-600/30 active:bg-rose-700"
+                className="flex-1 bg-slate-900 py-3.5 rounded-2xl flex-row items-center justify-center shadow-md active:bg-slate-800"
                 activeOpacity={0.8}
               >
                 {isSaving ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Save size={18} color="#FFFFFF" className="mr-2" />
+                    <Save size={16} color="#FFFFFF" className="mr-2" />
                     <Text className="text-white font-bold text-sm ml-2">Save Details</Text>
                   </>
                 )}

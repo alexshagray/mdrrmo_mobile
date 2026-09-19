@@ -129,22 +129,22 @@ export default function AccountSecurityScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0B1120]" edges={['top', 'bottom']}>
+    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
         {/* Top App Bar */}
-        <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-[#0F172A]/90">
+        <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
           <TouchableOpacity
             onPress={() => router.back()}
-            className="w-10 h-10 rounded-xl bg-slate-800 items-center justify-center border border-slate-700 active:bg-slate-700"
+            className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-200/80 active:bg-slate-200"
             activeOpacity={0.7}
           >
-            <ArrowLeft size={20} color="#F8FAFC" />
+            <ArrowLeft size={18} color="#0F172A" />
           </TouchableOpacity>
           <View className="items-center">
-            <Text className="text-white text-base font-bold tracking-tight">Account & Security</Text>
+            <Text className="text-slate-900 text-base font-bold tracking-tight">Account & Security</Text>
             <Text className="text-slate-400 text-xs">Credentials & Authentication</Text>
           </View>
           <View className="w-10" />
@@ -157,46 +157,55 @@ export default function AccountSecurityScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Account Overview Card */}
-          <View className="bg-[#0F172A]/80 border border-slate-800 rounded-3xl p-5 mb-5 shadow-lg">
+          <View
+            className="bg-white border border-slate-200/80 rounded-3xl p-5 mb-5"
+            style={{
+              shadowColor: '#0F172A',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.04,
+              shadowRadius: 10,
+              elevation: 2,
+            }}
+          >
             <View className="flex-row items-center justify-between mb-4">
               <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 items-center justify-center mr-3">
-                  <ShieldCheck size={20} color="#3B82F6" />
+                <View className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
+                  <ShieldCheck size={20} color="#2563EB" />
                 </View>
                 <View>
-                  <Text className="text-white font-bold text-base">Account Identity</Text>
+                  <Text className="text-slate-900 font-bold text-base">Account Identity</Text>
                   <Text className="text-slate-400 text-xs">Verified system profile</Text>
                 </View>
               </View>
-              <View className="bg-emerald-950/60 border border-emerald-700/50 px-3 py-1 rounded-full">
-                <Text className="text-emerald-400 text-[10px] font-extrabold uppercase">
+              <View className="bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                <Text className="text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
                   ACTIVE
                 </Text>
               </View>
             </View>
 
             <View className="space-y-2.5">
-              <View className="flex-row items-center justify-between py-2 border-b border-slate-800/70">
+              <View className="flex-row items-center justify-between py-2.5 border-b border-slate-100">
                 <View className="flex-row items-center">
                   <Mail size={14} color="#64748B" />
-                  <Text className="text-slate-400 text-xs ml-2">Email Address</Text>
+                  <Text className="text-slate-500 text-xs ml-2">Email Address</Text>
                 </View>
-                <Text className="text-white text-xs font-semibold">{user?.email || '—'}</Text>
+                <Text className="text-slate-800 text-xs font-semibold">{user?.email || '—'}</Text>
               </View>
 
-              <View className="flex-row items-center justify-between py-2 border-b border-slate-800/70">
+              <View className="flex-row items-center justify-between py-2.5 border-b border-slate-100">
                 <View className="flex-row items-center">
                   <Smartphone size={14} color="#64748B" />
-                  <Text className="text-slate-400 text-xs ml-2">Mobile Number</Text>
+                  <Text className="text-slate-500 text-xs ml-2">Mobile Number</Text>
                 </View>
-                <Text className="text-white text-xs font-semibold">
+                <Text className="text-slate-800 text-xs font-semibold">
                   {user?.phone_number || user?.phone || '—'}
                 </Text>
               </View>
 
-              <View className="flex-row items-center justify-between py-2">
-                <Text className="text-slate-400 text-xs">Role</Text>
-                <Text className="text-blue-400 font-extrabold text-xs uppercase tracking-wider">
+              <View className="flex-row items-center justify-between py-2.5">
+                <Text className="text-slate-500 text-xs">Role</Text>
+                <Text className="text-indigo-600 font-bold text-xs uppercase tracking-wider">
                   {role === 'responder' ? 'EMERGENCY RESPONDER' : 'RESIDENT'}
                 </Text>
               </View>
@@ -204,31 +213,40 @@ export default function AccountSecurityScreen() {
           </View>
 
           {/* Change Password Card */}
-          <View className="bg-[#0F172A]/80 border border-slate-800 rounded-3xl p-5 mb-5 shadow-lg">
+          <View
+            className="bg-white border border-slate-200/80 rounded-3xl p-5 mb-5"
+            style={{
+              shadowColor: '#0F172A',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.04,
+              shadowRadius: 10,
+              elevation: 2,
+            }}
+          >
             <View className="flex-row items-center mb-4">
-              <View className="w-9 h-9 rounded-xl bg-amber-500/10 items-center justify-center border border-amber-500/20 mr-3">
-                <KeyRound size={18} color="#F59E0B" />
+              <View className="w-9 h-9 rounded-xl bg-amber-50 items-center justify-center border border-amber-200/60 mr-3">
+                <KeyRound size={18} color="#D97706" />
               </View>
               <View>
-                <Text className="text-white font-bold text-base">Change Password</Text>
+                <Text className="text-slate-900 font-bold text-base">Change Password</Text>
                 <Text className="text-slate-400 text-xs">Update your secure access key</Text>
               </View>
             </View>
 
             {/* Feedback Banners */}
             {successMessage ? (
-              <View className="flex-row items-center bg-emerald-950/60 border border-emerald-700/50 rounded-2xl p-4 mb-4">
-                <CheckCircle2 size={18} color="#10B981" />
-                <Text className="text-emerald-300 text-xs font-semibold ml-2.5 flex-1">
+              <View className="flex-row items-center bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-4">
+                <CheckCircle2 size={18} color="#059669" />
+                <Text className="text-emerald-800 text-xs font-semibold ml-2.5 flex-1">
                   {successMessage}
                 </Text>
               </View>
             ) : null}
 
             {errorMessage ? (
-              <View className="flex-row items-center bg-red-950/60 border border-red-700/50 rounded-2xl p-4 mb-4">
-                <AlertCircle size={18} color="#EF4444" />
-                <Text className="text-red-300 text-xs font-semibold ml-2.5 flex-1">
+              <View className="flex-row items-center bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-4">
+                <AlertCircle size={18} color="#E11D48" />
+                <Text className="text-rose-800 text-xs font-semibold ml-2.5 flex-1">
                   {errorMessage}
                 </Text>
               </View>
@@ -236,8 +254,8 @@ export default function AccountSecurityScreen() {
 
             {/* Current Password */}
             <View className="mb-3.5">
-              <Text className="text-slate-300 text-xs font-semibold mb-1.5 ml-1">
-                Current Password <Text className="text-rose-400">*</Text>
+              <Text className="text-slate-700 text-xs font-bold mb-1.5 ml-1">
+                Current Password <Text className="text-rose-500">*</Text>
               </Text>
               <View className="relative flex-row items-center">
                 <TextInput
@@ -248,12 +266,12 @@ export default function AccountSecurityScreen() {
                       setFieldErrors((prev) => ({ ...prev, currentPassword: '' }));
                   }}
                   placeholder="Enter current password"
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#94A3B8"
                   secureTextEntry={!showCurrent}
-                  className={`bg-slate-900 border rounded-2xl px-4 py-3 text-white text-sm flex-1 pr-11 ${
+                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm flex-1 pr-11 ${
                     fieldErrors.currentPassword
-                      ? 'border-rose-500'
-                      : 'border-slate-800 focus:border-blue-500'
+                      ? 'border-rose-400 bg-rose-50/20'
+                      : 'border-slate-200 focus:border-blue-600 focus:bg-white'
                   }`}
                 />
                 <TouchableOpacity
@@ -264,7 +282,7 @@ export default function AccountSecurityScreen() {
                 </TouchableOpacity>
               </View>
               {fieldErrors.currentPassword && (
-                <Text className="text-rose-400 text-xs mt-1 ml-1">
+                <Text className="text-rose-500 text-xs mt-1 ml-1">
                   {fieldErrors.currentPassword}
                 </Text>
               )}
@@ -272,8 +290,8 @@ export default function AccountSecurityScreen() {
 
             {/* New Password */}
             <View className="mb-3.5">
-              <Text className="text-slate-300 text-xs font-semibold mb-1.5 ml-1">
-                New Password <Text className="text-rose-400">*</Text>
+              <Text className="text-slate-700 text-xs font-bold mb-1.5 ml-1">
+                New Password <Text className="text-rose-500">*</Text>
               </Text>
               <View className="relative flex-row items-center">
                 <TextInput
@@ -284,12 +302,12 @@ export default function AccountSecurityScreen() {
                       setFieldErrors((prev) => ({ ...prev, newPassword: '' }));
                   }}
                   placeholder="At least 8 characters"
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#94A3B8"
                   secureTextEntry={!showNew}
-                  className={`bg-slate-900 border rounded-2xl px-4 py-3 text-white text-sm flex-1 pr-11 ${
+                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm flex-1 pr-11 ${
                     fieldErrors.newPassword
-                      ? 'border-rose-500'
-                      : 'border-slate-800 focus:border-blue-500'
+                      ? 'border-rose-400 bg-rose-50/20'
+                      : 'border-slate-200 focus:border-blue-600 focus:bg-white'
                   }`}
                 />
                 <TouchableOpacity
@@ -300,14 +318,14 @@ export default function AccountSecurityScreen() {
                 </TouchableOpacity>
               </View>
               {fieldErrors.newPassword && (
-                <Text className="text-rose-400 text-xs mt-1 ml-1">{fieldErrors.newPassword}</Text>
+                <Text className="text-rose-500 text-xs mt-1 ml-1">{fieldErrors.newPassword}</Text>
               )}
             </View>
 
             {/* Confirm New Password */}
             <View className="mb-4">
-              <Text className="text-slate-300 text-xs font-semibold mb-1.5 ml-1">
-                Confirm New Password <Text className="text-rose-400">*</Text>
+              <Text className="text-slate-700 text-xs font-bold mb-1.5 ml-1">
+                Confirm New Password <Text className="text-rose-500">*</Text>
               </Text>
               <View className="relative flex-row items-center">
                 <TextInput
@@ -318,12 +336,12 @@ export default function AccountSecurityScreen() {
                       setFieldErrors((prev) => ({ ...prev, confirmPassword: '' }));
                   }}
                   placeholder="Repeat new password"
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#94A3B8"
                   secureTextEntry={!showConfirm}
-                  className={`bg-slate-900 border rounded-2xl px-4 py-3 text-white text-sm flex-1 pr-11 ${
+                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm flex-1 pr-11 ${
                     fieldErrors.confirmPassword
-                      ? 'border-rose-500'
-                      : 'border-slate-800 focus:border-blue-500'
+                      ? 'border-rose-400 bg-rose-50/20'
+                      : 'border-slate-200 focus:border-blue-600 focus:bg-white'
                   }`}
                 />
                 <TouchableOpacity
@@ -334,28 +352,28 @@ export default function AccountSecurityScreen() {
                 </TouchableOpacity>
               </View>
               {fieldErrors.confirmPassword && (
-                <Text className="text-rose-400 text-xs mt-1 ml-1">
+                <Text className="text-rose-500 text-xs mt-1 ml-1">
                   {fieldErrors.confirmPassword}
                 </Text>
               )}
             </View>
 
             {/* Password Validation Checklist */}
-            <View className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 mb-5 space-y-2">
-              <Text className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+            <View className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 mb-5 space-y-2">
+              <Text className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                 Password Requirements
               </Text>
               <View className="flex-row items-center">
                 <View
                   className={`w-3.5 h-3.5 rounded-full items-center justify-center mr-2 ${
-                    isMinLength ? 'bg-emerald-500' : 'bg-slate-800'
+                    isMinLength ? 'bg-emerald-500' : 'bg-slate-200'
                   }`}
                 >
                   <Text className="text-white text-[9px] font-bold">✓</Text>
                 </View>
                 <Text
                   className={`text-xs ${
-                    isMinLength ? 'text-emerald-400 font-semibold' : 'text-slate-500'
+                    isMinLength ? 'text-emerald-700 font-bold' : 'text-slate-400'
                   }`}
                 >
                   Minimum 8 characters
@@ -364,14 +382,14 @@ export default function AccountSecurityScreen() {
               <View className="flex-row items-center">
                 <View
                   className={`w-3.5 h-3.5 rounded-full items-center justify-center mr-2 ${
-                    isMatching ? 'bg-emerald-500' : 'bg-slate-800'
+                    isMatching ? 'bg-emerald-500' : 'bg-slate-200'
                   }`}
                 >
                   <Text className="text-white text-[9px] font-bold">✓</Text>
                 </View>
                 <Text
                   className={`text-xs ${
-                    isMatching ? 'text-emerald-400 font-semibold' : 'text-slate-500'
+                    isMatching ? 'text-emerald-700 font-bold' : 'text-slate-400'
                   }`}
                 >
                   Passwords match
@@ -382,10 +400,10 @@ export default function AccountSecurityScreen() {
             <TouchableOpacity
               onPress={handleChangePassword}
               disabled={isLoading || !isMinLength || !isMatching}
-              className={`py-4 rounded-2xl flex-row items-center justify-center ${
+              className={`py-3.5 rounded-2xl flex-row items-center justify-center ${
                 !isMinLength || !isMatching
-                  ? 'bg-blue-600/40 opacity-60'
-                  : 'bg-blue-600 shadow-lg shadow-blue-600/30 active:bg-blue-700'
+                  ? 'bg-slate-200'
+                  : 'bg-slate-900 shadow-md active:bg-slate-800'
               }`}
               activeOpacity={0.8}
             >
@@ -393,8 +411,14 @@ export default function AccountSecurityScreen() {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <>
-                  <Lock size={16} color="#FFFFFF" />
-                  <Text className="text-white font-bold text-sm ml-2">Change Password</Text>
+                  <Lock size={16} color={!isMinLength || !isMatching ? '#94A3B8' : '#FFFFFF'} />
+                  <Text
+                    className={`font-bold text-sm ml-2 ${
+                      !isMinLength || !isMatching ? 'text-slate-400' : 'text-white'
+                    }`}
+                  >
+                    Change Password
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -403,11 +427,13 @@ export default function AccountSecurityScreen() {
           {/* Secure Logout Section */}
           <TouchableOpacity
             onPress={handleLogout}
-            className="bg-rose-950/40 border border-rose-800/50 py-4 px-5 rounded-3xl flex-row items-center justify-center active:bg-rose-950/70 shadow-lg"
+            className="bg-white border border-rose-200 py-3.5 px-5 rounded-2xl flex-row items-center justify-center active:bg-rose-50 mb-4"
             activeOpacity={0.8}
           >
-            <LogOut size={18} color="#F43F5E" />
-            <Text className="text-rose-400 font-bold text-sm ml-2.5">Sign Out of Account</Text>
+            <LogOut size={17} color="#E11D48" />
+            <Text className="text-rose-600 font-bold text-xs ml-2 tracking-wider">
+              SIGN OUT OF ACCOUNT
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
