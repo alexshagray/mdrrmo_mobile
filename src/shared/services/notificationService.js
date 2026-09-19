@@ -44,7 +44,12 @@ class NotificationService {
       token = (await Notifications.getExpoPushTokenAsync()).data;
       console.log('Expo Push Token:', token);
     } catch (e) {
-      console.error('Error getting push token', e);
+      const msg = e?.message || String(e);
+      if (msg.includes('FirebaseApp is not initialized') || msg.includes('googleServicesFile')) {
+        console.log('[PushNotifications] Firebase not initialized in dev build.');
+      } else {
+        console.error('Error getting push token', e);
+      }
     }
 
     return token;

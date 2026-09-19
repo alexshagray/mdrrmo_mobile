@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { updateDispatchLocation } from '../api/dispatches';
+import { useAuth } from '../auth/authContext';
 
 /**
  * Calculates distance in meters between two lat/lng pairs (Haversine formula)
@@ -24,9 +25,13 @@ const ACTIVE_STATUSES = ['assigned', 'accepted', 'en_route', 'arrived_on_scene']
 
 /**
  * Hook to continuously track and transmit responder GPS for an active dispatch.
- * Automatically deactivates when the dispatch is completed, cancelled, or inactive.
+ * Driver is the primary tracking device; non-drivers operate in standby fallback mode.
  */
-export function useLiveDispatchTracking(dispatchId, dispatchStatus) {
+export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}) {
+  const { user } = useAuth();
+  const driverId = options?.driverId;
+  const isDriver = !driverId || !user?.id || Number(user.id) === Number(driverId);
+
   const [currentLocation, setCurrentLocation] = useState(null);
   const [lastSentAt, setLastSentAt] = useState(null);
   const [isTracking, setIsTracking] = useState(false);
@@ -63,12 +68,12 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus) {
           transmitLocation(lastKnown.coords);
         }
 
-        // 2. Watch position continuously
+        // 2. Watch position continuously: Driver is primary (fast & high accuracy), non-driver is standby
         const sub = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 4000,
-            distanceInterval: 10,
+            accuracy: isDriver ? Location.Accuracy.High : Location.Accuracy.Balanced,
+            timeInterval: isDriver ? 3000 : 15000,
+            distanceInterval: isDriver ? 8 : 25,
           },
           (loc) => {
             if (isCancelled || !loc?.coords) return;
@@ -118,15 +123,15 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus) {
     };
 
     const transmitLocation = async (coords) => {
-      if (isSendingRef.current || !dispatchId) return;
+      if (isSendingRef.current || !dispatchId || isCancelled) return;
 
       isSendingRef.current = true;
       try {
         await updateDispatchLocation(dispatchId, {
           latitude: coords.latitude,
           longitude: coords.longitude,
-          heading: coords.heading ?? null,
-          accuracy: coords.accuracy ?? null,
+          heading: (typeof coords.heading === 'number' && coords.heading >= 0) ? coords.heading : null,
+          accuracy: (typeof coords.accuracy === 'number' && coords.accuracy >= 0) ? coords.accuracy : null,
           timestamp: new Date().toISOString(),
         });
 
@@ -137,7 +142,15 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus) {
         lastSentTimeRef.current = Date.now();
         setLastSentAt(new Date());
       } catch (err) {
-        console.warn('Failed to transmit live dispatch location:', err?.message || err);
+        if (err?.response?.status === 422) {
+          // Inactive, completed, or cancelled mission - stop tracking cleanly
+          setIsTracking(false);
+          isCancelled = true;
+          if (subscription) {
+            subscription.remove();
+          }
+        }
+        console.warn('Failed to transmit live dispatch location:', err?.response?.data?.message || err?.message || err);
       } finally {
         isSendingRef.current = false;
       }

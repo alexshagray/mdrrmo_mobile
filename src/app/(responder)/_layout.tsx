@@ -1,9 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Home, Map as MapIcon, UserCircle, ClipboardList, User } from 'lucide-react-native';
 import { View } from 'react-native';
+import { getActiveDispatches } from '@/shared/api/dispatches';
+import { useLiveDispatchTracking } from '@/shared/hooks';
+import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 
 export default function ResponderLayout() {
+  const [activeDispatch, setActiveDispatch] = useState<any>(null);
+  const { missionRefreshTrigger } = useMissionAlarm();
+
+  useEffect(() => {
+    let isMounted = true;
+    getActiveDispatches().then(res => {
+      if (isMounted && res?.data && res.data.length > 0) {
+        setActiveDispatch(res.data[0]);
+      } else if (isMounted) {
+        setActiveDispatch(null);
+      }
+    }).catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [missionRefreshTrigger]);
+
+  useLiveDispatchTracking(activeDispatch?.id, activeDispatch?.dispatch_status, { driverId: activeDispatch?.driver_id });
   return (
     <Tabs
       screenOptions={{

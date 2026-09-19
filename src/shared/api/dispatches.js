@@ -35,10 +35,10 @@ export const updateDispatchStatus = async (dispatchId, status, coords = null) =>
 
 export const updateDispatchLocation = async (dispatchId, { latitude, longitude, heading = null, accuracy = null, timestamp = null }) => {
   const payload = {
-    latitude,
-    longitude,
-    heading,
-    accuracy,
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+    heading: (typeof heading === 'number' && heading >= 0) ? heading : null,
+    accuracy: (typeof accuracy === 'number' && accuracy >= 0) ? accuracy : null,
     timestamp: timestamp || new Date().toISOString()
   };
   const response = await apiClient.post(`/responder/dispatches/${dispatchId}/location`, payload);

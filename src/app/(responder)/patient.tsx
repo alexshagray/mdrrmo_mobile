@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Platform, StyleSheet, KeyboardAvoidingView, Modal } from 'react-native';
 import * as Location from 'expo-location';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Header, Button } from '@/shared/components';
 import { SignaturePad, BodyDiagram } from '@/shared/components';
-import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation } from 'lucide-react-native';
+import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw } from 'lucide-react-native';
 import { searchPatients, createPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
@@ -254,6 +254,12 @@ export default function PatientCareRecordScreen() {
     loadActiveDispatch();
   }, [missionRefreshTrigger]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadActiveDispatch();
+    }, [missionRefreshTrigger])
+  );
+
   const loadActiveDispatch = async () => {
     try {
       const res = await getActiveDispatches();
@@ -383,6 +389,10 @@ export default function PatientCareRecordScreen() {
             waiver_signature: pcr.waiver_signature || pcr.patient_signature || prev.waiver_signature,
           } : {})
         }));
+      } else {
+        if (!isWalkIn) {
+          setActiveDispatch(null);
+        }
       }
     } catch (e) {
       console.log('Error loading active dispatch:', e);
@@ -472,9 +482,10 @@ export default function PatientCareRecordScreen() {
       }));
       setShowWalkInModal(false);
       setStep(1);
-    } catch (error) {
+    } catch (error: any) {
       console.log('Error creating walk-in dispatch:', error);
-      Alert.alert('Error', 'Failed to create Walk-In PCR.');
+      const errMsg = error?.response?.data?.message || 'Failed to create Walk-In PCR.';
+      Alert.alert('Notice', errMsg);
     } finally {
       setIsCreatingWalkIn(false);
     }
@@ -1415,11 +1426,24 @@ export default function PatientCareRecordScreen() {
           <Text className="text-slate-500 font-medium text-center mb-8 leading-5">
             You can only fill out a Patient Care Record when you are actively assigned to an emergency dispatch.
           </Text>
-          <Button 
-            title="Create Walk-In PCR" 
-            onPress={() => setShowWalkInModal(true)} 
-            style={{ width: '100%', backgroundColor: '#e11d48' }}
-          />
+          <View className="w-full space-y-3">
+            <TouchableOpacity
+              onPress={() => {
+                setIsLoading(true);
+                loadActiveDispatch();
+              }}
+              className="w-full py-3.5 bg-slate-100 active:bg-slate-200 rounded-xl items-center flex-row justify-center mb-3 border border-slate-200"
+            >
+              <RefreshCw size={16} color="#475569" style={{ marginRight: 8 }} />
+              <Text className="text-slate-700 font-bold">Check for Active Mission</Text>
+            </TouchableOpacity>
+
+            <Button 
+              title="Create Walk-In PCR" 
+              onPress={() => setShowWalkInModal(true)} 
+              style={{ width: '100%', backgroundColor: '#e11d48' }}
+            />
+          </View>
         </View>
 
         {/* Walk-In Confirmation Modal */}

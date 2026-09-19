@@ -30,6 +30,14 @@ export default function DispatchScreen() {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapboxGL.Camera>(null);
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(responder)');
+    }
+  };
+
   const [userLocation, setUserLocation] = useState<Location.LocationObjectCoords | null>(null);
   const { echo } = useRealtime() as { echo: any };
 
@@ -224,7 +232,7 @@ export default function DispatchScreen() {
     50
   );
 
-  useLiveDispatchTracking(dispatch?.id, dispatch?.dispatch_status);
+  useLiveDispatchTracking(dispatch?.id, dispatch?.dispatch_status, { driverId: dispatch?.driver_id });
 
   // Center map directly on incident pin when loaded
   useEffect(() => {
@@ -270,7 +278,7 @@ export default function DispatchScreen() {
     try {
       await updateDispatchStatus(dispatch.id, 'cancelled');
       setShowDeclineModal(false);
-      router.back();
+      handleBack();
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to decline dispatch.');
@@ -312,7 +320,8 @@ export default function DispatchScreen() {
         params: {
           lat: rawLat,
           lng: rawLng,
-          dispatchId: dispatch.id
+          dispatchId: dispatch.id,
+          driverId: dispatch.driver_id,
         }
       });
     } catch (e) {
@@ -322,7 +331,8 @@ export default function DispatchScreen() {
         params: {
           lat: rawLat,
           lng: rawLng,
-          dispatchId: dispatch.id
+          dispatchId: dispatch.id,
+          driverId: dispatch.driver_id,
         }
       });
     } finally {
@@ -432,7 +442,7 @@ export default function DispatchScreen() {
       </View>
       
       <View className="absolute top-0 left-0 right-0 px-4 flex-row items-center justify-between pointer-events-box-none" style={{ paddingTop: insets.top + 8 }}>
-        <TouchableOpacity onPress={() => router.back()} className="bg-white/90 p-3 rounded-full shadow-lg border border-slate-200/50 pointer-events-auto">
+        <TouchableOpacity onPress={handleBack} className="bg-white/90 p-3 rounded-full shadow-lg border border-slate-200/50 pointer-events-auto">
           <ArrowLeft size={20} color="#1E293B" />
         </TouchableOpacity>
         <StatusChip status={dispatch.dispatch_status} type="dispatch" />

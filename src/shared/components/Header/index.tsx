@@ -25,7 +25,7 @@ export function Header({
       <View className="flex-row items-center flex-1 pr-2">
         {showBack && (
           <TouchableOpacity 
-            onPress={() => router.back()} 
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} 
             className="bg-slate-50 p-3 rounded-2xl mr-4 border border-slate-200/60 shadow-sm"
           >
             <ChevronLeft size={22} color="#1E293B" strokeWidth={3} />

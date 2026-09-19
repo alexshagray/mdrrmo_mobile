@@ -1,74 +1,100 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter as useExpoRouter, useLocalSearchParams as useExpoSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
-import { ArrowLeft, Navigation, X, Crosshair, AlertTriangle, Layers, Map as MapIcon, Ambulance, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle } from 'lucide-react-native';
 import { useLiveDispatchTracking } from '@/shared/hooks';
 import { updateDispatchStatus } from '@/shared/api/dispatches';
-
-// Helper: Haversine distance between two coords in meters
-const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // metres
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-};
-
-// Decode OSRM polyline
-const decodePolyline = (str: string, precision: number = 5) => {
-  let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, latitude_change, longitude_change, factor = Math.pow(10, precision);
-  while (index < str.length) {
-    byte = null; shift = 0; result = 0;
-    do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
-    latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    shift = result = 0;
-    do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
-    longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
-    lat += latitude_change; lng += longitude_change;
-    coordinates.push({ latitude: lat / factor, longitude: lng / factor });
-  }
-  return coordinates;
-};
+import {
+  getDistance,
+  calculateBearing,
+  smoothAngle,
+  trimRouteProgress,
+  LatLng,
+} from '@/shared/utils/navigationMath';
+import {
+  fetchRoadRoute,
+  formatDistance,
+  formatDuration,
+} from '@/shared/services/routingService';
+import {
+  ResponderNavigationArrow,
+  IncidentLocationPin,
+} from '@/shared/components/Map/NavigationMarkers';
 
 export default function NavigationScreen() {
   const router = useExpoRouter();
   const params = useExpoSearchParams();
   const mapRef = useRef<MapboxGL.Camera>(null);
 
-  const destination = {
-    latitude: parseFloat(Array.isArray(params.lat) ? params.lat[0] : params.lat as string) || 8.5138,
-    longitude: parseFloat(Array.isArray(params.lng) ? params.lng[0] : params.lng as string) || 124.5775,
+  const destination: LatLng = {
+    latitude: parseFloat(Array.isArray(params.lat) ? params.lat[0] : (params.lat as string)) || 8.5138,
+    longitude: parseFloat(Array.isArray(params.lng) ? params.lng[0] : (params.lng as string)) || 124.5775,
   };
 
   const dispatchId = Array.isArray(params.dispatchId) ? params.dispatchId[0] : params.dispatchId;
+  const driverId = Array.isArray(params.driverId) ? params.driverId[0] : params.driverId;
   const [trackingStatus, setTrackingStatus] = useState('en_route');
-  useLiveDispatchTracking(dispatchId, trackingStatus);
+  useLiveDispatchTracking(dispatchId, trackingStatus, { driverId });
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(responder)');
+    }
+  };
+
+  // State
+  const [displayedLocation, setDisplayedLocation] = useState<LatLng | null>(null);
+  const [heading, setHeading] = useState<number>(0);
+  const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
+  const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
   const [isArriving, setIsArriving] = useState(false);
+  const [isFpvMode, setIsFpvMode] = useState(false);
+
+  // Refs for navigation stability & smooth tracking
+  const isCalculatingRef = useRef(false);
+  const lastRecalcTimeRef = useRef(0);
+  const lastReliableHeadingRef = useRef(0);
+  const lastRawLocationRef = useRef<LatLng | null>(null);
+  const deviationCounterRef = useRef(0);
+  const isFpvModeRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRouteRef = useRef<LatLng[]>([]);
+
+  // Keep activeRouteRef in sync with state for access in location callback
+  useEffect(() => {
+    activeRouteRef.current = routeCoords;
+  }, [routeCoords]);
+
+  // Proximity to scene: must be within 10 meters of the incident pin
+  const distanceToScene = displayedLocation
+    ? getDistance(displayedLocation.latitude, displayedLocation.longitude, destination.latitude, destination.longitude)
+    : Infinity;
+  const isWithinRange = distanceToScene <= 10;
 
   const handleArrived = async () => {
     if (isArriving) return;
+    if (!isWithinRange) {
+      Alert.alert(
+        'Proximity Requirement',
+        `You must be within 10 meters of the incident location pin to mark arrival. You are currently ${Math.round(distanceToScene)}m away.`
+      );
+      return;
+    }
     setIsArriving(true);
     try {
       if (dispatchId) {
         await updateDispatchStatus(dispatchId, 'arrived_on_scene');
       }
-      // Stop en-route tracking and route display
       setTrackingStatus('arrived_on_scene');
       setRouteCoords([]);
       setRouteInfo(null);
-
-      // Automatically return to Home/Dashboard
       router.replace('/(responder)');
     } catch (e: any) {
       console.error('Error updating status to arrived_on_scene:', e);
@@ -78,102 +104,209 @@ export default function NavigationScreen() {
     }
   };
 
-  const [location, setLocation] = useState<Location.LocationObjectCoords | {latitude: number; longitude: number; heading: number} | null>(null);
-  const [routeCoords, setRouteCoords] = useState<{latitude: number; longitude: number}[]>([]);
-  const [routeInfo, setRouteInfo] = useState<{distance: string; duration: string} | null>(null);
-  const [isCalculating, setIsCalculating] = useState(true);
-  
-  const [isFpvMode, setIsFpvMode] = useState(false);
-  const isFpvModeRef = useRef(false);
-
-  // Fetch Route from OSRM
-  const fetchRoute = async (startLat: number, startLng: number, destLat: number, destLng: number) => {
-    try {
+  // Fetch full road-following route from Mapbox Directions
+  const calculateRoute = useCallback(
+    async (startLat: number, startLng: number, destLat: number, destLng: number) => {
+      if (isCalculatingRef.current) return;
+      isCalculatingRef.current = true;
       setIsCalculating(true);
-      const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${destLng},${destLat}?overview=full`;
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.routes && data.routes.length > 0) {
-        const route = data.routes[0];
-        const coords = decodePolyline(route.geometry);
-        setRouteCoords(coords);
-        setRouteInfo({
-          distance: (route.distance / 1000).toFixed(1) + ' km',
-          duration: Math.ceil(route.duration / 60) + ' min',
-        });
-        
-        if (mapRef.current && !isFpvModeRef.current) {
-          const lats = [startLat, ...coords.map(c => c.latitude), destLat];
-          const lngs = [startLng, ...coords.map(c => c.longitude), destLng];
-          const ne = [Math.max(...lngs), Math.max(...lats)];
-          const sw = [Math.min(...lngs), Math.min(...lats)];
-          mapRef.current.fitBounds(ne, sw, [100, 50, 300, 50], 1000);
-        }
-      }
-    } catch (e) {
-      console.error("OSRM Routing Error", e);
-    } finally {
-      setIsCalculating(false);
-    }
-  };
 
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      try {
+        const result = await fetchRoadRoute(startLat, startLng, destLat, destLng, controller.signal);
+
+        if (result && result.coordinates.length >= 2) {
+          setRouteCoords(result.coordinates);
+          setRouteInfo({
+            distance: result.distanceFormatted,
+            duration: result.durationFormatted,
+          });
+          deviationCounterRef.current = 0;
+
+          if (mapRef.current && !isFpvModeRef.current) {
+            const lats = [startLat, ...result.coordinates.map((c) => c.latitude), destLat];
+            const lngs = [startLng, ...result.coordinates.map((c) => c.longitude), destLng];
+            const ne = [Math.max(...lngs), Math.max(...lats)];
+            const sw = [Math.min(...lngs), Math.min(...lats)];
+            mapRef.current.fitBounds(ne, sw, [90, 40, 290, 40], 1000);
+          }
+        }
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') {
+          console.warn('Road route calculation error:', e?.message || e);
+        }
+      } finally {
+        isCalculatingRef.current = false;
+        setIsCalculating(false);
+      }
+    },
+    []
+  );
+
+  // Location Tracking & Dynamic Navigation Engine
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
     let isMounted = true;
 
     const startTracking = async () => {
       try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
+        const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           if (isMounted) {
             Alert.alert('Permission Denied', 'Location permission is required for navigation.');
-            router.back();
+            handleBack();
           }
           return;
         }
 
-        let isFirstLocation = true;
+        let isInitialFix = true;
 
+        // Try getting cached position first for instantaneous startup
         const lastKnown = await Location.getLastKnownPositionAsync();
-        if (!isMounted) return;
-
-        if (lastKnown) {
-          setLocation(lastKnown.coords);
-          fetchRoute(lastKnown.coords.latitude, lastKnown.coords.longitude, destination.latitude, destination.longitude);
-          isFirstLocation = false;
-        } else {
-          const fallbackLoc = { latitude: 8.5138, longitude: 124.5775, heading: 0 };
-          setLocation(fallbackLoc);
-          fetchRoute(fallbackLoc.latitude, fallbackLoc.longitude, destination.latitude, destination.longitude);
-          isFirstLocation = false;
+        if (lastKnown && isMounted) {
+          const initCoords = { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
+          setDisplayedLocation(initCoords);
+          lastRawLocationRef.current = initCoords;
+          calculateRoute(initCoords.latitude, initCoords.longitude, destination.latitude, destination.longitude);
+          isInitialFix = false;
         }
 
         const sub = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
-            timeInterval: 3000,
-            distanceInterval: 10,
+            accuracy: Location.Accuracy.High,
+            timeInterval: 1500,
+            distanceInterval: 3,
           },
           (loc) => {
             if (!isMounted) return;
-            setLocation(loc.coords);
-            
-            if (isFpvModeRef.current && mapRef.current) {
-               mapRef.current.setCamera({
-                 centerCoordinate: [loc.coords.longitude, loc.coords.latitude],
-                 heading: loc.coords.heading || 0,
-                 pitch: 65,
-                 zoomLevel: 19,
-                 animationDuration: 3000
-               });
+
+            const currentRaw: LatLng = {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            };
+            const currentAccuracy = loc.coords.accuracy ?? 15;
+            const currentSpeed = loc.coords.speed ?? 0;
+
+            // 1. BEARING / HEADING RESOLUTION & SMOOTHING
+            let targetHeading = lastReliableHeadingRef.current;
+            const hasGpsHeading =
+              typeof loc.coords.heading === 'number' &&
+              loc.coords.heading >= 0 &&
+              currentSpeed > 0.6;
+
+            if (hasGpsHeading) {
+              const validHeading = loc.coords.heading as number;
+              targetHeading = validHeading;
+              lastReliableHeadingRef.current = validHeading;
+            } else if (lastRawLocationRef.current) {
+              const distMoved = getDistance(
+                lastRawLocationRef.current.latitude,
+                lastRawLocationRef.current.longitude,
+                currentRaw.latitude,
+                currentRaw.longitude
+              );
+
+              // Only update bearing if vehicle actually moved forward by at least 2.5m
+              if (distMoved >= 2.5) {
+                const movementBearing = calculateBearing(
+                  lastRawLocationRef.current.latitude,
+                  lastRawLocationRef.current.longitude,
+                  currentRaw.latitude,
+                  currentRaw.longitude
+                );
+                targetHeading = movementBearing;
+                lastReliableHeadingRef.current = movementBearing;
+              }
+              // If stationary or tiny jitter, KEEP lastReliableHeadingRef.current!
             }
-            
-            if (isFirstLocation) {
-              isFirstLocation = false;
-              fetchRoute(loc.coords.latitude, loc.coords.longitude, destination.latitude, destination.longitude);
+
+            // Smooth the heading with low-pass angular filter
+            setHeading((prev) => smoothAngle(prev, targetHeading, 0.32));
+            lastRawLocationRef.current = currentRaw;
+
+            // 2. DYNAMIC ROUTE PROGRESS & ROAD SNAPPING
+            const currentActiveRoute = activeRouteRef.current;
+
+            if (currentActiveRoute.length >= 2) {
+              // Project onto active road route
+              const trimResult = trimRouteProgress(currentActiveRoute, currentRaw, 0, 32);
+
+              if (trimResult.isSnapped) {
+                // Snapped cleanly to road segment:
+                // Update displayed location on the road
+                setDisplayedLocation(trimResult.displayLocation);
+
+                // Dynamically remove completed road segment behind responder
+                setRouteCoords(trimResult.remainingRoute);
+                deviationCounterRef.current = 0;
+
+                // Dynamically calculate remaining road distance along the active remaining path
+                let remainingMeters = 0;
+                for (let i = 0; i < trimResult.remainingRoute.length - 1; i++) {
+                  remainingMeters += getDistance(
+                    trimResult.remainingRoute[i].latitude,
+                    trimResult.remainingRoute[i].longitude,
+                    trimResult.remainingRoute[i + 1].latitude,
+                    trimResult.remainingRoute[i + 1].longitude
+                  );
+                }
+
+                if (remainingMeters > 0) {
+                  const estSeconds = (remainingMeters / 10) * 1.1; // ~36 km/h city average
+                  setRouteInfo({
+                    distance: formatDistance(remainingMeters),
+                    duration: formatDuration(estSeconds),
+                  });
+                }
+              } else {
+                // Not snapped (e.g. GPS drifted or user took another street):
+                setDisplayedLocation(currentRaw);
+
+                // 3. INTELLIGENT AUTOMATIC REROUTING
+                const deviationThreshold = Math.max(38, currentAccuracy + 12);
+                const now = Date.now();
+
+                if (
+                  trimResult.crossTrackDistance > deviationThreshold &&
+                  currentSpeed > 0.8 &&
+                  now - lastRecalcTimeRef.current > 6000
+                ) {
+                  deviationCounterRef.current += 1;
+
+                  if (deviationCounterRef.current >= 2) {
+                    console.log('Vehicle deviated from route, recalculating fresh road path...');
+                    lastRecalcTimeRef.current = now;
+                    deviationCounterRef.current = 0;
+                    calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
+                  }
+                } else {
+                  deviationCounterRef.current = 0;
+                }
+              }
             } else {
-              checkDeviationAndRecalculate(loc.coords);
+              setDisplayedLocation(currentRaw);
+            }
+
+            // 4. CAMERA FOLLOWING (FPV MODE)
+            if (isFpvModeRef.current && mapRef.current) {
+              mapRef.current.setCamera({
+                centerCoordinate: [currentRaw.longitude, currentRaw.latitude],
+                heading: targetHeading,
+                pitch: 62,
+                zoomLevel: 19,
+                animationDuration: 1800,
+              });
+            }
+
+            // Initial route fetch if not already done
+            if (isInitialFix) {
+              isInitialFix = false;
+              calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
             }
           }
         );
@@ -184,7 +317,7 @@ export default function NavigationScreen() {
           sub.remove();
         }
       } catch (err) {
-        console.error("Location Tracking Error:", err);
+        console.error('Location Tracking Error:', err);
       }
     };
 
@@ -195,36 +328,22 @@ export default function NavigationScreen() {
       if (locationSubscription) {
         locationSubscription.remove();
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, []);
-
-  const checkDeviationAndRecalculate = (currentCoords: {latitude: number; longitude: number}) => {
-    setRouteCoords((prevCoords) => {
-      if (prevCoords.length === 0) return prevCoords;
-      
-      let minDistance = Infinity;
-      for (const pt of prevCoords) {
-        const d = getDistance(currentCoords.latitude, currentCoords.longitude, pt.latitude, pt.longitude);
-        if (d < minDistance) minDistance = d;
-      }
-      
-      if (minDistance > 50) {
-        fetchRoute(currentCoords.latitude, currentCoords.longitude, destination.latitude, destination.longitude);
-      }
-      return prevCoords;
-    });
-  };
+  }, [calculateRoute, destination.latitude, destination.longitude]);
 
   const handleOverview = () => {
     isFpvModeRef.current = false;
     setIsFpvMode(false);
-    
-    if (mapRef.current && routeCoords.length > 0 && location) {
-      const lats = [location.latitude, ...routeCoords.map(c => c.latitude), destination.latitude];
-      const lngs = [location.longitude, ...routeCoords.map(c => c.longitude), destination.longitude];
+
+    if (mapRef.current && routeCoords.length > 0 && displayedLocation) {
+      const lats = [displayedLocation.latitude, ...routeCoords.map((c) => c.latitude), destination.latitude];
+      const lngs = [displayedLocation.longitude, ...routeCoords.map((c) => c.longitude), destination.longitude];
       const ne = [Math.max(...lngs), Math.max(...lats)];
       const sw = [Math.min(...lngs), Math.min(...lats)];
-      mapRef.current.fitBounds(ne, sw, [100, 50, 300, 50], 1000);
+      mapRef.current.fitBounds(ne, sw, [90, 40, 290, 40], 1000);
     }
   };
 
@@ -232,15 +351,15 @@ export default function NavigationScreen() {
     const newFpv = !isFpvModeRef.current;
     isFpvModeRef.current = newFpv;
     setIsFpvMode(newFpv);
-    
-    if (mapRef.current && location) {
+
+    if (mapRef.current && displayedLocation) {
       if (newFpv) {
         mapRef.current.setCamera({
-          centerCoordinate: [location.longitude, location.latitude],
-          pitch: 65,
-          heading: location.heading || 0,
+          centerCoordinate: [displayedLocation.longitude, displayedLocation.latitude],
+          pitch: 62,
+          heading: heading || 0,
           zoomLevel: 19,
-          animationDuration: 1000
+          animationDuration: 1000,
         });
       } else {
         handleOverview();
@@ -250,79 +369,105 @@ export default function NavigationScreen() {
 
   return (
     <View className="flex-1 bg-slate-900 relative">
-      <MapView 
+      <MapView
         ref={mapRef}
         className="absolute inset-0"
-        showsUserLocation={false} 
+        showsUserLocation={false}
         styleURL={MapboxGL.StyleURL.Dark}
       >
-        {routeCoords.length > 0 && (
-          <MapboxGL.ShapeSource id="routeSource" shape={{ type: 'LineString', coordinates: routeCoords.map(c => [c.longitude, c.latitude]) }}>
-            <MapboxGL.LineLayer id="routeFill" style={{ lineColor: '#34d399', lineWidth: 8, lineCap: 'round', lineJoin: 'round' }} />
+        {/* Active Road Route with High-Contrast Casing */}
+        {routeCoords.length >= 2 && (
+          <MapboxGL.ShapeSource
+            id="routeSource"
+            shape={{
+              type: 'LineString',
+              coordinates: routeCoords.map((c) => [c.longitude, c.latitude]),
+            }}
+          >
+            {/* Outer contrasting road border */}
+            <MapboxGL.LineLayer
+              id="routeCasing"
+              style={{
+                lineColor: '#064e3b',
+                lineWidth: 10,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            {/* Vibrant primary navigation stroke */}
+            <MapboxGL.LineLayer
+              id="routeFill"
+              style={{
+                lineColor: '#10B981',
+                lineWidth: 6,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
           </MapboxGL.ShapeSource>
         )}
-        
-        {/* Noticeable Incident Destination Marker */}
-        <MapboxGL.PointAnnotation id="incidentDestination" coordinate={[destination.longitude, destination.latitude]}>
-          <View className="items-center justify-center w-24 h-24 bg-red-500/10 rounded-full">
-            <View className="w-20 h-20 bg-red-500/20 rounded-full items-center justify-center absolute" />
-            <View className="w-14 h-14 bg-red-500 rounded-full border-[4px] border-white shadow-2xl items-center justify-center">
-              <AlertTriangle size={24} color="#ffffff" strokeWidth={2.5} />
-            </View>
-            <View className="absolute bottom-2 w-4 h-4 bg-red-600 rounded-full border-4 border-white shadow-sm" />
-          </View>
+
+        {/* Clean Incident Destination Marker (No Circular Container) */}
+        <MapboxGL.PointAnnotation
+          id="incidentDestination"
+          coordinate={[destination.longitude, destination.latitude]}
+          anchor={{ x: 0.5, y: 1.0 }}
+        >
+          <IncidentLocationPin size={38} />
         </MapboxGL.PointAnnotation>
 
-        {/* Responder Navigation Puck */}
-        {location && (
-          <MapboxGL.PointAnnotation id="userPuck" coordinate={[location.longitude, location.latitude]}>
-            <View className="items-center justify-center w-32 h-32 bg-emerald-500/20 rounded-full">
-              <View className="w-24 h-24 bg-emerald-500/40 rounded-full items-center justify-center absolute border border-emerald-400/50" />
-              <View className="w-16 h-16 bg-emerald-500 rounded-full border-[4px] border-white shadow-2xl items-center justify-center" style={{ elevation: 10, shadowColor: '#10B981', shadowOpacity: 0.8, shadowRadius: 15 }}>
-                <View style={{ transform: [{ rotate: `${location.heading || 0}deg` }] }}>
-                  <Navigation size={28} color="#ffffff" fill="#ffffff" />
-                </View>
-              </View>
-            </View>
+        {/* Clean Directional Responder Arrow (Faces Travel Bearing, No Circular Container) */}
+        {displayedLocation && (
+          <MapboxGL.PointAnnotation
+            id="userPuck"
+            coordinate={[displayedLocation.longitude, displayedLocation.latitude]}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <ResponderNavigationArrow heading={heading} size={36} />
           </MapboxGL.PointAnnotation>
         )}
       </MapView>
 
       <SafeAreaView className="flex-1 justify-between" edges={['top', 'bottom']} pointerEvents="box-none">
-        
         {/* Top Header */}
         <View className="px-4 mt-2 flex-row items-center" pointerEvents="box-none">
-          <TouchableOpacity onPress={() => router.back()} className="bg-slate-900/90 p-3 rounded-full shadow-xl mr-3 border border-slate-700/50 pointer-events-auto">
+          <TouchableOpacity
+            onPress={handleBack}
+            className="bg-slate-900/90 p-3 rounded-full shadow-xl mr-3 border border-slate-700/50 pointer-events-auto"
+          >
             <ArrowLeft size={24} color="#f8fafc" />
           </TouchableOpacity>
           <View className="flex-1 bg-slate-900/90 py-3 px-5 rounded-3xl shadow-xl border border-slate-700/50 flex-row items-center pointer-events-auto">
-             <View className="flex-1">
-               <Text className="text-white font-bold text-lg tracking-tight">Responding to Scene</Text>
-               {isCalculating ? (
-                 <Text className="text-emerald-400/80 text-sm font-medium">Calculating fastest route...</Text>
-               ) : (
-                 <Text className="text-emerald-400/80 text-sm font-medium">Follow highlighted path</Text>
-               )}
-             </View>
+            <View className="flex-1">
+              <Text className="text-white font-bold text-lg tracking-tight">Responding to Scene</Text>
+              {isCalculating ? (
+                <Text className="text-emerald-400/80 text-sm font-medium">Calculating fastest road route...</Text>
+              ) : (
+                <Text className="text-emerald-400/80 text-sm font-medium">Follow highlighted road path</Text>
+              )}
+            </View>
           </View>
         </View>
 
         {/* Bottom Panel */}
         <View className="px-4 mb-4 flex-col items-end" pointerEvents="box-none">
-          
           <View className="flex-col items-center mb-6 space-y-4" pointerEvents="box-none">
             {/* Overview Map Button */}
-            <TouchableOpacity 
-              onPress={handleOverview} 
-              className={`w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto mb-3 ${!isFpvMode ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-900/90 border-slate-700/50'}`}
+            <TouchableOpacity
+              onPress={handleOverview}
+              className={`w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto mb-3 ${
+                !isFpvMode ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-900/90 border-slate-700/50'
+              }`}
             >
               <MapIcon size={24} color={!isFpvMode ? '#ffffff' : '#94A3B8'} />
             </TouchableOpacity>
 
             {/* FPV Mode Toggle Button */}
-            <TouchableOpacity 
-              onPress={toggleFpv} 
-              className={`w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto ${isFpvMode ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-900/90 border-slate-700/50'}`}
+            <TouchableOpacity
+              onPress={toggleFpv}
+              className={`w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto ${
+                isFpvMode ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-900/90 border-slate-700/50'
+              }`}
             >
               <Layers size={24} color={isFpvMode ? '#ffffff' : '#34d399'} />
             </TouchableOpacity>
@@ -333,32 +478,61 @@ export default function NavigationScreen() {
             {routeInfo ? (
               <View className="flex-row justify-between items-end mb-6">
                 <View>
-                  <Text className="text-6xl font-black text-emerald-400 tracking-tighter shadow-sm">{routeInfo.duration}</Text>
-                  <Text className="text-slate-400 font-bold text-sm tracking-widest uppercase mt-1">{routeInfo.distance} remaining</Text>
+                  <Text className="text-6xl font-black text-emerald-400 tracking-tighter shadow-sm">
+                    {routeInfo.duration}
+                  </Text>
+                  <Text className="text-slate-400 font-bold text-sm tracking-widest uppercase mt-1">
+                    {routeInfo.distance} remaining
+                  </Text>
                 </View>
-                <View className="bg-emerald-500/20 px-4 py-2 rounded-full border border-emerald-500/30">
-                  <Text className="text-emerald-400 font-black text-xs tracking-widest">ACTIVE</Text>
+                <View className="bg-emerald-500/20 px-4 py-2 rounded-full border border-emerald-500/30 flex-row items-center">
+                  {isCalculating && <ActivityIndicator color="#34d399" size="small" style={{ marginRight: 6 }} />}
+                  <Text className="text-emerald-400 font-black text-xs tracking-widest">
+                    {isCalculating ? 'ROUTING' : 'ACTIVE'}
+                  </Text>
                 </View>
               </View>
             ) : (
               <View className="flex-row items-center justify-center py-6 mb-2">
-                 <ActivityIndicator color="#34d399" size="large" />
-                 <Text className="ml-4 text-slate-300 font-bold text-lg">Acquiring GPS...</Text>
+                <ActivityIndicator color="#34d399" size="large" />
+                <Text className="ml-4 text-slate-300 font-bold text-lg">
+                  {!displayedLocation ? 'Acquiring GPS...' : 'Calculating road route...'}
+                </Text>
               </View>
             )}
 
-            <TouchableOpacity 
+            {!isWithinRange ? (
+              <View className="flex-row items-center justify-center mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <AlertTriangle size={15} color="#f59e0b" style={{ marginRight: 6 }} />
+                <Text className="text-amber-400 text-xs font-semibold text-center">
+                  {displayedLocation
+                    ? `Must be within 10m to mark arrival (${Math.round(distanceToScene)}m away)`
+                    : 'Acquiring GPS to verify arrival proximity...'}
+                </Text>
+              </View>
+            ) : (
+              <View className="flex-row items-center justify-center mb-3 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <CheckCircle size={15} color="#34d399" style={{ marginRight: 6 }} />
+                <Text className="text-emerald-400 text-xs font-bold text-center">
+                  Within arrival range ({Math.round(distanceToScene)}m from incident pin)
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
               onPress={handleArrived}
-              disabled={isArriving}
+              disabled={isArriving || !isWithinRange}
               activeOpacity={0.85}
-              style={styles.btnArrived}
+              style={[styles.btnArrived, (!isWithinRange || isArriving) && styles.btnArrivedDisabled]}
             >
               {isArriving ? (
                 <ActivityIndicator color="#ffffff" size="small" />
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ambulance size={22} color="#ffffff" style={{ marginRight: 10 }} />
-                  <Text style={styles.btnArrivedText}>ARRIVED ON SCENE</Text>
+                  <Ambulance size={22} color={isWithinRange ? '#ffffff' : '#64748b'} style={{ marginRight: 10 }} />
+                  <Text style={[styles.btnArrivedText, !isWithinRange && styles.btnArrivedTextDisabled]}>
+                    {isWithinRange ? 'ARRIVED ON SCENE' : 'ARRIVED ON SCENE (LOCKED)'}
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -383,10 +557,20 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  btnArrivedDisabled: {
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#334155',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   btnArrivedText: {
     color: '#ffffff',
     fontWeight: '900',
     fontSize: 16,
     letterSpacing: 1.2,
+  },
+  btnArrivedTextDisabled: {
+    color: '#64748b',
   },
 });

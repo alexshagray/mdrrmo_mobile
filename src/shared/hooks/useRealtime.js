@@ -13,12 +13,17 @@ export function useRealtime() {
     
     if (instance) {
       // Pusher specific connection states
-      instance.connector.pusher.connection.bind('connected', () => setIsConnected(true));
-      instance.connector.pusher.connection.bind('disconnected', () => setIsConnected(false));
-      instance.connector.pusher.connection.bind('error', () => setIsConnected(false));
-      
-      // Check immediate state
-      setIsConnected(instance.connector.pusher.connection.state === 'connected');
+      const pusher = instance.connector?.pusher;
+      if (pusher?.connection) {
+        pusher.connection.bind('connected', () => setIsConnected(true));
+        pusher.connection.bind('disconnected', () => setIsConnected(false));
+        pusher.connection.bind('error', () => setIsConnected(false));
+        
+        // Check immediate state
+        setIsConnected(pusher.connection.state === 'connected');
+      } else if (typeof instance.connectionStatus === 'function') {
+        setIsConnected(instance.connectionStatus() === 'connected');
+      }
     }
   }, []);
 

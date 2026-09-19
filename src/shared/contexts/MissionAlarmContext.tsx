@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import { AlertTriangle, X, MapPin, Activity } from 'lucide-react-native';
+import Constants from 'expo-constants';
 import { updatePushTokenApi } from '../api/auth';
 import { useAuth } from '../auth/authContext';
 import { useRealtime } from '../hooks/useRealtime';
@@ -60,15 +61,25 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       }
       
       try {
-        const tokenResponse = await Notifications.getExpoPushTokenAsync({
-          projectId: process.env.EXPO_PUBLIC_PROJECT_ID || 'mdrrmo-mobile', 
-        });
+        const projectId =
+          process.env.EXPO_PUBLIC_PROJECT_ID ||
+          Constants?.expoConfig?.extra?.eas?.projectId ||
+          Constants?.easConfig?.projectId;
+
+        const tokenResponse = await Notifications.getExpoPushTokenAsync(
+          projectId ? { projectId } : undefined
+        );
         token = tokenResponse.data;
         if (isMounted) {
           await updatePushTokenApi(token);
         }
-      } catch (e) {
-        console.log('Error getting push token:', e);
+      } catch (e: any) {
+        const msg = e?.message || String(e);
+        if (msg.includes('FirebaseApp is not initialized') || msg.includes('googleServicesFile')) {
+          console.log('[PushNotifications] Dev client running without google-services.json; push notifications disabled for this test session.');
+        } else {
+          console.log('Error getting push token:', e);
+        }
       }
     }
 
@@ -105,9 +116,17 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
   // Handle WebSocket Event
   useEffect(() => {
-    if (!echo || !user?.id) return;
+    if (!echo || !user?.id || typeof (echo as any).private !== 'function') return;
 
-    const channel = (echo as any).private(`responder.${user.id}`);
+    let channel: any = null;
+    try {
+      channel = (echo as any).private(`responder.${user.id}`);
+    } catch (err) {
+      console.warn('Failed to subscribe to responder private channel:', err);
+      return;
+    }
+
+    if (!channel) return;
 
     const handleMissionEvent = (e: any) => {
       console.log('Realtime dispatch event received on responder channel:', e);
@@ -131,10 +150,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     channel.listen('.DispatchStatusUpdated', handleStatusEvent);
 
     return () => {
-      channel.stopListening('DispatchCreated');
-      channel.stopListening('.DispatchCreated');
-      channel.stopListening('DispatchStatusUpdated');
-      channel.stopListening('.DispatchStatusUpdated');
+      if (channel) {
+        channel.stopListening('DispatchCreated');
+        channel.stopListening('.DispatchCreated');
+        channel.stopListening('DispatchStatusUpdated');
+        channel.stopListening('.DispatchStatusUpdated');
+      }
     };
   }, [echo, user]);
 

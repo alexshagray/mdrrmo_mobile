@@ -30,9 +30,17 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
 
   // Handle WebSocket Events for Resident
   useEffect(() => {
-    if (!echo || !user?.id || role !== 'resident') return;
+    if (!echo || !user?.id || role !== 'resident' || typeof (echo as any).private !== 'function') return;
 
-    const channel = (echo as any).private(`resident.${user.id}`);
+    let channel: any = null;
+    try {
+      channel = (echo as any).private(`resident.${user.id}`);
+    } catch (err) {
+      console.warn('Failed to subscribe to resident private channel:', err);
+      return;
+    }
+
+    if (!channel) return;
 
     const handleIncidentVerified = (e: any) => {
       console.log('IncidentVerified received on resident channel:', e);
@@ -135,18 +143,20 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
     channel.listen('.DispatchCompleted', handleCompleted);
 
     return () => {
-      channel.stopListening('IncidentVerified');
-      channel.stopListening('.IncidentVerified');
-      channel.stopListening('IncidentRejected');
-      channel.stopListening('.IncidentRejected');
-      channel.stopListening('DispatchCreated');
-      channel.stopListening('.DispatchCreated');
-      channel.stopListening('DispatchAccepted');
-      channel.stopListening('.DispatchAccepted');
-      channel.stopListening('DispatchStatusUpdated');
-      channel.stopListening('.DispatchStatusUpdated');
-      channel.stopListening('DispatchCompleted');
-      channel.stopListening('.DispatchCompleted');
+      if (channel) {
+        channel.stopListening('IncidentVerified');
+        channel.stopListening('.IncidentVerified');
+        channel.stopListening('IncidentRejected');
+        channel.stopListening('.IncidentRejected');
+        channel.stopListening('DispatchCreated');
+        channel.stopListening('.DispatchCreated');
+        channel.stopListening('DispatchAccepted');
+        channel.stopListening('.DispatchAccepted');
+        channel.stopListening('DispatchStatusUpdated');
+        channel.stopListening('.DispatchStatusUpdated');
+        channel.stopListening('DispatchCompleted');
+        channel.stopListening('.DispatchCompleted');
+      }
     };
   }, [echo, user, role]);
 
