@@ -21,24 +21,25 @@ export function Header({
   const router = useRouter();
 
   return (
-    <View className={`flex-row items-center justify-between py-6 px-5 bg-white ${className}`}>
+    <View className={`flex-row items-center justify-between pt-4 pb-3 px-5 ${className}`}>
       <View className="flex-row items-center flex-1 pr-2">
         {showBack && (
           <TouchableOpacity 
             onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} 
-            className="bg-slate-50 p-3 rounded-2xl mr-4 border border-slate-200/60 shadow-sm"
+            activeOpacity={0.7}
+            className="w-10 h-10 bg-white items-center justify-center rounded-full mr-3.5 border border-slate-200/80 shadow-sm"
           >
-            <ChevronLeft size={22} color="#1E293B" strokeWidth={3} />
+            <ChevronLeft size={20} color="#334155" strokeWidth={2.5} />
           </TouchableOpacity>
         )}
         <View className="flex-1">
           {subtitle && (
-            <Text className="text-blue-600 font-black uppercase tracking-[0.2em] text-[10px] mb-1.5 opacity-90">
+            <Text className="text-slate-400 font-bold uppercase tracking-wider text-[11px] mb-0.5">
               {subtitle}
             </Text>
           )}
           <Text 
-            className="text-3xl font-black tracking-tighter text-slate-800 leading-tight" 
+            className="text-2xl font-black tracking-tight text-slate-900 leading-tight" 
             numberOfLines={2}
           >
             {title}

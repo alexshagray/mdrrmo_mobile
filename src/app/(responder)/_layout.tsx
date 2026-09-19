@@ -32,32 +32,35 @@ export default function ResponderLayout() {
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          bottom: 20,
+          bottom: 18,
           left: 20,
           right: 20,
-          elevation: 0,
-          backgroundColor: '#ffffff',
-          borderRadius: 24,
-          height: 64,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
+          elevation: 6,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 28,
+          height: 60,
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.08,
+          shadowRadius: 16,
           borderTopWidth: 0,
+          borderWidth: 1,
+          borderColor: '#F1F5F9',
           paddingBottom: 0,
+          paddingHorizontal: 6,
+          alignItems: 'center',
+          justifyContent: 'space-around',
         },
         tabBarShowLabel: false,
-        tabBarActiveTintColor: '#dc2626',
-        tabBarInactiveTintColor: '#94A3B8',
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-2 rounded-xl ${focused ? 'bg-responder-primary/10' : ''}`}>
-              <Home color={color} size={24} />
+          tabBarIcon: ({ focused }) => (
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+              <Home color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
@@ -66,9 +69,9 @@ export default function ResponderLayout() {
         name="dispatch"
         options={{
           title: 'Dispatch',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-2 rounded-xl ${focused ? 'bg-responder-primary/10' : ''}`}>
-              <MapIcon color={color} size={24} />
+          tabBarIcon: ({ focused }) => (
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+              <MapIcon color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
@@ -77,9 +80,9 @@ export default function ResponderLayout() {
         name="patient"
         options={{
           title: 'Patient',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-2 rounded-xl ${focused ? 'bg-responder-primary/10' : ''}`}>
-              <UserCircle color={color} size={24} />
+          tabBarIcon: ({ focused }) => (
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+              <UserCircle color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
@@ -88,9 +91,9 @@ export default function ResponderLayout() {
         name="history"
         options={{
           title: 'History',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-2 rounded-xl ${focused ? 'bg-responder-primary/10' : ''}`}>
-              <ClipboardList color={color} size={24} />
+          tabBarIcon: ({ focused }) => (
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+              <ClipboardList color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}
@@ -99,9 +102,9 @@ export default function ResponderLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-2 rounded-xl ${focused ? 'bg-responder-primary/10' : ''}`}>
-              <User color={color} size={24} />
+          tabBarIcon: ({ focused }) => (
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+              <User color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
         }}

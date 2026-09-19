@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { StatusChip } from '@/shared/components';
-import { MapPin, Clock, AlertTriangle, ArrowRight } from 'lucide-react-native';
+import { MapPin, Clock, AlertTriangle, ArrowRight, Navigation } from 'lucide-react-native';
 
 interface DispatchCardProps {
   dispatch?: any;
@@ -10,68 +10,98 @@ interface DispatchCardProps {
 }
 
 export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps) {
-  // UI Placeholder fallback
   const data = dispatch || {
     id: 'DSP-2026-089',
     type: 'Medical Emergency',
     priority: 'High',
     location: 'Brgy. Poblacion, Opol',
     status: 'Assigned',
-    time: '10:45 AM'
+    time: '10:45 AM',
   };
 
+  const isUrgent = data.status === 'assigned';
+  const isEnRoute = data.status === 'accepted' || data.status === 'en_route';
+
   return (
-    <View className="bg-white rounded-[28px] p-6 shadow-sm border border-slate-100 mb-8 relative overflow-hidden">
-      {/* Decorative Red Accent */}
-      <View className="absolute left-0 top-0 bottom-0 w-[5px] bg-red-500" />
-      
-      <View className="flex-row justify-between items-center mb-4">
-        <View className="flex-row items-center bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/60">
-          <AlertTriangle size={14} color="#EF4444" />
-          <Text className="text-slate-600 font-black tracking-widest text-[10px] uppercase ml-1.5">
+    <View
+      className="bg-white rounded-3xl p-6 border border-slate-200/80 mb-6"
+      style={{
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 14,
+        elevation: 3,
+      }}
+    >
+      {/* Top Header Badge & Status */}
+      <View className="flex-row justify-between items-center mb-3.5">
+        <View className="flex-row items-center bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200/60">
+          <AlertTriangle size={12} color="#DC2626" />
+          <Text className="text-slate-600 font-bold tracking-wider text-[11px] uppercase ml-1.5">
             {typeof data.id === 'number' ? `DSP-00${data.id}` : data.id}
           </Text>
         </View>
         <StatusChip status={data.status} />
       </View>
 
-      <Text className="text-slate-900 text-2xl font-black tracking-tighter mb-5">
+      {/* Incident Name */}
+      <Text className="text-slate-900 text-xl font-black tracking-tight mb-4">
         {data.type}
       </Text>
 
-      <View className="space-y-2.5 mb-6">
+      {/* Details (Location & Dispatch Time) */}
+      <View className="space-y-2 mb-5">
         <View className="flex-row items-center">
-          <View className="bg-slate-100 p-2 rounded-xl mr-3 border border-slate-200/50">
-            <MapPin size={16} color="#3B82F6" />
+          <View className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
+            <MapPin size={14} color="#64748B" />
           </View>
-          <Text className="text-slate-700 font-bold tracking-tight text-[15px] flex-1">{data.location}</Text>
+          <Text className="text-slate-700 font-semibold text-sm flex-1" numberOfLines={1}>
+            {data.location}
+          </Text>
         </View>
-        
-        <View className="flex-row items-center">
-          <View className="bg-slate-100 p-2 rounded-xl mr-3 border border-slate-200/50">
-            <Clock size={16} color="#F59E0B" />
+
+        <View className="flex-row items-center mt-1.5">
+          <View className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
+            <Clock size={14} color="#64748B" />
           </View>
-          <Text className="text-slate-500 font-bold tracking-tight text-[14px]">
+          <Text className="text-slate-400 font-medium text-xs">
             {data.time ? `Dispatched at ${data.time}` : 'Dispatched Recently'}
           </Text>
         </View>
       </View>
 
-      <TouchableOpacity 
+      {/* Primary Action Button */}
+      <TouchableOpacity
         onPress={onDetails || (() => {})}
-        activeOpacity={0.8}
-        className="bg-blue-600 py-4 px-6 rounded-2xl flex-row items-center justify-center border border-blue-500/50 shadow-sm shadow-blue-500/30"
+        activeOpacity={0.85}
+        className={`py-3.5 px-5 rounded-2xl flex-row items-center justify-center ${
+          isUrgent
+            ? 'bg-rose-600 active:bg-rose-700'
+            : isEnRoute
+            ? 'bg-slate-900 active:bg-slate-800'
+            : 'bg-emerald-600 active:bg-emerald-700'
+        }`}
+        style={{
+          shadowColor: isUrgent ? '#E11D48' : '#0F172A',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 8,
+          elevation: 3,
+        }}
       >
-        <Text className="text-blue-50 font-black tracking-widest text-xs mr-2">
+        {isEnRoute ? (
+          <Navigation size={15} color="#FFFFFF" style={{ marginRight: 8 }} />
+        ) : null}
+        <Text className="text-white font-bold tracking-wider text-xs mr-2">
           {data.status === 'assigned'
-            ? 'REVIEW & ACCEPT'
+            ? 'REVIEW & ACCEPT MISSION'
             : data.status === 'accepted' || data.status === 'en_route'
             ? 'OPEN MAP & NAVIGATE'
             : data.status === 'arrived_on_scene'
-            ? 'CREATE PATIENT CARE RECORD'
+            ? 'OPEN PATIENT CARE RECORD'
             : 'VIEW MISSION DETAILS'}
         </Text>
-        <ArrowRight size={16} color="#EFF6FF" />
+        <ArrowRight size={15} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
   );
