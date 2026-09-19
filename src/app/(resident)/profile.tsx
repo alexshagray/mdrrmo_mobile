@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -70,22 +72,24 @@ export default function ResidentProfileScreen() {
   const phone = currentUser?.phone_number || currentUser?.phone || 'No phone registered';
   const photoUrl = currentUser?.profile_photo_url;
 
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const handleLogout = () => {
-    Alert.alert(
-      'Sign Out Confirmation',
-      'Are you sure you want to sign out from your MDRRMO account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/login');
-          },
-        },
-      ]
-    );
+    setShowLogoutModal(true);
+  };
+
+  const handleLogoutConfirm = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setShowLogoutModal(false);
+      router.replace('/login');
+    } catch (e) {
+      console.error('Logout error:', e);
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -396,6 +400,87 @@ export default function ResidentProfileScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Enhanced Sign Out Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showLogoutModal}
+        onRequestClose={() => !isLoggingOut && setShowLogoutModal(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-slate-900/60 px-5">
+          <View
+            className="w-full max-w-sm bg-white rounded-[32px] p-6 items-center shadow-2xl border border-slate-100"
+            style={{
+              shadowColor: '#0F172A',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.15,
+              shadowRadius: 20,
+              elevation: 8,
+            }}
+          >
+            {/* Soft glowing icon badge */}
+            <View className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 items-center justify-center mb-4 shadow-sm shadow-rose-100">
+              <LogOut size={28} color="#E11D48" strokeWidth={2.25} />
+            </View>
+
+            {/* Title & Description */}
+            <Text className="text-xl font-black text-slate-900 text-center tracking-tight mb-2">
+              Sign Out of MDRRMO?
+            </Text>
+            <Text className="text-slate-500 text-sm text-center font-medium leading-5 mb-5 px-2">
+              You will need to sign in again to report emergencies, view active missions, or receive live alerts.
+            </Text>
+
+            {/* Account preview chip */}
+            <View className="w-full bg-slate-50 rounded-2xl p-3 flex-row items-center border border-slate-200/60 mb-6">
+              <View className="w-10 h-10 rounded-xl bg-indigo-100 items-center justify-center mr-3">
+                <User size={20} color="#4F46E5" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-slate-900 font-bold text-xs" numberOfLines={1}>
+                  {fullName}
+                </Text>
+                <Text className="text-slate-400 text-[11px]" numberOfLines={1}>
+                  {email}
+                </Text>
+              </View>
+            </View>
+
+            {/* Buttons */}
+            <View className="w-full space-y-2.5">
+              <TouchableOpacity
+                onPress={handleLogoutConfirm}
+                disabled={isLoggingOut}
+                activeOpacity={0.85}
+                className="w-full py-3.5 bg-rose-600 active:bg-rose-700 rounded-2xl items-center flex-row justify-center shadow-md shadow-rose-500/25"
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <LogOut size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text className="text-white font-extrabold text-sm tracking-wider uppercase">
+                      Yes, Sign Out
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+                className="w-full py-3 bg-slate-100 active:bg-slate-200 rounded-2xl items-center mt-2 border border-slate-200/60"
+              >
+                <Text className="text-slate-700 font-bold text-sm">
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

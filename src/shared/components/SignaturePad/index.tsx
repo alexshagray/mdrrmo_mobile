@@ -17,7 +17,7 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({
   clearText = 'Clear',
   confirmText = 'Save'
 }) => {
-  const ref = useRef<any>();
+  const ref = useRef<any>(null);
 
   const handleOK = (signature: string) => {
     onOK(signature); // Base64 string

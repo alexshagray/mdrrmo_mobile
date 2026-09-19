@@ -46,7 +46,7 @@ const SERVICES: HotlineService[] = [
     name: 'Police',
     shortLabel: 'PNP',
     description: 'Emergency & crime response',
-    number: '911',
+    number: '09358056370',
     icon: ShieldCheck,
     cardBg: '#FFFFFF',
     accent: '#1D4ED8',
@@ -59,7 +59,7 @@ const SERVICES: HotlineService[] = [
     name: 'Fire Dept.',
     shortLabel: 'BFP',
     description: 'Fire & rescue operations',
-    number: '160',
+    number: '09758429491',
     icon: Flame,
     cardBg: '#FFFFFF',
     accent: '#C2410C',
@@ -70,9 +70,9 @@ const SERVICES: HotlineService[] = [
   {
     id: 'health',
     name: 'Health Dept.',
-    shortLabel: 'DOH',
+    shortLabel: 'RHU / DOH',
     description: 'Medical & health emergencies',
-    number: '1555',
+    number: '0953678760',
     icon: HeartPulse,
     cardBg: '#FFFFFF',
     accent: '#059669',
@@ -239,7 +239,7 @@ function ServiceCard({ service }: { service: HotlineService }) {
             accessibilityLabel={`Dial ${service.number}`}
           >
             <Phone size={12} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.callBtnText}>{service.number}</Text>
+            <Text style={styles.callBtnText} numberOfLines={1}>{service.number}</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -358,8 +358,8 @@ const styles = StyleSheet.create({
   },
   callBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
   },
 });

@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Header, Button } from '@/shared/components';
 import { SignaturePad, BodyDiagram } from '@/shared/components';
-import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw } from 'lucide-react-native';
+import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock } from 'lucide-react-native';
 import { searchPatients, createPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
@@ -140,7 +140,7 @@ const resolveAddressFromCoords = async (latitude: number, longitude: number): Pr
   } catch (err) {
     console.log('Reverse geocoding error:', err);
   }
-  return `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`;
+  return 'Opol, Misamis Oriental';
 };
 
 const TOTAL_STEPS = 8;
@@ -1489,6 +1489,81 @@ export default function PatientCareRecordScreen() {
             </View>
           </View>
         </Modal>
+      </SafeAreaView>
+    );
+  }
+
+  // Check if arrival on scene is required
+  const isStationWalkIn = isWalkIn || activeDispatch?.incident?.report_source === 'walk_in';
+  const hasArrivedOnScene = activeDispatch?.dispatch_status === 'arrived_on_scene' || isStationWalkIn;
+
+  if (activeDispatch && !hasArrivedOnScene) {
+    const isEnRoute = activeDispatch.dispatch_status === 'en_route';
+    const isAccepted = activeDispatch.dispatch_status === 'accepted';
+    const statusLabel = isEnRoute ? 'En Route to Scene' : (isAccepted ? 'Mission Accepted' : 'Mission Assigned');
+
+    return (
+      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center px-6" edges={['top', 'left', 'right']}>
+        <View className="items-center justify-center bg-white p-7 rounded-[32px] border border-slate-200 w-full shadow-lg shadow-slate-200/50">
+          <View className="w-20 h-20 bg-amber-50 rounded-3xl items-center justify-center mb-5 border border-amber-200/60 shadow-sm shadow-amber-200">
+            <Lock size={38} color="#D97706" strokeWidth={2.25} />
+          </View>
+          
+          <View className="bg-amber-100/70 px-3 py-1 rounded-full mb-3">
+            <Text className="text-amber-800 text-[11px] font-extrabold uppercase tracking-wider">
+              {statusLabel}
+            </Text>
+          </View>
+
+          <Text className="text-slate-900 font-black text-2xl tracking-tight mb-2 text-center">
+            Arrival on Scene Required
+          </Text>
+          
+          <Text className="text-slate-500 text-sm text-center mb-6 leading-relaxed">
+            The Patient Care Record (PCR) unlocks once you arrive at the incident scene and your status transitions to <Text className="font-bold text-slate-700">Arrived on Scene</Text>.
+          </Text>
+
+          {/* Mission Details Preview Card */}
+          <View className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-200/70 mb-6">
+            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Target Mission</Text>
+            <Text className="text-slate-900 font-bold text-base mb-2">
+              {activeDispatch.incident?.incident_type?.name || 'Emergency Mission'}
+            </Text>
+            <View className="flex-row items-start pt-1 border-t border-slate-200/60">
+              <View className="mt-0.5 mr-2">
+                <MapPin size={14} color="#64748B" />
+              </View>
+              <Text className="text-slate-600 text-xs font-medium flex-1 leading-5" numberOfLines={3}>
+                {activeDispatch.incident?.place_of_incident || activeDispatch.incident?.location || 'Reported Location'}
+              </Text>
+            </View>
+          </View>
+
+          <View className="w-full space-y-3">
+            <TouchableOpacity
+              onPress={() => router.push('/(responder)/dispatch')}
+              activeOpacity={0.85}
+              className="w-full py-4 bg-slate-900 active:bg-slate-800 rounded-2xl items-center flex-row justify-center shadow-md shadow-slate-900/20"
+            >
+              <Navigation size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text className="text-white font-extrabold text-sm tracking-wider uppercase">
+                Open Mission & Navigation
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                setIsLoading(true);
+                loadActiveDispatch();
+              }}
+              activeOpacity={0.7}
+              className="w-full py-3 bg-transparent items-center flex-row justify-center mt-1"
+            >
+              <RefreshCw size={14} color="#64748B" style={{ marginRight: 6 }} />
+              <Text className="text-slate-600 text-xs font-bold">Refresh Status</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </SafeAreaView>
     );
   }

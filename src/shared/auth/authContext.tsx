@@ -136,13 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let fieldErrors: Record<string, string[]> | undefined;
       
       if (error.response?.status === 422) {
-         if (error.response.data?.errors) {
-            fieldErrors = error.response.data.errors;
-            const firstKey = Object.keys(fieldErrors)[0];
-            errorMessage = fieldErrors[firstKey]?.[0] || 'Validation failed.';
-         } else {
-            errorMessage = 'Invalid email or password.';
-         }
+          const errors = error.response.data?.errors;
+          if (errors && typeof errors === 'object') {
+             fieldErrors = errors;
+             const firstKey = Object.keys(errors)[0];
+             errorMessage = (firstKey && errors[firstKey]?.[0]) || 'Validation failed.';
+          } else {
+             errorMessage = 'Invalid email or password.';
+          }
       } else if (error.response?.status === 401) {
          errorMessage = 'Invalid email or password.';
       } else if (error.message === 'Network Error' || !error.response) {

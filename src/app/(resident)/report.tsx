@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Header } from '@/shared/components';
 import * as Location from 'expo-location';
+import { resolveAddressFromCoords } from '@/shared/utils/location';
 import * as ImagePicker from 'expo-image-picker';
 import {
   View,
@@ -34,7 +35,6 @@ import {
   XCircle,
   RotateCcw,
   Ambulance,
-  PhoneCall,
   Lock,
 } from 'lucide-react-native';
 
@@ -403,6 +403,14 @@ export default function ReportScreen() {
 
       const { latitude, longitude } = currentLoc.coords;
 
+      // Automatically resolve real address/place name from coordinates
+      let resolvedAddress = '';
+      try {
+        resolvedAddress = await resolveAddressFromCoords(latitude, longitude);
+      } catch (err) {
+        console.log('Error resolving address in report:', err);
+      }
+
       // 2. Prepare FormData
       const formData = new FormData();
       formData.append('incident_type_id', selectedType.toString());
@@ -411,6 +419,9 @@ export default function ReportScreen() {
       formData.append('reporter_latitude', latitude.toString());
       formData.append('reporter_longitude', longitude.toString());
       formData.append('reported_at', new Date().toISOString());
+      if (resolvedAddress) {
+        formData.append('address', resolvedAddress);
+      }
       if (description.trim()) {
         formData.append('description', description);
       }
@@ -584,80 +595,132 @@ export default function ReportScreen() {
 
           {/* Lifecycle Stepper Card */}
           {!isRejected && (
-            <View style={styles.stepperCard}>
-              <Text style={styles.stepperHeader}>INCIDENT PROGRESS</Text>
+            <View className="bg-white rounded-3xl p-5 border border-slate-200/80 mb-5 shadow-sm">
+              <View className="flex-row items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                <Text className="text-slate-400 font-bold text-xs uppercase tracking-wider">
+                  INCIDENT PROGRESS
+                </Text>
+                <View className="bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
+                  <Text className="text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider">
+                    {isArrived ? 'On Scene' : isEnRoute ? 'Live Dispatched' : isAssigned ? 'Crew Assigned' : 'Under Review'}
+                  </Text>
+                </View>
+              </View>
               
               {/* Step 1: Submitted */}
-              <View style={styles.stepRow}>
-                <View style={[styles.stepDot, styles.stepDotDone]}>
-                  <CircleCheck size={14} color="#FFFFFF" strokeWidth={3} />
+              <View className="flex-row items-start mb-3.5">
+                <View className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/60 items-center justify-center mr-3 mt-0.5">
+                  <CircleCheck size={16} color="#059669" strokeWidth={2.5} />
                 </View>
-                <View style={styles.stepContent}>
-                  <Text style={styles.stepTitleDone}>Report Submitted</Text>
-                  <Text style={styles.stepSub}>Report #{activeIncident.id} recorded with GPS & photo</Text>
+                <View className="flex-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-slate-900 font-bold text-sm">Report Submitted</Text>
+                    <Text className="text-emerald-600 font-bold text-[10px] uppercase">Logged</Text>
+                  </View>
+                  <Text className="text-slate-400 text-xs mt-0.5">Report #{activeIncident.id} recorded with GPS & photo</Text>
                 </View>
               </View>
-              <View style={[styles.stepBar, styles.stepBarDone]} />
 
               {/* Step 2: Verification */}
-              <View style={styles.stepRow}>
-                <View style={[styles.stepDot, (isVerified || isAssigned || isEnRoute || isArrived) ? styles.stepDotDone : styles.stepDotCurrent]}>
+              <View className="flex-row items-start mb-3.5">
+                <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 mt-0.5 border ${
+                  (isVerified || isAssigned || isEnRoute || isArrived)
+                    ? 'bg-emerald-50 border-emerald-200/60'
+                    : 'bg-amber-50 border-amber-200/60'
+                }`}>
                   {(isVerified || isAssigned || isEnRoute || isArrived) ? (
-                    <CircleCheck size={14} color="#FFFFFF" strokeWidth={3} />
+                    <CircleCheck size={16} color="#059669" strokeWidth={2.5} />
                   ) : (
-                    <Clock size={14} color="#D97706" strokeWidth={2.5} />
+                    <Clock size={16} color="#D97706" strokeWidth={2.5} />
                   )}
                 </View>
-                <View style={styles.stepContent}>
-                  <Text style={(isVerified || isAssigned || isEnRoute || isArrived) ? styles.stepTitleDone : styles.stepTitleCurrent}>
-                    Dispatcher Review
-                  </Text>
-                  <Text style={styles.stepSub}>
-                    {(isVerified || isAssigned || isEnRoute || isArrived) ? 'Report verified and approved' : 'Dispatcher verifying report validity'}
+                <View className="flex-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text className={`text-sm font-bold ${
+                      (isVerified || isAssigned || isEnRoute || isArrived) ? 'text-slate-900' : 'text-amber-700'
+                    }`}>
+                      Dispatcher Review
+                    </Text>
+                    <Text className={`text-[10px] font-bold uppercase ${
+                      (isVerified || isAssigned || isEnRoute || isArrived) ? 'text-emerald-600' : 'text-amber-600'
+                    }`}>
+                      {(isVerified || isAssigned || isEnRoute || isArrived) ? 'Approved' : 'In Review'}
+                    </Text>
+                  </View>
+                  <Text className="text-slate-400 text-xs mt-0.5">
+                    {(isVerified || isAssigned || isEnRoute || isArrived) ? 'Report verified by command center' : 'Dispatcher verifying incident validity'}
                   </Text>
                 </View>
               </View>
-              <View style={[styles.stepBar, (isAssigned || isEnRoute || isArrived) ? styles.stepBarDone : styles.stepBarPending]} />
 
               {/* Step 3: Assignment */}
-              <View style={styles.stepRow}>
-                <View style={[styles.stepDot, (isAssigned || isEnRoute || isArrived) ? styles.stepDotDone : (isVerified ? styles.stepDotCurrent : styles.stepDotPending)]}>
+              <View className="flex-row items-start mb-3.5">
+                <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 mt-0.5 border ${
+                  (isAssigned || isEnRoute || isArrived)
+                    ? 'bg-emerald-50 border-emerald-200/60'
+                    : isVerified
+                    ? 'bg-blue-50 border-blue-200/60'
+                    : 'bg-slate-50 border-slate-200/60'
+                }`}>
                   {(isAssigned || isEnRoute || isArrived) ? (
-                    <CircleCheck size={14} color="#FFFFFF" strokeWidth={3} />
+                    <CircleCheck size={16} color="#059669" strokeWidth={2.5} />
                   ) : isVerified ? (
-                    <ActivityIndicator size={12} color="#2563EB" />
+                    <ActivityIndicator size={13} color="#2563EB" />
                   ) : (
-                    <Lock size={12} color="#94A3B8" />
+                    <Lock size={14} color="#94A3B8" />
                   )}
                 </View>
-                <View style={styles.stepContent}>
-                  <Text style={(isAssigned || isEnRoute || isArrived) ? styles.stepTitleDone : (isVerified ? styles.stepTitleCurrent : styles.stepTitlePending)}>
-                    Responder Assignment
-                  </Text>
-                  <Text style={styles.stepSub}>
+                <View className="flex-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text className={`text-sm font-bold ${
+                      (isAssigned || isEnRoute || isArrived) ? 'text-slate-900' : isVerified ? 'text-blue-700' : 'text-slate-400'
+                    }`}>
+                      Responder Assignment
+                    </Text>
+                    <Text className={`text-[10px] font-bold uppercase ${
+                      (isAssigned || isEnRoute || isArrived) ? 'text-emerald-600' : isVerified ? 'text-blue-600' : 'text-slate-400'
+                    }`}>
+                      {(isAssigned || isEnRoute || isArrived) ? 'Assigned' : isVerified ? 'Matching' : 'Waiting'}
+                    </Text>
+                  </View>
+                  <Text className="text-slate-400 text-xs mt-0.5">
                     {(isAssigned || isEnRoute || isArrived) ? `${unitName} assigned to mission` : 'Awaiting team assignment'}
                   </Text>
                 </View>
               </View>
-              <View style={[styles.stepBar, (isEnRoute || isArrived) ? styles.stepBarDone : styles.stepBarPending]} />
 
-              {/* Step 4: En Route & Live Tracking */}
-              <View style={styles.stepRow}>
-                <View style={[styles.stepDot, isArrived ? styles.stepDotDone : (isEnRoute ? styles.stepDotActive : styles.stepDotPending)]}>
+              {/* Step 4: Live Responder Tracking */}
+              <View className="flex-row items-start">
+                <View className={`w-8 h-8 rounded-xl items-center justify-center mr-3 mt-0.5 border ${
+                  isArrived
+                    ? 'bg-emerald-50 border-emerald-200/60'
+                    : isEnRoute
+                    ? 'bg-sky-50 border-sky-200/60'
+                    : 'bg-slate-50 border-slate-200/60'
+                }`}>
                   {isArrived ? (
-                    <CircleCheck size={14} color="#FFFFFF" strokeWidth={3} />
+                    <CircleCheck size={16} color="#059669" strokeWidth={2.5} />
                   ) : isEnRoute ? (
-                    <Navigation size={14} color="#FFFFFF" strokeWidth={2.5} />
+                    <Navigation size={15} color="#0284C7" strokeWidth={2.5} />
                   ) : (
-                    <Lock size={12} color="#94A3B8" />
+                    <Lock size={14} color="#94A3B8" />
                   )}
                 </View>
-                <View style={styles.stepContent}>
-                  <Text style={(isEnRoute || isArrived) ? styles.stepTitleDone : styles.stepTitlePending}>
-                    Live Responder Tracking
-                  </Text>
-                  <Text style={styles.stepSub}>
-                    {isArrived ? 'Responder arrived on scene' : (isEnRoute ? 'Live GPS tracking active on map' : 'Activates when responder departs')}
+                <View className="flex-1">
+                  <View className="flex-row items-center justify-between">
+                    <Text className={`text-sm font-bold ${
+                      (isEnRoute || isArrived) ? 'text-slate-900' : 'text-slate-400'
+                    }`}>
+                      Live Responder Tracking
+                    </Text>
+                    <Text className={`text-[10px] font-bold uppercase ${
+                      isArrived ? 'text-emerald-600' : isEnRoute ? 'text-sky-600' : 'text-slate-400'
+                    }`}>
+                      {isArrived ? 'Arrived' : isEnRoute ? 'En Route' : 'Standby'}
+                    </Text>
+                  </View>
+                  <Text className="text-slate-400 text-xs mt-0.5">
+                    {isArrived ? 'Responder arrived on scene' : isEnRoute ? 'Live GPS tracking active on map' : 'Activates when responder departs'}
                   </Text>
                 </View>
               </View>
@@ -699,7 +762,7 @@ export default function ReportScreen() {
             )}
 
             {/* If Rejected: Return to form */}
-            {isRejected ? (
+            {isRejected && (
               <TouchableOpacity
                 style={styles.returnFormBtn}
                 onPress={() => {
@@ -711,26 +774,7 @@ export default function ReportScreen() {
                 <RotateCcw size={16} color="#FFFFFF" strokeWidth={2.2} />
                 <Text style={styles.returnFormBtnText}>Return to Report Form</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.refreshReportBtn}
-                onPress={() => fetchIncidents()}
-                activeOpacity={0.85}
-              >
-                <RotateCcw size={16} color="#475569" strokeWidth={2.2} />
-                <Text style={styles.refreshReportBtnText}>Refresh Status</Text>
-              </TouchableOpacity>
             )}
-
-            {/* Hotline Quick Call */}
-            <TouchableOpacity
-              style={styles.callHotlineBtn}
-              onPress={() => Linking.openURL('tel:+639123456789')}
-              activeOpacity={0.85}
-            >
-              <PhoneCall size={16} color="#DC2626" />
-              <Text style={styles.callHotlineBtnText}>Call Emergency Hotline (911)</Text>
-            </TouchableOpacity>
 
             {!isRejected && (
               <TouchableOpacity
@@ -1186,38 +1230,6 @@ const styles = StyleSheet.create({
   },
   returnFormBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  refreshReportBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-    borderRadius: 14,
-    gap: 8,
-    alignSelf: 'stretch',
-  },
-  refreshReportBtnText: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  callHotlineBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    paddingVertical: 13,
-    borderRadius: 14,
-    gap: 8,
-  },
-  callHotlineBtnText: {
-    color: '#DC2626',
     fontSize: 14,
     fontWeight: '700',
   },

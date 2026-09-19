@@ -39,7 +39,7 @@ export function Input({
   const renderIcon = () => {
     if (!icon) return null;
     if (React.isValidElement(icon)) {
-      return React.cloneElement(icon as React.ReactElement, {
+      return React.cloneElement(icon as React.ReactElement<any>, {
         color: error ? '#EF4444' : isFocused ? '#3B82F6' : '#94A3B8',
         size: 20
       });

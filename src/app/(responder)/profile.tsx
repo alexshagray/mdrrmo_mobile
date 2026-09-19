@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
-  Switch,
   TouchableOpacity,
   Alert,
   Image,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -21,13 +22,14 @@ import {
   Mail,
   Smartphone,
   Award,
+  User,
 } from 'lucide-react-native';
 import { useAuth } from '@/shared/hooks';
 import { Avatar } from '@/shared/components';
 
 export default function ResponderProfileScreen() {
   const router = useRouter();
-  const { user, logout, isOnDuty, toggleDutyStatus } = useAuth();
+  const { user, logout } = useAuth();
 
   const fullName = user
     ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Emergency Responder'
@@ -39,22 +41,24 @@ export default function ResponderProfileScreen() {
   const phone = user?.phone_number || user?.phone || 'No phone registered';
   const photoUrl = user?.profile_photo_url;
 
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const handleLogout = () => {
-    Alert.alert(
-      'Sign Out Confirmation',
-      'Are you sure you want to go off-duty and sign out of your responder terminal?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            router.replace('/login');
-          },
-        },
-      ]
-    );
+    setShowLogoutModal(true);
+  };
+
+  const handleLogoutConfirm = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setShowLogoutModal(false);
+      router.replace('/login');
+    } catch (e) {
+      console.error('Logout error:', e);
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -109,12 +113,8 @@ export default function ResponderProfileScreen() {
                 />
               )}
             </View>
-            {/* Online/Duty Status Indicator */}
-            <View
-              className={`absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-white ${
-                isOnDuty ? 'bg-emerald-500' : 'bg-slate-400'
-              }`}
-            />
+            {/* Online Status Indicator */}
+            <View className="absolute bottom-0 right-0 w-5 h-5 rounded-full border-2 border-white bg-emerald-500" />
           </View>
 
           {/* Full Name */}
@@ -148,62 +148,6 @@ export default function ResponderProfileScreen() {
               <Text className="text-slate-500 text-xs font-medium">{phone}</Text>
             </View>
           </View>
-        </View>
-
-        {/* Shift Status Card */}
-        <View
-          className="bg-white border border-slate-200/80 rounded-3xl p-5 mb-5 flex-row justify-between items-center"
-          style={{
-            shadowColor: '#0F172A',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 14,
-            elevation: 3,
-          }}
-        >
-          <View className="flex-row items-center flex-1 mr-3">
-            <View
-              className={`w-11 h-11 rounded-2xl items-center justify-center mr-3.5 border ${
-                isOnDuty
-                  ? 'bg-emerald-50 border-emerald-200/70'
-                  : 'bg-slate-50 border-slate-200/70'
-              }`}
-            >
-              <Activity size={20} color={isOnDuty ? '#059669' : '#94A3B8'} />
-            </View>
-            <View className="flex-1">
-              <View className="flex-row items-center">
-                <Text className="font-bold text-slate-900 text-sm mr-2">Shift Status</Text>
-                <View
-                  className={`px-2 py-0.5 rounded-full border ${
-                    isOnDuty
-                      ? 'bg-emerald-50 border-emerald-200/70'
-                      : 'bg-slate-100 border-slate-200/70'
-                  }`}
-                >
-                  <Text
-                    className={`text-[10px] font-bold uppercase ${
-                      isOnDuty ? 'text-emerald-700' : 'text-slate-500'
-                    }`}
-                  >
-                    {isOnDuty ? 'ACTIVE' : 'OFF DUTY'}
-                  </Text>
-                </View>
-              </View>
-              <Text className="text-slate-400 text-xs mt-0.5 leading-snug">
-                {isOnDuty
-                  ? 'Ready to receive emergency missions'
-                  : 'Standby mode / unavailable'}
-              </Text>
-            </View>
-          </View>
-
-          <Switch
-            value={isOnDuty}
-            onValueChange={toggleDutyStatus}
-            trackColor={{ true: '#10B981', false: '#E2E8F0' }}
-            thumbColor="#FFFFFF"
-          />
         </View>
 
         {/* Qualifications Section */}
@@ -328,10 +272,96 @@ export default function ResponderProfileScreen() {
         >
           <LogOut size={17} color="#E11D48" />
           <Text className="text-rose-600 font-bold text-xs ml-2 tracking-wider">
-            SIGN OUT OF TERMINAL
+            SIGN OUT
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Enhanced Sign Out Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showLogoutModal}
+        onRequestClose={() => !isLoggingOut && setShowLogoutModal(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-slate-900/60 px-5">
+          <View
+            className="w-full max-w-sm bg-white rounded-[32px] p-6 items-center shadow-2xl border border-slate-100"
+            style={{
+              shadowColor: '#0F172A',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.15,
+              shadowRadius: 20,
+              elevation: 8,
+            }}
+          >
+            {/* Soft glowing icon badge */}
+            <View className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 items-center justify-center mb-4 shadow-sm shadow-rose-100">
+              <LogOut size={28} color="#E11D48" strokeWidth={2.25} />
+            </View>
+
+            {/* Title & Description */}
+            <Text className="text-xl font-black text-slate-900 text-center tracking-tight mb-2">
+              Go Off-Duty & Sign Out?
+            </Text>
+            <Text className="text-slate-500 text-sm text-center font-medium leading-5 mb-5 px-2">
+              Signing out will take your terminal offline. You will stop receiving live mission alarms and dispatch telemetry.
+            </Text>
+
+            {/* Responder preview chip */}
+            <View className="w-full bg-slate-50 rounded-2xl p-3 flex-row items-center border border-slate-200/60 mb-6">
+              <View className="w-10 h-10 rounded-xl bg-slate-200/80 items-center justify-center mr-3">
+                <Shield size={20} color="#0F172A" />
+              </View>
+              <View className="flex-1">
+                <View className="flex-row items-center">
+                  <Text className="text-slate-900 font-bold text-xs mr-2" numberOfLines={1}>
+                    {fullName}
+                  </Text>
+                  <View className="bg-slate-200 px-1.5 py-0.5 rounded">
+                    <Text className="text-slate-600 text-[9px] font-black uppercase">TEAM {teamName}</Text>
+                  </View>
+                </View>
+                <Text className="text-slate-400 text-[11px] mt-0.5" numberOfLines={1}>
+                  Badge: {badge} • {email}
+                </Text>
+              </View>
+            </View>
+
+            {/* Buttons */}
+            <View className="w-full space-y-2.5">
+              <TouchableOpacity
+                onPress={handleLogoutConfirm}
+                disabled={isLoggingOut}
+                activeOpacity={0.85}
+                className="w-full py-3.5 bg-rose-600 active:bg-rose-700 rounded-2xl items-center flex-row justify-center shadow-md shadow-rose-500/25"
+              >
+                {isLoggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <LogOut size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text className="text-white font-extrabold text-sm tracking-wider uppercase">
+                      Confirm Sign Out
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                activeOpacity={0.7}
+                className="w-full py-3 bg-slate-100 active:bg-slate-200 rounded-2xl items-center mt-2 border border-slate-200/60"
+              >
+                <Text className="text-slate-700 font-bold text-sm">
+                  Stay on Duty
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

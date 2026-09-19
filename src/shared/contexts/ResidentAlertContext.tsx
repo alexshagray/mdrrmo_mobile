@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Vibration, Linking } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import { ShieldAlert, CheckCircle, X, MapPin, Ambulance, PhoneCall, AlertCircle } from 'lucide-react-native';
@@ -109,10 +110,20 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
           dispatch: e.dispatch,
         });
       } else if (status === 'arrived_on_scene') {
+        Notifications.scheduleNotificationAsync({
+          content: {
+            title: '🚨 Responders Have Arrived!',
+            body: 'The emergency medical response unit has arrived at your reported location.',
+            sound: true,
+            priority: Notifications.AndroidNotificationPriority.MAX,
+          },
+          trigger: null,
+        }).catch(() => {});
+
         setActiveAlert({
           type: 'arrived',
           title: 'RESPONDERS ON SCENE',
-          subtitle: 'The emergency medical team has arrived at your reported location.',
+          subtitle: 'The emergency medical team has arrived at your reported location. Please look out for the team.',
           dispatch: e.dispatch,
         });
       }
@@ -172,6 +183,8 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
             Vibration.vibrate([0, 500, 200, 500, 200, 800]);
           } else if (activeAlert.type === 'cancelled') {
             Vibration.vibrate([0, 400, 150, 400]);
+          } else if (activeAlert.type === 'arrived') {
+            Vibration.vibrate([0, 600, 200, 600, 200, 1000]);
           } else {
             Vibration.vibrate(500);
           }
@@ -292,10 +305,12 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
                   <Ambulance size={18} color="#2563EB" />
                   <Text style={styles.infoTextBold}>{teamName} • {ambulanceName}</Text>
                 </View>
-                {dispatch.incident?.location && (
+                {(dispatch.incident?.place_of_incident || dispatch.incident?.incident_address || dispatch.incident?.location) && (
                   <View style={[styles.infoRow, { marginTop: 6 }]}>
                     <MapPin size={16} color="#64748B" />
-                    <Text style={styles.infoText} numberOfLines={2}>{dispatch.incident.location}</Text>
+                    <Text style={styles.infoText} numberOfLines={2}>
+                      {dispatch.incident.place_of_incident || dispatch.incident.incident_address || dispatch.incident.location}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -318,6 +333,15 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.dismissBtn} onPress={clearAlert}>
                   <Text style={styles.dismissText}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            ) : activeAlert?.type === 'arrived' ? (
+              <View style={{ width: '100%', gap: 10 }}>
+                <TouchableOpacity style={[styles.trackButton, { backgroundColor: '#059669' }]} onPress={clearAlert}>
+                  <Text style={styles.trackButtonText}>I SEE THEM / UNDERSTOOD</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dismissBtn} onPress={handleTrackLive}>
+                  <Text style={styles.dismissText}>View Live Map</Text>
                 </TouchableOpacity>
               </View>
             ) : isEnRouteOrArrived ? (

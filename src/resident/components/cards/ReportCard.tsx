@@ -151,17 +151,20 @@ export function ReportCard({ report, onPress }: ReportCardProps) {
             {/* Meta info + chevron */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5 }}>
-                  <MapPin size={13} color="#6366F1" strokeWidth={2.25} />
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5 }}>
+                  <View style={{ marginTop: 2 }}>
+                    <MapPin size={13} color="#6366F1" strokeWidth={2.25} />
+                  </View>
                   <Text
                     style={{
                       color: '#475569',
                       fontSize: 12,
                       fontWeight: '500',
-                      marginLeft: 5,
+                      marginLeft: 6,
                       flex: 1,
+                      lineHeight: 17,
                     }}
-                    numberOfLines={1}
+                    numberOfLines={3}
                   >
                     {data.location}
                   </Text>

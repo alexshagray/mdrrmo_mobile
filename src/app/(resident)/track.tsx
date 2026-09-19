@@ -11,13 +11,15 @@ import {
   Dimensions,
   PanResponder,
   StyleSheet,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
+import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import MapboxGL from '@rnmapbox/maps';
 import { MapView, Avatar, LocationPermissionModal } from '@/shared/components';
-import { TimelineCard } from '@/responder/components/common/TimelineCard';
 import {
   Clock,
   MapPin,
@@ -31,11 +33,12 @@ import {
   Maximize2,
   ChevronUp,
   ChevronDown,
-  RotateCcw,
   ArrowRight,
   CheckCircle2,
-  PhoneCall,
   XCircle,
+  Ambulance,
+  Radio,
+  Check,
 } from 'lucide-react-native';
 import { getMyReports, callResponderApi } from '@/shared/api/incidents';
 import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
@@ -45,8 +48,8 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Bottom navigation bar height (tab bar sits at bottom: 20 with height: 64)
 const BOTTOM_NAV_HEIGHT = 84;
-const SHEET_COLLAPSED_HEIGHT = 118;
-const SHEET_EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 420);
+const SHEET_COLLAPSED_HEIGHT = 126;
+const SHEET_EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.72, 560);
 
 // Helper: Haversine distance between two coordinates in metres
 const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -189,7 +192,7 @@ const TrackingLockedState = ({
     <SafeAreaView className="flex-1 bg-slate-50 px-6 justify-center" edges={['top', 'bottom']}>
       <View className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl shadow-slate-200/60 items-center">
         <View
-          className={`w-20 h-20 rounded-full items-center justify-center mb-5 ${
+          className={`w-20 h-20 rounded-3xl items-center justify-center mb-5 ${
             isRejected
               ? 'bg-red-50 border-2 border-red-200'
               : isArrived
@@ -215,7 +218,7 @@ const TrackingLockedState = ({
         </View>
 
         <View
-          className={`px-3.5 py-1.5 rounded-full mb-3 ${
+          className={`px-3.5 py-1.5 rounded-xl mb-3 ${
             isRejected
               ? 'bg-red-100'
               : isArrived
@@ -295,7 +298,7 @@ const TrackingLockedState = ({
           </Text>
         </View>
 
-        <View className="w-full gap-3">
+        <View className="w-full">
           <TouchableOpacity
             className="w-full bg-indigo-600 py-4 rounded-2xl flex-row items-center justify-center shadow-md shadow-indigo-500/20"
             onPress={onNavigateToReport}
@@ -303,26 +306,6 @@ const TrackingLockedState = ({
           >
             <Text className="text-white font-bold text-sm mr-2">View Incident Progress</Text>
             <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.5} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="w-full bg-red-50 border border-red-200 py-3.5 rounded-2xl flex-row items-center justify-center"
-            onPress={() => Linking.openURL('tel:+639123456789')}
-            activeOpacity={0.85}
-          >
-            <PhoneCall size={16} color="#DC2626" />
-            <Text className="text-red-700 font-bold text-sm ml-2">Call Hotline (911)</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="w-full py-2.5 items-center justify-center"
-            onPress={onRefresh}
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center">
-              <RotateCcw size={14} color="#64748B" />
-              <Text className="text-slate-500 font-semibold text-xs ml-1.5">Check for updates</Text>
-            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -351,6 +334,61 @@ export default function TrackScreen() {
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+
+  // Arrival Alarm & Notification State
+  const [showArrivalModal, setShowArrivalModal] = useState(false);
+  const arrivalAudioPlayer = useRef<AudioPlayer | null>(null);
+  const hasTriggeredArrivalRef = useRef(false);
+
+  const dismissArrivalAlert = useCallback(() => {
+    Vibration.cancel();
+    if (arrivalAudioPlayer.current) {
+      try {
+        arrivalAudioPlayer.current.pause();
+        if (typeof arrivalAudioPlayer.current.remove === 'function') {
+          arrivalAudioPlayer.current.remove();
+        }
+      } catch (e) {}
+      arrivalAudioPlayer.current = null;
+    }
+    setShowArrivalModal(false);
+  }, []);
+
+  const triggerArrivalAlarm = useCallback(async (unitLabel: string) => {
+    if (hasTriggeredArrivalRef.current) return;
+    hasTriggeredArrivalRef.current = true;
+    setShowArrivalModal(true);
+
+    try {
+      // 1. Multi-pulse emergency vibration
+      Vibration.vibrate([0, 600, 200, 600, 200, 1000]);
+
+      // 2. Schedule immediate system notification
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: '🚨 Responders Arrived on Scene!',
+          body: `${unitLabel} has arrived at your reported emergency location.`,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+        },
+        trigger: null,
+      }).catch(() => {});
+
+      // 3. Play alarm audio chime
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+      });
+
+      const player = createAudioPlayer(require('../../../assets/sounds/alarm.mp3'));
+      player.loop = false;
+      player.volume = 0.9;
+      player.play();
+      arrivalAudioPlayer.current = player;
+    } catch (e) {
+      console.log('Error playing arrival alarm:', e);
+    }
+  }, []);
 
   // Live Responder Pulse Animation
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -607,14 +645,22 @@ export default function TrackScreen() {
     fetchRoute,
   ]);
 
-  // Strict Rule Check: Live tracking unlocks ONLY when en_route (Option A: stops completely when arrived)
+  // Strict Rule Check: Live tracking unlocks when en_route and stays active on arrival
   const activeDispatch = activeIncident?.active_dispatch;
   const dispatchStatus = activeDispatch?.dispatch_status || activeIncident?.incident_status;
   const isArrived = dispatchStatus === 'arrived_on_scene';
   const isEnRoute = dispatchStatus === 'en_route' && !isArrived;
-  const isLiveTracking = isEnRoute;
+  const isLiveTracking = isEnRoute || isArrived;
 
-  // When arrived or not en_route, clear route line and travel ETA immediately
+  // Trigger Arrival Alarm and Notification when responder arrives
+  useEffect(() => {
+    if (isArrived && activeDispatch) {
+      const label = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
+      triggerArrivalAlarm(label);
+    }
+  }, [isArrived, activeDispatch?.id, triggerArrivalAlarm]);
+
+  // When arrived or not en_route, clear route polyline immediately
   useEffect(() => {
     if (isArrived || !isEnRoute) {
       setRouteCoords([]);
@@ -661,18 +707,21 @@ export default function TrackScreen() {
     (activeDispatch?.last_longitude ? parseFloat(activeDispatch.last_longitude) : null);
   const hasAmbulanceCoords = ambLat !== null && ambLng !== null && !isNaN(ambLat) && !isNaN(ambLng);
 
-  // Unit & Crew Details
+  // Unit & Assigned Ambulance Driver Details
   const unitName = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
   const ambulanceDesc =
     activeDispatch?.ambulance?.vehicle_name ||
     activeDispatch?.ambulance?.plate_number ||
     'MDRRMO Vehicle';
-  const leaderName = activeDispatch?.team_leader
-    ? `${activeDispatch.team_leader.first_name} ${activeDispatch.team_leader.last_name}`
-    : activeDispatch?.driver
-    ? `${activeDispatch.driver.first_name} ${activeDispatch.driver.last_name}`
-    : 'MDRRMO Crew';
-  const leaderRole = activeDispatch?.team_leader ? 'Team Leader' : 'Crew Responder';
+  const driverUser = activeDispatch?.driver;
+  const driverName = driverUser
+    ? `${driverUser.first_name || ''} ${driverUser.last_name || ''}`.trim()
+    : 'Ambulance Driver';
+  const driverPhone =
+    driverUser?.phone_number ||
+    activeDispatch?.ambulance?.driver?.phone_number ||
+    activeDispatch?.team_leader?.phone_number ||
+    '';
   const etaDuration = routeInfo?.duration || (isArrived ? 'On Scene' : 'Calculating...');
   const etaDistance = routeInfo?.distance || '';
 
@@ -702,6 +751,16 @@ export default function TrackScreen() {
     }
   };
 
+  // Dial Driver Helper
+  const dialDriverNumber = () => {
+    if (driverPhone) {
+      const cleanNumber = driverPhone.replace(/[^0-9+]/g, '');
+      Linking.openURL(`tel:${cleanNumber}`);
+    } else {
+      Linking.openURL('tel:911');
+    }
+  };
+
   // Call Responder Flow
   const handleCallResponder = () => {
     setIsLocationModalVisible(true);
@@ -711,23 +770,22 @@ export default function TrackScreen() {
     setIsLocationModalVisible(false);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Linking.openURL('tel:+639123456789');
-        return;
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        await callResponderApi(activeIncident.id, location.coords.latitude, location.coords.longitude);
       }
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      await callResponderApi(activeIncident.id, location.coords.latitude, location.coords.longitude);
-      Linking.openURL('tel:+639123456789');
     } catch (error) {
-      Linking.openURL('tel:+639123456789');
+      // ignore
+    } finally {
+      dialDriverNumber();
     }
   };
 
   const onDenyLocation = () => {
     setIsLocationModalVisible(false);
-    Linking.openURL('tel:+639123456789');
+    dialDriverNumber();
   };
 
   return (
@@ -747,23 +805,34 @@ export default function TrackScreen() {
               coordinates: routeCoords.map((c) => [c.longitude, c.latitude]),
             }}
           >
-            {/* Outer Route Border / Casing for High Visibility */}
+            {/* Ambient Glow Route Layer */}
+            <MapboxGL.LineLayer
+              id="routeGlow"
+              style={{
+                lineColor: isArrived ? '#10B981' : '#3B82F6',
+                lineWidth: 11,
+                lineCap: 'round',
+                lineJoin: 'round',
+                lineOpacity: 0.28,
+              }}
+            />
+            {/* Outer Route Border / Casing for High Contrast */}
             <MapboxGL.LineLayer
               id="routeCasing"
               style={{
-                lineColor: '#1E40AF',
-                lineWidth: 8.5,
+                lineColor: isArrived ? '#064E3B' : '#1E3A8A',
+                lineWidth: 7,
                 lineCap: 'round',
                 lineJoin: 'round',
-                lineOpacity: 0.35,
+                lineOpacity: 0.85,
               }}
             />
             {/* Inner Vibrant Navigation Core */}
             <MapboxGL.LineLayer
               id="routeCore"
               style={{
-                lineColor: isArrived ? '#059669' : '#2563EB',
-                lineWidth: 5.5,
+                lineColor: isArrived ? '#34D399' : '#60A5FA',
+                lineWidth: 4.5,
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
@@ -779,13 +848,7 @@ export default function TrackScreen() {
             title="Emergency Location"
           >
             <View style={styles.incidentMarkerContainer}>
-              {/* Outer soft ping ring */}
-              <View style={styles.incidentPulseRing} />
-              {/* Pin Icon */}
-              <View style={styles.incidentPinIcon}>
-                <AlertTriangle size={17} color="#FFFFFF" strokeWidth={2.5} />
-              </View>
-              {/* Floating Emergency Badge */}
+              <MapPin size={34} color="#DC2626" fill="#DC2626" strokeWidth={1.5} />
               <View style={styles.incidentLabelBadge}>
                 <Text style={styles.incidentLabelText}>Emergency Scene</Text>
               </View>
@@ -801,42 +864,29 @@ export default function TrackScreen() {
             title={unitName}
           >
             <View style={styles.responderMarkerContainer}>
-              {/* Animated Live Signal Radar Halo */}
-              {!isArrived && (
-                <Animated.View
-                  style={[
-                    styles.radarHalo,
-                    {
-                      transform: [{ scale: pulseAnim }],
-                      opacity: haloOpacity,
-                    },
-                  ]}
+              {ambulanceCoords?.heading !== undefined && !isArrived ? (
+                <View
+                  style={{
+                    transform: [{ rotate: `${ambulanceCoords.heading}deg` }],
+                  }}
+                >
+                  <Navigation
+                    size={32}
+                    color={isArrived ? '#059669' : '#2563EB'}
+                    fill={isArrived ? '#059669' : '#2563EB'}
+                  />
+                </View>
+              ) : (
+                <Ambulance
+                  size={34}
+                  color={isArrived ? '#059669' : '#2563EB'}
+                  strokeWidth={2.4}
                 />
               )}
 
-              {/* Main Ambulance Badge */}
-              <View
-                style={[
-                  styles.responderCorePuck,
-                  isArrived ? styles.responderPuckArrived : styles.responderPuckEnRoute,
-                ]}
-              >
-                {/* Heading indicator if heading available and en route */}
-                {ambulanceCoords?.heading !== undefined && !isArrived ? (
-                  <View
-                    style={{
-                      transform: [{ rotate: `${ambulanceCoords.heading}deg` }],
-                    }}
-                  >
-                    <Navigation size={22} color="#FFFFFF" fill="#FFFFFF" />
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: 20 }}>🚑</Text>
-                )}
-              </View>
-
               {/* Floating Unit Name Label */}
               <View style={styles.responderLabelPill}>
+                <View style={styles.responderLiveDot} />
                 <Text style={styles.responderLabelText}>{unitName}</Text>
               </View>
             </View>
@@ -858,21 +908,32 @@ export default function TrackScreen() {
                 isArrived ? styles.dotArrived : styles.dotEnRoute,
               ]}
             />
-            <View>
-              <Text style={styles.topReportTag}>
-                REPORT #{activeIncident.id} • {activeIncident.incident_type?.name?.toUpperCase() || 'EMERGENCY'}
-              </Text>
-              <Text style={styles.topStatusMain}>
+            <View style={{ flex: 1 }}>
+              <View style={styles.topReportTagRow}>
+                <Text style={styles.topReportTag}>
+                  REPORT #{activeIncident.id}
+                </Text>
+                <View style={styles.topTypeBadge}>
+                  <Text style={styles.topTypeText}>
+                    {activeIncident.incident_type?.name?.toUpperCase() || 'EMERGENCY'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.topStatusMain} numberOfLines={1}>
                 {isArrived ? 'Responders on Scene' : `${unitName} is on the way`}
               </Text>
             </View>
           </View>
 
-          {/* Compact ETA Chip */}
+          {/* Compact Status Chip (Live GPS Status, No Inaccurate Duration) */}
           <View style={[styles.compactEtaChip, isArrived ? styles.etaChipArrived : styles.etaChipEnRoute]}>
-            <Clock size={12} color={isArrived ? '#047857' : '#1D4ED8'} strokeWidth={2.5} />
+            {isArrived ? (
+              <CheckCircle2 size={12} color="#047857" strokeWidth={2.5} />
+            ) : (
+              <Navigation size={12} color="#1D4ED8" strokeWidth={2.5} />
+            )}
             <Text style={[styles.compactEtaText, isArrived ? styles.etaTextArrived : styles.etaTextEnRoute]}>
-              {etaDuration}
+              {isArrived ? 'ON SCENE' : 'EN ROUTE'}
             </Text>
           </View>
         </View>
@@ -882,7 +943,7 @@ export default function TrackScreen() {
       <View
         style={[
           styles.floatingActionGroup,
-          { bottom: BOTTOM_NAV_HEIGHT + SHEET_COLLAPSED_HEIGHT + 14 },
+          { bottom: BOTTOM_NAV_HEIGHT + SHEET_COLLAPSED_HEIGHT + 16 },
         ]}
       >
         {/* Overview Button (Fit Bounds) */}
@@ -904,7 +965,7 @@ export default function TrackScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ─── 6. DRAGGABLE BOTTOM SHEET (MAP-FIRST DETAIL DRAWER) ─── */}
+      {/* ─── 6. DRAGGABLE BOTTOM SHEET (MAP-FIRST DETAIL DRAWER & MESSAGE MODAL) ─── */}
       <Animated.View
         style={[
           styles.bottomSheetContainer,
@@ -928,25 +989,25 @@ export default function TrackScreen() {
           <View style={styles.collapsedHeaderRow}>
             <View style={styles.collapsedUnitInfo}>
               <View style={styles.collapsedIconBox}>
-                <Text style={{ fontSize: 18 }}>🚑</Text>
+                <Ambulance size={22} color="#2563EB" strokeWidth={2.2} />
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.collapsedUnitTitle} numberOfLines={1}>
                   {unitName}
                 </Text>
                 <Text style={styles.collapsedUnitSub} numberOfLines={1}>
-                  {isArrived ? 'Arrived on scene' : ambulanceDesc}
+                  {isArrived ? 'Arrived on scene' : `${ambulanceDesc} • En Route`}
                 </Text>
               </View>
             </View>
 
             <View style={styles.collapsedActions}>
-              {/* ETA Badge */}
+              {/* Live Status & Distance Badge (No Inaccurate Duration) */}
               <View style={styles.collapsedEtaBadge}>
-                <Text style={styles.collapsedEtaDuration}>{etaDuration}</Text>
-                {etaDistance ? (
-                  <Text style={styles.collapsedEtaDistance}>{etaDistance}</Text>
-                ) : null}
+                <Text style={styles.collapsedEtaDuration}>{isArrived ? 'ON SCENE' : 'EN ROUTE'}</Text>
+                <Text style={styles.collapsedEtaDistance}>
+                  {isArrived ? 'Responders Here' : etaDistance ? `${etaDistance} away` : 'Live GPS'}
+                </Text>
               </View>
 
               {/* Expand Toggle Button */}
@@ -956,109 +1017,235 @@ export default function TrackScreen() {
                 activeOpacity={0.7}
               >
                 {isSheetExpanded ? (
-                  <ChevronDown size={18} color="#64748B" />
+                  <ChevronDown size={18} color="#475569" strokeWidth={2.4} />
                 ) : (
-                  <ChevronUp size={18} color="#64748B" />
+                  <ChevronUp size={18} color="#475569" strokeWidth={2.4} />
                 )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* Expanded Drawer Details (Revealed on Swipe Up) */}
+        {/* Expanded Drawer Details (Revealed on Swipe Up or Tap) */}
         {isSheetExpanded && (
           <ScrollView
             style={styles.expandedContentScroll}
+            contentContainerStyle={{ paddingBottom: 28 }}
             showsVerticalScrollIndicator={false}
             nestedScrollEnabled={true}
           >
-            {/* Responder Crew & Direct Call Action */}
+            {/* 1. ASSIGNED AMBULANCE DRIVER & DIRECT CALL ACTION */}
             <View style={styles.crewCardRow}>
-              <Avatar name={leaderName} size="md" />
+              <View style={styles.crewAvatarBox}>
+                <Avatar name={driverName} size="md" />
+              </View>
               <View style={styles.crewInfoText}>
                 <Text style={styles.crewName} numberOfLines={1}>
-                  {leaderName}
+                  {driverName}
                 </Text>
-                <Text style={styles.crewRole}>{leaderRole} • MDRRMO</Text>
+                <Text style={styles.crewRole} numberOfLines={1}>
+                  Ambulance Driver • {activeDispatch?.ambulance?.plate_number || unitName}
+                </Text>
+                {driverPhone ? (
+                  <Text style={styles.driverPhoneText} numberOfLines={1}>
+                    {driverPhone}
+                  </Text>
+                ) : null}
               </View>
               <TouchableOpacity
                 style={styles.callResponderBtn}
                 onPress={handleCallResponder}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <Phone size={16} color="#FFFFFF" strokeWidth={2.4} />
-                <Text style={styles.callResponderBtnText}>Call</Text>
+                <Phone size={15} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.callResponderBtnText}>Call Driver</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Quick Mission Meta Grid */}
+            {/* 2. QUICK MISSION META TILES (Expanded space, all text clearly visible) */}
             <View style={styles.missionGrid}>
               <View style={styles.metaBox}>
                 <Text style={styles.metaLabel}>INCIDENT TYPE</Text>
-                <Text style={styles.metaValue} numberOfLines={1}>
+                <Text style={styles.metaValue} numberOfLines={2}>
                   {activeIncident.incident_type?.name || 'Emergency'}
                 </Text>
               </View>
               <View style={styles.metaBox}>
-                <Text style={styles.metaLabel}>VEHICLE</Text>
-                <Text style={styles.metaValue} numberOfLines={1}>
+                <Text style={styles.metaLabel}>ASSIGNED UNIT</Text>
+                <Text style={styles.metaValue} numberOfLines={2}>
+                  {unitName}
+                </Text>
+              </View>
+              <View style={styles.metaBox}>
+                <Text style={styles.metaLabel}>VEHICLE / PLATE</Text>
+                <Text style={styles.metaValue} numberOfLines={2}>
                   {activeDispatch?.ambulance?.vehicle_name || 'Ambulance'}
+                  {activeDispatch?.ambulance?.plate_number ? ` (${activeDispatch.ambulance.plate_number})` : ''}
                 </Text>
               </View>
               <View style={styles.metaBox}>
-                <Text style={styles.metaLabel}>PLATE NUMBER</Text>
-                <Text style={styles.metaValue} numberOfLines={1}>
-                  {activeDispatch?.ambulance?.plate_number || 'Official MDRRMO'}
-                </Text>
-              </View>
-              <View style={styles.metaBox}>
-                <Text style={styles.metaLabel}>STATUS</Text>
+                <Text style={styles.metaLabel}>MISSION STATUS</Text>
                 <Text
                   style={[
                     styles.metaValue,
                     { color: isArrived ? '#059669' : '#2563EB' },
                   ]}
+                  numberOfLines={2}
                 >
-                  {isArrived ? 'ARRIVED ON SCENE' : 'TRAVELING EN ROUTE'}
+                  {isArrived ? 'Arrived on Scene' : 'Traveling En Route'}
                 </Text>
               </View>
             </View>
 
-            {/* Timeline Component */}
-            <View style={styles.timelineSection}>
-              <Text style={styles.timelineSectionTitle}>MISSION PROGRESS</Text>
-              <TimelineCard
-                events={[
+            {/* 4. MISSION PROGRESS MILESTONES (Sleek Connected Milestone Cards, NO generic circles) */}
+            <View style={styles.milestonesSection}>
+              <View style={styles.milestonesSectionHeader}>
+                <Text style={styles.milestonesSectionTitle}>MISSION PROGRESS</Text>
+                <Text style={styles.milestonesSectionSub}>
+                  {isArrived ? '4 of 4 Steps Complete' : isEnRoute ? '3 of 4 Steps Complete' : '2 of 4 Steps Complete'}
+                </Text>
+              </View>
+
+              <View style={styles.milestonesList}>
+                {[
                   {
-                    time: 'Verified',
-                    title: 'Incident Approved',
-                    description: 'Dispatcher verified report',
-                    active: true,
+                    step: 1,
+                    title: 'Incident Verified & Approved',
+                    desc: 'Command Center reviewed and verified report',
+                    status: 'Completed',
+                    done: true,
+                    active: false,
+                    icon: ShieldCheck,
                   },
                   {
-                    time: 'Dispatched',
-                    title: 'Unit Assigned',
-                    description: `${unitName} assigned to mission`,
-                    active: true,
+                    step: 2,
+                    title: `${unitName} Dispatched`,
+                    desc: 'Emergency response vehicle assigned with crew',
+                    status: 'Completed',
+                    done: true,
+                    active: false,
+                    icon: Ambulance,
                   },
                   {
-                    time: 'En Route',
+                    step: 3,
                     title: 'En Route to Location',
-                    description: 'Responders traveling to scene',
-                    active: isEnRoute || isArrived,
+                    desc: isArrived ? 'Transit completed' : 'Responders traveling to scene with sirens',
+                    status: isArrived ? 'Completed' : 'Live Now',
+                    done: isArrived,
+                    active: isEnRoute,
+                    icon: Navigation,
                   },
                   {
-                    time: isArrived ? 'On Scene' : '--:--',
+                    step: 4,
                     title: 'Arrival on Scene',
-                    description: isArrived ? 'Responders arrived on scene' : 'Pending arrival',
+                    desc: isArrived ? 'Responders arrived on scene providing assistance' : 'Approaching destination',
+                    status: isArrived ? 'Completed' : 'Pending',
+                    done: isArrived,
                     active: isArrived,
+                    icon: CheckCircle2,
                   },
-                ]}
-              />
+                ].map((item, idx, arr) => {
+                  const IconComp = item.icon;
+                  const isLast = idx === arr.length - 1;
+                  const isCurrent = item.active;
+                  const isDone = item.done;
+
+                  return (
+                    <View key={item.step} style={styles.milestoneRow}>
+                      <View style={styles.milestoneLeftCol}>
+                        <View
+                          style={[
+                            styles.milestoneIconBox,
+                            isDone
+                              ? styles.milestoneBoxDone
+                              : isCurrent
+                              ? styles.milestoneBoxCurrent
+                              : styles.milestoneBoxPending,
+                          ]}
+                        >
+                          <IconComp
+                            size={14}
+                            color={isDone ? '#FFFFFF' : isCurrent ? '#2563EB' : '#94A3B8'}
+                            strokeWidth={2.4}
+                          />
+                        </View>
+                        {!isLast && (
+                          <View
+                            style={[
+                              styles.milestoneLine,
+                              isDone ? styles.milestoneLineDone : styles.milestoneLinePending,
+                            ]}
+                          />
+                        )}
+                      </View>
+
+                      <View style={styles.milestoneContent}>
+                        <View style={styles.milestoneTitleRow}>
+                          <Text
+                            style={[
+                              styles.milestoneTitle,
+                              isDone || isCurrent ? styles.milestoneTitleActive : styles.milestoneTitleMuted,
+                            ]}
+                          >
+                            {item.title}
+                          </Text>
+                          <View
+                            style={[
+                              styles.milestoneTag,
+                              isDone
+                                ? styles.milestoneTagDone
+                                : isCurrent
+                                ? styles.milestoneTagCurrent
+                                : styles.milestoneTagPending,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.milestoneTagText,
+                                isDone
+                                  ? styles.milestoneTagTextDone
+                                  : isCurrent
+                                  ? styles.milestoneTagTextCurrent
+                                  : styles.milestoneTagTextPending,
+                              ]}
+                            >
+                              {item.status}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.milestoneDesc}>{item.desc}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           </ScrollView>
         )}
       </Animated.View>
+
+      {/* ─── 7. RESPONDER ARRIVAL ALARM & NOTIFICATION MODAL ─── */}
+      {showArrivalModal && (
+        <View style={styles.arrivalAlertOverlay}>
+          <View style={styles.arrivalAlertCard}>
+            <View style={styles.arrivalAlertIconBox}>
+              <Ambulance size={34} color="#FFFFFF" strokeWidth={2.4} />
+            </View>
+            <Text style={styles.arrivalAlertTitle}>RESPONDERS ON SCENE!</Text>
+            <Text style={styles.arrivalAlertSubtitle}>
+              {unitName} has arrived at your reported emergency location. Medical personnel are on site providing assistance.
+            </Text>
+            <TouchableOpacity
+              style={styles.arrivalAlertActionBtn}
+              onPress={dismissArrivalAlert}
+              activeOpacity={0.85}
+            >
+              <Check size={18} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.arrivalAlertActionBtnText}>I See Them / Understood</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Location Permission Modal */}
       <LocationPermissionModal
@@ -1086,15 +1273,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EF444433',
+    borderRadius: 16,
+    backgroundColor: '#EF444425',
     borderWidth: 1.5,
-    borderColor: '#EF444466',
+    borderColor: '#EF444455',
   },
   incidentPinIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: '#DC2626',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1102,14 +1289,27 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     shadowColor: '#DC2626',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.45,
     shadowRadius: 6,
-    elevation: 6,
+    elevation: 7,
+  },
+  incidentPinPointer: {
+    width: 0,
+    height: 0,
+    backgroundColor: 'transparent',
+    borderStyle: 'solid',
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#DC2626',
+    marginTop: -1,
   },
   incidentLabelBadge: {
     backgroundColor: '#991B1B',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 2.5,
     borderRadius: 8,
     marginTop: 3,
     borderWidth: 1,
@@ -1129,17 +1329,17 @@ const styles = StyleSheet.create({
   },
   radarHalo: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 58,
+    height: 58,
+    borderRadius: 20,
     backgroundColor: '#3B82F633',
     borderWidth: 1.5,
     borderColor: '#3B82F688',
   },
   responderCorePuck: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -1157,13 +1357,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#059669',
   },
   responderLabelPill: {
-    backgroundColor: '#0F172AEE',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172AF0',
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
     borderRadius: 10,
     marginTop: 4,
     borderWidth: 1,
     borderColor: '#334155',
+    gap: 5,
+  },
+  responderLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#38BDF8',
   },
   responderLabelText: {
     color: '#FFFFFF',
@@ -1183,7 +1392,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFFEE',
+    backgroundColor: '#FFFFFFFA',
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1191,9 +1400,9 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
   },
   topPillLeft: {
     flexDirection: 'row',
@@ -1213,11 +1422,31 @@ const styles = StyleSheet.create({
   dotArrived: {
     backgroundColor: '#059669',
   },
+  topReportTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
   topReportTag: {
     color: '#64748B',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.4,
+  },
+  topTypeBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  topTypeText: {
+    color: '#1E40AF',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   topStatusMain: {
     color: '#0F172A',
@@ -1228,8 +1457,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
   },
@@ -1242,7 +1471,7 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0',
   },
   compactEtaText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
   },
   etaTextEnRoute: {
@@ -1262,8 +1491,8 @@ const styles = StyleSheet.create({
   floatingActionBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    backgroundColor: '#FFFFFFF2',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1290,27 +1519,27 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 12,
     zIndex: 30,
     overflow: 'hidden',
   },
   sheetHeaderTouchZone: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 10,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   sheetGrabberWrapper: {
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
   sheetGrabberPill: {
-    width: 38,
-    height: 4.5,
-    borderRadius: 3,
+    width: 48,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#CBD5E1',
   },
   collapsedHeaderRow: {
@@ -1326,26 +1555,66 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   collapsedIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#EFF6FF',
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
+    marginRight: 8,
+  },
+  unitTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   collapsedUnitTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: '#0F172A',
   },
+  unitLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  unitBadgeEnRoute: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  unitBadgeArrived: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  unitBadgeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  badgeDotEnRoute: {
+    backgroundColor: '#2563EB',
+  },
+  badgeDotArrived: {
+    backgroundColor: '#059669',
+  },
+  unitBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  badgeTextEnRoute: {
+    color: '#1D4ED8',
+  },
+  badgeTextArrived: {
+    color: '#047857',
+  },
   collapsedUnitSub: {
     fontSize: 12,
     color: '#64748B',
     fontWeight: '500',
-    marginTop: 1,
+    marginTop: 2,
   },
   collapsedActions: {
     flexDirection: 'row',
@@ -1353,18 +1622,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   collapsedEtaBadge: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'flex-end',
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   collapsedEtaDuration: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#2563EB',
+    color: '#1D4ED8',
   },
   collapsedEtaDistance: {
     fontSize: 10,
@@ -1372,20 +1642,24 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   toggleExpandBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
 
-  // Expanded Sheet Content
+  // Expanded Content Scroll
   expandedContentScroll: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 12,
   },
+
+  // 1. Crew Card Row
   crewCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1395,6 +1669,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     marginBottom: 12,
+  },
+  crewAvatarBox: {
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   crewInfoText: {
     flex: 1,
@@ -1407,26 +1685,37 @@ const styles = StyleSheet.create({
   },
   crewRole: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#64748B',
     marginTop: 1,
+  },
+  driverPhoneText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
+    marginTop: 2,
   },
   callResponderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2563EB',
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 9,
+    borderRadius: 13,
     gap: 6,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   callResponderBtnText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 
-  // Mission Grid
+  // 2. Mission Meta Grid
   missionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1436,33 +1725,225 @@ const styles = StyleSheet.create({
   metaBox: {
     width: '48.5%',
     backgroundColor: '#FFFFFF',
-    padding: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    minHeight: 70,
+    justifyContent: 'center',
   },
   metaLabel: {
     fontSize: 9,
     fontWeight: '800',
     color: '#94A3B8',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   metaValue: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#1E293B',
+    lineHeight: 16,
   },
 
-  // Timeline Section
-  timelineSection: {
-    marginBottom: 24,
+  // 4. Milestones Section
+  milestonesSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
   },
-  timelineSectionTitle: {
+  milestonesSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  milestonesSectionTitle: {
     fontSize: 10,
     fontWeight: '800',
     color: '#64748B',
     letterSpacing: 0.6,
-    marginBottom: 10,
+  },
+  milestonesSectionSub: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  milestonesList: {
+    gap: 0,
+  },
+  milestoneRow: {
+    flexDirection: 'row',
+  },
+  milestoneLeftCol: {
+    alignItems: 'center',
+    marginRight: 12,
+    width: 32,
+  },
+  milestoneIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  milestoneBoxDone: {
+    backgroundColor: '#059669',
+  },
+  milestoneBoxCurrent: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#2563EB',
+  },
+  milestoneBoxPending: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  milestoneLine: {
+    width: 2,
+    height: 28,
+    marginVertical: 2,
+  },
+  milestoneLineDone: {
+    backgroundColor: '#059669',
+  },
+  milestoneLinePending: {
+    backgroundColor: '#E2E8F0',
+  },
+  milestoneContent: {
+    flex: 1,
+    paddingBottom: 16,
+  },
+  milestoneTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  milestoneTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  milestoneTitleActive: {
+    color: '#0F172A',
+  },
+  milestoneTitleMuted: {
+    color: '#94A3B8',
+  },
+  milestoneTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  milestoneTagDone: {
+    backgroundColor: '#ECFDF5',
+  },
+  milestoneTagCurrent: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  milestoneTagPending: {
+    backgroundColor: '#F8FAFC',
+  },
+  milestoneTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  milestoneTagTextDone: {
+    color: '#059669',
+  },
+  milestoneTagTextCurrent: {
+    color: '#2563EB',
+  },
+  milestoneTagTextPending: {
+    color: '#94A3B8',
+  },
+  milestoneDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 15,
+  },
+
+  // 6. Arrival Alert Modal
+  arrivalAlertOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+    paddingHorizontal: 24,
+  },
+  arrivalAlertCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  arrivalAlertIconBox: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  arrivalAlertTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  arrivalAlertSubtitle: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  arrivalAlertActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    width: '100%',
+    gap: 8,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  arrivalAlertActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

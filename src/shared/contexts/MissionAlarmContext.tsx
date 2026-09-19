@@ -240,8 +240,16 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   };
 
   const dispatchInfo = incomingMission?.dispatch;
-  const incidentLocation = dispatchInfo?.incident?.location || dispatchInfo?.incident?.barangay || 'Emergency Location';
-  const incidentType = dispatchInfo?.incident?.incident_type?.name || 'Emergency Dispatch';
+  const inc = dispatchInfo?.incident;
+  const incidentLocation =
+    inc?.place_of_incident ||
+    inc?.incident_address ||
+    (inc?.location_code ? `Marker ${inc.location_code}` : null) ||
+    inc?.location ||
+    inc?.barangay ||
+    inc?.resident?.resident_profile?.barangay?.barangay_name ||
+    'Emergency Location';
+  const incidentType = inc?.incident_type?.name || 'Emergency Dispatch';
 
   return (
     <MissionAlarmContext.Provider value={{ incomingMission, clearMission, missionRefreshTrigger }}>

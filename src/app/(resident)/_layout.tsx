@@ -1,19 +1,14 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Home, TriangleAlert, AlertTriangle, MapPin, Bell, User, Circle } from 'lucide-react-native';
+import { Home, TriangleAlert, AlertTriangle, Navigation, Bell, User, Circle } from 'lucide-react-native';
 import { View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { AnimatedTabIcon } from '@/resident/components/navigation/AnimatedTabIcon';
 
 const AlertIcon = TriangleAlert || AlertTriangle || Circle;
 
 export default function ResidentLayout() {
   return (
-    <View className="flex-1">
-      <LinearGradient 
-        colors={['#EEF2FF', '#E0E7FF', '#C7D2FE']} 
-        className="absolute inset-0" 
-      />
+    <View className="flex-1 bg-slate-50">
       <Tabs
         screenOptions={{
         headerShown: false,
@@ -39,17 +34,17 @@ export default function ResidentLayout() {
           justifyContent: 'space-around',
         },
         tabBarShowLabel: false,
-        tabBarActiveTintColor: '#4F46E5',
+        tabBarActiveTintColor: '#0F172A',
         tabBarInactiveTintColor: '#94A3B8',
-        sceneStyle: { backgroundColor: 'transparent' },
+        sceneStyle: { backgroundColor: '#F8FAFC' },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} IconComponent={Home} />
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon focused={focused} IconComponent={Home} />
           ),
         }}
       />
@@ -57,8 +52,8 @@ export default function ResidentLayout() {
         name="report"
         options={{
           title: 'Report',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} IconComponent={AlertIcon} />
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon focused={focused} IconComponent={AlertIcon} />
           ),
         }}
       />
@@ -66,8 +61,8 @@ export default function ResidentLayout() {
         name="track"
         options={{
           title: 'Track',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} IconComponent={MapPin} />
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon focused={focused} IconComponent={Navigation} />
           ),
         }}
       />
@@ -75,8 +70,8 @@ export default function ResidentLayout() {
         name="notifications"
         options={{
           title: 'Alerts',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} IconComponent={Bell} />
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon focused={focused} IconComponent={Bell} />
           ),
         }}
       />
@@ -84,8 +79,8 @@ export default function ResidentLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, focused }) => (
-            <AnimatedTabIcon focused={focused} color={color} IconComponent={User} />
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon focused={focused} IconComponent={User} />
           ),
         }}
       />

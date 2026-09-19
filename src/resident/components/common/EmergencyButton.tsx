@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
-import { AlertTriangle } from 'lucide-react-native';
+import { AlertTriangle, ShieldAlert, ArrowRight } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface EmergencyButtonProps {
   onPress: () => void;
@@ -11,16 +12,16 @@ interface EmergencyButtonProps {
 export function EmergencyButton({
   onPress,
   title = 'REPORT EMERGENCY',
-  subtitle = 'Tap here for immediate assistance',
+  subtitle = 'Tap for immediate dispatch & medical rescue',
 }: EmergencyButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
-    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 15 }).start();
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 18 }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 15 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 18 }).start();
   };
 
   return (
@@ -28,13 +29,13 @@ export function EmergencyButton({
       style={{
         transform: [{ scale }],
         marginHorizontal: 16,
-        marginVertical: 8,
-        borderRadius: 24,
-        shadowColor: '#f43f5e',
+        marginVertical: 10,
+        borderRadius: 28,
+        shadowColor: '#E11D48',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.38,
+        shadowOpacity: 0.35,
         shadowRadius: 18,
-        elevation: 10,
+        elevation: 8,
       }}
     >
       <TouchableOpacity
@@ -43,78 +44,129 @@ export function EmergencyButton({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={{
-          backgroundColor: '#F43F5E',
-          borderRadius: 24,
-          paddingVertical: 26,
-          paddingHorizontal: 24,
-          alignItems: 'center',
-          justifyContent: 'center',
+          borderRadius: 28,
           overflow: 'hidden',
         }}
       >
-        {/* Decorative circles */}
-        <View
+        <LinearGradient
+          colors={['#E11D48', '#BE123C', '#9F1239']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={{
-            position: 'absolute',
-            top: -30,
-            left: -30,
-            width: 120,
-            height: 120,
-            borderRadius: 60,
-            backgroundColor: 'rgba(255,255,255,0.06)',
-          }}
-        />
-        <View
-          style={{
-            position: 'absolute',
-            bottom: -20,
-            right: -20,
-            width: 90,
-            height: 90,
-            borderRadius: 45,
-            backgroundColor: 'rgba(255,255,255,0.06)',
-          }}
-        />
-
-        {/* Icon ring */}
-        <View
-          style={{
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: 'rgba(255,255,255,0.15)',
+            paddingVertical: 24,
+            paddingHorizontal: 22,
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: 14,
-            borderWidth: 2,
-            borderColor: 'rgba(255,255,255,0.2)',
+            borderRadius: 28,
+            borderWidth: 1.5,
+            borderColor: 'rgba(255, 255, 255, 0.25)',
           }}
         >
-          <AlertTriangle size={40} color="#FFFFFF" strokeWidth={2.25} />
-        </View>
+          {/* Decorative soft circles */}
+          <View
+            style={{
+              position: 'absolute',
+              top: -30,
+              left: -30,
+              width: 130,
+              height: 130,
+              borderRadius: 65,
+              backgroundColor: 'rgba(255,255,255,0.08)',
+            }}
+          />
+          <View
+            style={{
+              position: 'absolute',
+              bottom: -25,
+              right: -25,
+              width: 110,
+              height: 110,
+              borderRadius: 55,
+              backgroundColor: 'rgba(255,255,255,0.06)',
+            }}
+          />
 
-        <Text
-          style={{
-            color: '#FFFFFF',
-            fontSize: 22,
-            fontWeight: '800',
-            letterSpacing: 2,
-            marginBottom: 4,
-            textAlign: 'center',
-          }}
-        >
-          {title}
-        </Text>
-        <Text
-          style={{
-            color: 'rgba(255,255,255,0.8)',
-            fontSize: 13,
-            fontWeight: '500',
-            textAlign: 'center',
-          }}
-        >
-          {subtitle}
-        </Text>
+          {/* Icon Badge */}
+          <View
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 36,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 14,
+              borderWidth: 2,
+              borderColor: 'rgba(255,255,255,0.3)',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 6,
+            }}
+          >
+            <AlertTriangle size={36} color="#FFFFFF" strokeWidth={2.5} />
+          </View>
+
+          {/* Live Urgency Pill */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+              borderRadius: 999,
+              marginBottom: 8,
+              borderWidth: 1,
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+            }}
+          >
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: '#FFFFFF',
+                marginRight: 6,
+              }}
+            />
+            <Text
+              style={{
+                color: '#FFFFFF',
+                fontSize: 10,
+                fontWeight: '800',
+                letterSpacing: 1.2,
+                textTransform: 'uppercase',
+              }}
+            >
+              24/7 Priority Hotline
+            </Text>
+          </View>
+
+          <Text
+            style={{
+              color: '#FFFFFF',
+              fontSize: 22,
+              fontWeight: '900',
+              letterSpacing: 1.5,
+              marginBottom: 4,
+              textAlign: 'center',
+            }}
+          >
+            {title}
+          </Text>
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.85)',
+              fontSize: 13,
+              fontWeight: '500',
+              textAlign: 'center',
+              maxWidth: '85%',
+            }}
+          >
+            {subtitle}
+          </Text>
+        </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
   );

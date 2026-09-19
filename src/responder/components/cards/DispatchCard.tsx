@@ -51,11 +51,11 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
 
       {/* Details (Location & Dispatch Time) */}
       <View className="space-y-2 mb-5">
-        <View className="flex-row items-center">
-          <View className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
+        <View className="flex-row items-start">
+          <View className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5 mt-0.5">
             <MapPin size={14} color="#64748B" />
           </View>
-          <Text className="text-slate-700 font-semibold text-sm flex-1" numberOfLines={1}>
+          <Text className="text-slate-700 font-semibold text-sm flex-1 leading-5" numberOfLines={3}>
             {data.location}
           </Text>
         </View>
