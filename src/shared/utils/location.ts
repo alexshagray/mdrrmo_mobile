@@ -50,8 +50,13 @@ export const resolveAddressFromCoords = async (
         barangay = `Brgy. ${barangay}`;
       }
 
-      const city = g.city || g.subregion || 'Opol';
-      const province = g.region || 'Misamis Oriental';
+      const city = g.city || 'Opol';
+      let province = 'Misamis Oriental';
+      if (g.subregion && !g.subregion.toLowerCase().includes('mindanao')) {
+        province = g.subregion;
+      } else if (g.region && !g.region.toLowerCase().includes('mindanao')) {
+        province = g.region;
+      }
 
       const addressComponents = [
         poiName,
@@ -68,7 +73,8 @@ export const resolveAddressFromCoords = async (
 
       // Fallback to formattedAddress cleaned of Plus Codes
       if (g.formattedAddress) {
-        const cleaned = cleanFormattedAddress(g.formattedAddress);
+        let cleaned = cleanFormattedAddress(g.formattedAddress);
+        cleaned = cleaned.replace(/Northern Mindanao/gi, 'Misamis Oriental').replace(/,\s*Philippines/gi, '').trim();
         if (cleaned) {
           if (barangay && !cleaned.toLowerCase().includes(g.district!.toLowerCase())) {
             return `${barangay}, ${cleaned}`;

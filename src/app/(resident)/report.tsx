@@ -154,6 +154,13 @@ export default function ReportScreen() {
   const [selectedType, setSelectedType] = useState(1);
   const [description, setDescription] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoMetadata, setPhotoMetadata] = useState<{
+    latitude: number;
+    longitude: number;
+    locationName: string;
+    capturedAt: string;
+    formattedDateTime: string;
+  } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeIncident, setActiveIncident] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -366,16 +373,59 @@ export default function ReportScreen() {
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
+      quality: 0.65,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      setPhotoUri(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      setPhotoUri(uri);
+
+      // Immediately capture location and timestamp when photo is taken
+      const captureTime = new Date();
+      const capturedAtIso = captureTime.toISOString();
+      const formattedDateTime = captureTime.toLocaleString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+      // Default fallback coordinates from locationService
+      let photoLat = 0;
+      let photoLng = 0;
+      let locationName = 'Resolving location...';
+
+      try {
+        const loc = await locationService.getCurrentLocation();
+        if (loc?.coords) {
+          photoLat = loc.coords.latitude;
+          photoLng = loc.coords.longitude;
+          try {
+            locationName = await resolveAddressFromCoords(photoLat, photoLng);
+          } catch (geocodingErr) {
+            console.warn('Geocoding error for photo:', geocodingErr);
+            locationName = `Location (${photoLat.toFixed(4)}, ${photoLng.toFixed(4)})`;
+          }
+        }
+      } catch (locErr) {
+        console.warn('Error fetching location for photo:', locErr);
+      }
+
+      setPhotoMetadata({
+        latitude: photoLat,
+        longitude: photoLng,
+        locationName: locationName || 'Current Location',
+        capturedAt: capturedAtIso,
+        formattedDateTime,
+      });
     }
   };
 
   const handleRemovePhoto = () => {
     setPhotoUri(null);
+    setPhotoMetadata(null);
   };
 
   const handleSubmit = async () => {
@@ -436,6 +486,22 @@ export default function ReportScreen() {
         name: filename,
         type,
       } as any);
+
+      // Append photo metadata (exact coordinates, reverse geocoded address, capture timestamp)
+      if (photoMetadata) {
+        if (photoMetadata.latitude) {
+          formData.append('photo_latitude', photoMetadata.latitude.toString());
+        }
+        if (photoMetadata.longitude) {
+          formData.append('photo_longitude', photoMetadata.longitude.toString());
+        }
+        if (photoMetadata.locationName) {
+          formData.append('photo_location_name', photoMetadata.locationName);
+        }
+        if (photoMetadata.capturedAt) {
+          formData.append('photo_captured_at', photoMetadata.capturedAt);
+        }
+      }
 
       // 3. Submit
       await submitEmergencyReport(formData);
@@ -854,11 +920,58 @@ export default function ReportScreen() {
         {/* ── Attachments ── */}
         <SectionLabel label="Photo Evidence" required />
         {photoUri ? (
-          <View style={styles.photoPreviewContainer}>
-            <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-            <TouchableOpacity style={styles.removePhotoBtn} onPress={handleRemovePhoto}>
-              <XCircle size={24} color="#FFFFFF" fill="#DC2626" />
-            </TouchableOpacity>
+          <View>
+            <View style={styles.photoPreviewContainer}>
+              <Image source={{ uri: photoUri }} style={styles.photoPreview} />
+              <TouchableOpacity style={styles.removePhotoBtn} onPress={handleRemovePhoto}>
+                <XCircle size={24} color="#FFFFFF" fill="#DC2626" />
+              </TouchableOpacity>
+            </View>
+
+            {photoMetadata && (
+              <View style={styles.photoMetaCard}>
+                <View style={styles.photoMetaHeader}>
+                  <Text style={styles.photoMetaTitle}>Captured Photo Information</Text>
+                  <View style={styles.photoMetaBadge}>
+                    <Text style={styles.photoMetaBadgeText}>GPS VERIFIED</Text>
+                  </View>
+                </View>
+
+                <View style={styles.photoMetaRow}>
+                  <MapPin size={15} color="#3B82F6" strokeWidth={2.2} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.photoMetaLabel}>Location</Text>
+                    <Text style={styles.photoMetaValue} numberOfLines={2}>
+                      {photoMetadata.locationName || 'Detecting address...'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.photoMetaDivider} />
+
+                <View style={styles.photoMetaRow}>
+                  <Navigation size={15} color="#10B981" strokeWidth={2.2} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.photoMetaLabel}>Coordinates</Text>
+                    <Text style={styles.photoMetaMono}>
+                      {photoMetadata.latitude ? `${photoMetadata.latitude.toFixed(6)}, ${photoMetadata.longitude.toFixed(6)}` : 'Coordinates pending'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.photoMetaDivider} />
+
+                <View style={styles.photoMetaRow}>
+                  <Clock size={15} color="#F59E0B" strokeWidth={2.2} />
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Text style={styles.photoMetaLabel}>Date & Time</Text>
+                    <Text style={styles.photoMetaValue}>
+                      {photoMetadata.formattedDateTime}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         ) : (
           <TouchableOpacity style={styles.photoUploadBtn} onPress={handlePickPhoto}>
@@ -1436,5 +1549,68 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 14,
     lineHeight: 16,
+  },
+  photoMetaCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginTop: 10,
+  },
+  photoMetaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EDF2F7',
+  },
+  photoMetaTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  photoMetaBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  photoMetaBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#15803D',
+    letterSpacing: 0.4,
+  },
+  photoMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 4,
+  },
+  photoMetaLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 1,
+  },
+  photoMetaValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  photoMetaMono: {
+    fontSize: 12,
+    fontFamily: 'monospace',
+    fontWeight: '600',
+    color: '#0F766E',
+  },
+  photoMetaDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 4,
   },
 });

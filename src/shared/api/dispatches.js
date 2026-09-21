@@ -13,7 +13,7 @@ export const getDispatchHistory = async (page = 1, type = 'all', date = '') => {
   return response.data;
 };
 
-export const createWalkInDispatch = async (data = { latitude: 0, longitude: 0 }) => {
+export const createWalkInDispatch = async (data = {}) => {
   const response = await apiClient.post('/responder/dispatches/walk-in', data);
   return response.data;
 };
@@ -52,5 +52,22 @@ export const updatePcr = async (dispatchId, pcrData) => {
 
 export const submitPcr = async (dispatchId) => {
   const response = await apiClient.post(`/responder/dispatches/${dispatchId}/pcr/submit`);
+  return response.data;
+};
+
+export const uploadPcrPhoto = async (dispatchId, formData) => {
+  const response = await apiClient.post(`/responder/dispatches/${dispatchId}/pcr/photo`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const reportUnfoundedDispatch = async (dispatchId, { reason, category = 'false_alarm' }) => {
+  const response = await apiClient.post(`/responder/dispatches/${dispatchId}/unfounded`, {
+    reason,
+    category,
+  });
   return response.data;
 };

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Platform, StyleSheet, KeyboardAvoidingView, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Platform, StyleSheet, KeyboardAvoidingView, Modal, Image } from 'react-native';
 import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Header, Button } from '@/shared/components';
 import { SignaturePad, BodyDiagram } from '@/shared/components';
-import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock } from 'lucide-react-native';
+import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2 } from 'lucide-react-native';
 import { searchPatients, createPatient } from '@/shared/api/patients';
-import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch } from '@/shared/api/dispatches';
+import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 
 function debounce(func: Function, wait: number) {
@@ -106,8 +107,13 @@ const resolveAddressFromCoords = async (latitude: number, longitude: number): Pr
         barangay = `Brgy. ${barangay}`;
       }
 
-      const city = g.city || g.subregion || '';
-      const province = g.region || '';
+      const city = g.city || 'Opol';
+      let province = 'Misamis Oriental';
+      if (g.subregion && !g.subregion.toLowerCase().includes('mindanao')) {
+        province = g.subregion;
+      } else if (g.region && !g.region.toLowerCase().includes('mindanao')) {
+        province = g.region;
+      }
 
       const addressComponents = [
         poiName,
@@ -124,7 +130,8 @@ const resolveAddressFromCoords = async (latitude: number, longitude: number): Pr
 
       // Fallback to formattedAddress cleaned of Plus Codes
       if (g.formattedAddress) {
-        const cleaned = cleanFormattedAddress(g.formattedAddress);
+        let cleaned = cleanFormattedAddress(g.formattedAddress);
+        cleaned = cleaned.replace(/Northern Mindanao/gi, 'Misamis Oriental').replace(/,\s*Philippines/gi, '').trim();
         if (cleaned) {
           if (barangay && !cleaned.toLowerCase().includes(g.district!.toLowerCase())) {
             return `${barangay}, ${cleaned}`;
@@ -250,6 +257,122 @@ export default function PatientCareRecordScreen() {
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
   const { missionRefreshTrigger } = useMissionAlarm();
 
+  // Optional Incident Scene Photo
+  const [pcrPhoto, setPcrPhoto] = useState<{
+    uri: string;
+    latitude: number;
+    longitude: number;
+    locationName: string;
+    capturedAt: string;
+    formattedDateTime: string;
+  } | null>(null);
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
+
+  const handleTakePcrPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera access is required to take an incident photo.');
+        return;
+      }
+
+      setIsTakingPhoto(true);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.65, // Fast transmission over weak internet
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const uri = result.assets[0].uri;
+        const captureTime = new Date();
+        const capturedAtIso = captureTime.toISOString();
+        const formattedDateTime = captureTime.toLocaleString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+
+        let photoLat = 0;
+        let photoLng = 0;
+        let locationName = 'Resolving location...';
+
+        try {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          if (loc?.coords) {
+            photoLat = loc.coords.latitude;
+            photoLng = loc.coords.longitude;
+            try {
+              locationName = await resolveAddressFromCoords(photoLat, photoLng);
+            } catch (geocodingErr) {
+              console.warn('Geocoding error for PCR photo:', geocodingErr);
+              locationName = `Location (${photoLat.toFixed(4)}, ${photoLng.toFixed(4)})`;
+            }
+          }
+        } catch (locErr) {
+          console.warn('Error fetching location for PCR photo:', locErr);
+          locationName = 'Scene Location';
+        }
+
+        setPcrPhoto({
+          uri,
+          latitude: photoLat,
+          longitude: photoLng,
+          locationName: locationName || 'Scene Location',
+          capturedAt: capturedAtIso,
+          formattedDateTime,
+        });
+      }
+    } catch (err: any) {
+      console.warn('Error taking PCR photo:', err);
+      Alert.alert('Camera Error', 'Could not open camera. Please try again.');
+    } finally {
+      setIsTakingPhoto(false);
+    }
+  };
+
+  const handleRemovePcrPhoto = () => {
+    setPcrPhoto(null);
+  };
+
+  // Negative on Scene / False Alarm State
+  const [showUnfoundedModal, setShowUnfoundedModal] = useState(false);
+  const [unfoundedCategory, setUnfoundedCategory] = useState<'false_alarm' | 'prank'>('false_alarm');
+  const [unfoundedReason, setUnfoundedReason] = useState('');
+  const [isSubmittingUnfounded, setIsSubmittingUnfounded] = useState(false);
+
+  const handleConfirmUnfounded = async () => {
+    if (!activeDispatch?.id || isSubmittingUnfounded) return;
+    const finalReason = unfoundedReason.trim() || 'Responders arrived on scene. Conducted area sweep; zero patients or incident found.';
+    setIsSubmittingUnfounded(true);
+    try {
+      await reportUnfoundedDispatch(activeDispatch.id, {
+        reason: finalReason,
+        category: unfoundedCategory,
+      });
+      setShowUnfoundedModal(false);
+      setActiveDispatch(null);
+      setFormData(initialFormData);
+      Alert.alert(
+        'Mission Closed',
+        'Negative result reported. Your unit and crew have been released back to Available.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(responder)'),
+          }
+        ]
+      );
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to submit report. Please check your connection and try again.');
+    } finally {
+      setIsSubmittingUnfounded(false);
+    }
+  };
+
   useEffect(() => {
     loadActiveDispatch();
   }, [missionRefreshTrigger]);
@@ -279,14 +402,16 @@ export default function PatientCareRecordScreen() {
           || dispatch.incident?.location 
           || '';
 
-        if (!defaultPlaceOfIncident && dispatch.incident) {
+        if ((!defaultPlaceOfIncident || defaultPlaceOfIncident.includes('MDRRMO Station')) && dispatch.incident) {
           const incLat = parseFloat(dispatch.incident.incident_latitude ?? dispatch.incident.latitude);
           const incLng = parseFloat(dispatch.incident.incident_longitude ?? dispatch.incident.longitude);
           if (!isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
             setIsResolvingLocation(true);
             defaultPlaceOfIncident = await resolveAddressFromCoords(incLat, incLng);
             setIsResolvingLocation(false);
-          } else if (dispatch.incident.description) {
+          } else if (dispatch.incident.barangay) {
+            defaultPlaceOfIncident = `Brgy. ${dispatch.incident.barangay}, Opol, Misamis Oriental`;
+          } else if (dispatch.incident.description && !dispatch.incident.description.includes('Station Assistance')) {
             defaultPlaceOfIncident = dispatch.incident.description;
           }
         }
@@ -412,7 +537,7 @@ export default function PatientCareRecordScreen() {
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const address = await resolveAddressFromCoords(loc.coords.latitude, loc.coords.longitude);
-      const resolved = address || `Lat: ${loc.coords.latitude.toFixed(6)}, Lng: ${loc.coords.longitude.toFixed(6)}`;
+      const resolved = address || 'Opol, Misamis Oriental';
       setFormData(prev => ({ ...prev, place_of_incident: resolved }));
       setErrors(prev => ({ ...prev, place_of_incident: '' }));
     } catch (e) {
@@ -433,7 +558,7 @@ export default function PatientCareRecordScreen() {
     if (!isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
       setIsResolvingLocation(true);
       const address = await resolveAddressFromCoords(incLat, incLng);
-      setFormData(prev => ({ ...prev, place_of_incident: address }));
+      setFormData(prev => ({ ...prev, place_of_incident: address || 'Opol, Misamis Oriental' }));
       setErrors(prev => ({ ...prev, place_of_incident: '' }));
       setIsResolvingLocation(false);
     } else if (activeDispatch.incident.description) {
@@ -450,7 +575,7 @@ export default function PatientCareRecordScreen() {
       // 1. Request location permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       let coords = { latitude: 0, longitude: 0 };
-      let addressStr = 'Unknown Location';
+      let addressStr = '';
 
       if (status === 'granted') {
         // 2. Get GPS Location
@@ -460,25 +585,29 @@ export default function PatientCareRecordScreen() {
         addressStr = await resolveAddressFromCoords(coords.latitude, coords.longitude);
       }
 
-      // 3. Call API with coords
-      const res = await createWalkInDispatch(coords);
+      // 3. Real readable place of incident where responder followed the family/citizen
+      const realLocationName = addressStr && addressStr.trim()
+        ? addressStr
+        : 'Incident Scene, Opol, Misamis Oriental';
+
+      // Call API with coords AND real resolved address
+      const res = await createWalkInDispatch({
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        place_of_incident: realLocationName,
+      });
       
       // 4. Update state
       setActiveDispatch(res.data);
       setIsWalkIn(true);
-      setWalkInCoords({ ...coords, address: addressStr });
-      
-      const timestamp = new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
-      const locationDetails = status === 'granted' 
-        ? `${addressStr} (Lat: ${coords.latitude.toFixed(6)}, Lng: ${coords.longitude.toFixed(6)}) @ ${timestamp}`
-        : `Unknown Location @ ${timestamp}`;
+      setWalkInCoords({ ...coords, address: realLocationName });
 
       setFormData(prev => ({
         ...prev,
         dispatch_time: formatTime24ForApi(res.data.created_at),
         en_route_time: formatTime24ForApi(res.data.en_route_at),
         on_scene_time: formatTime24ForApi(res.data.arrived_on_scene_at || res.data.arrived_at),
-        place_of_incident: locationDetails,
+        place_of_incident: realLocationName,
       }));
       setShowWalkInModal(false);
       setStep(1);
@@ -705,8 +834,35 @@ export default function PatientCareRecordScreen() {
     
     setIsSaving(true);
     try {
+      // If an optional scene photo was taken, upload it
+      if (pcrPhoto && activeDispatch?.id) {
+        try {
+          const filename = pcrPhoto.uri.split('/').pop() || 'pcr_photo.jpg';
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+          const photoFormData = new FormData();
+          photoFormData.append('photo', {
+            uri: pcrPhoto.uri,
+            name: filename,
+            type,
+          } as any);
+
+          if (pcrPhoto.latitude) photoFormData.append('photo_latitude', pcrPhoto.latitude.toString());
+          if (pcrPhoto.longitude) photoFormData.append('photo_longitude', pcrPhoto.longitude.toString());
+          if (pcrPhoto.locationName) photoFormData.append('photo_location_name', pcrPhoto.locationName);
+          if (pcrPhoto.capturedAt) photoFormData.append('photo_captured_at', pcrPhoto.capturedAt);
+
+          await uploadPcrPhoto(activeDispatch.id, photoFormData);
+        } catch (photoErr) {
+          console.warn('PCR Photo upload failed, continuing with PCR submission:', photoErr);
+          // Do not block PCR submission if photo upload fails on poor mobile internet
+        }
+      }
+
       await submitPcr(activeDispatch.id);
       Alert.alert('Success', 'PCR submitted successfully!');
+      setPcrPhoto(null);
       setActiveDispatch(null);
       setStep(1);
       setFormData(initialFormData);
@@ -1393,6 +1549,121 @@ export default function PatientCareRecordScreen() {
           </View>
         </View>
 
+        {/* Optional Incident Scene Photo */}
+        <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ backgroundColor: '#e0e7ff', padding: 8, borderRadius: 10 }}>
+                <Camera size={18} color="#4f46e5" />
+              </View>
+              <View>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#0f172a' }}>
+                  Incident Scene Photo
+                </Text>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500' }}>
+                  Optional documentation
+                </Text>
+              </View>
+            </View>
+            <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b' }}>OPTIONAL</Text>
+            </View>
+          </View>
+
+          {pcrPhoto ? (
+            <View>
+              <View style={{ position: 'relative', height: 180, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#cbd5e1' }}>
+                <Image source={{ uri: pcrPhoto.uri }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                <TouchableOpacity
+                  onPress={handleRemovePcrPhoto}
+                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: '#dc2626', borderRadius: 20, padding: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 }}
+                >
+                  <Trash2 size={16} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Photo Metadata Details */}
+              <View style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <MapPin size={14} color="#3b82f6" style={{ marginTop: 2, marginRight: 8 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Location</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }} numberOfLines={2}>
+                      {pcrPhoto.locationName}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <Navigation size={14} color="#10b981" style={{ marginTop: 2, marginRight: 8 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>GPS Coordinates</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f766e', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                      {pcrPhoto.latitude ? `${pcrPhoto.latitude.toFixed(6)}, ${pcrPhoto.longitude.toFixed(6)}` : 'Recorded from scene'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                  <Clock size={14} color="#f59e0b" style={{ marginTop: 2, marginRight: 8 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Date & Time Taken</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>
+                      {pcrPhoto.formattedDateTime}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Retake Button */}
+              <TouchableOpacity
+                onPress={handleTakePcrPhoto}
+                disabled={isTakingPhoto}
+                style={{ marginTop: 10, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', backgroundColor: '#ffffff' }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>Retake Photo</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={handleTakePcrPhoto}
+              disabled={isTakingPhoto}
+              activeOpacity={0.8}
+              style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1.5,
+                borderColor: '#cbd5e1',
+                borderStyle: 'dashed',
+                borderRadius: 16,
+                paddingVertical: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              {isTakingPhoto ? (
+                <ActivityIndicator color="#4f46e5" size="small" />
+              ) : (
+                <>
+                  <View style={{ backgroundColor: '#eef2ff', width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }}>
+                    <Camera size={24} color="#4f46e5" />
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#334155' }}>
+                    📷 Take Incident Photo
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '500' }}>
+                    Tap to open camera and capture scene photo
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
         <TouchableOpacity 
           onPress={handleFinalSubmit} 
           disabled={isSaving}
@@ -1460,10 +1731,10 @@ export default function PatientCareRecordScreen() {
                   <Plus size={32} color="#e11d48" />
                 </View>
                 <Text className="text-xl font-bold text-slate-800 text-center mb-2">
-                  Create Walk-In PCR?
+                  Create Direct / Walk-In PCR
                 </Text>
-                <Text className="text-slate-500 text-center font-medium">
-                  This will instantly generate a new active dispatch and automatically capture your current location.
+                <Text className="text-slate-500 text-center font-medium leading-5">
+                  Use this when a family member or citizen requested help in person and you responded to the incident scene. This will capture the incident scene location.
                 </Text>
               </View>
               <View className="flex-row justify-between space-x-3 mt-4">
@@ -1574,6 +1845,34 @@ export default function PatientCareRecordScreen() {
         <Header title={`PCR: ${activeDispatch.incident?.tracking_number || 'Walk-In'}`} />
         {renderStepIndicator()}
         
+        {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <TouchableOpacity
+            onPress={() => setShowUnfoundedModal(true)}
+            activeOpacity={0.8}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#FEF3C7',
+              borderColor: '#FDE68A',
+              borderWidth: 1,
+              borderRadius: 12,
+              paddingVertical: 9,
+              paddingHorizontal: 14,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={15} color="#D97706" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400E' }}>
+                No Patient Found / False Alarm?
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
+              Report & Free Unit →
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <ScrollView style={styles.flex1} contentContainerStyle={styles.scroll}>
           {step === 1 && renderStep1()}
@@ -1596,6 +1895,113 @@ export default function PatientCareRecordScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Modal to report Negative on Scene / False Alarm / Prank */}
+        <Modal
+          visible={showUnfoundedModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => !isSubmittingUnfounded && setShowUnfoundedModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 }}>
+              <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                <View style={{ width: 56, height: 56, backgroundColor: '#FEF3C7', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                  <AlertTriangle size={28} color="#D97706" />
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
+                  No Patient / False Alarm
+                </Text>
+                <Text style={{ fontSize: 12, color: '#64748B', textAlign: 'center', marginTop: 4 }}>
+                  If zero patients or incidents are found on scene, report it to close the dispatch and release your unit back to available.
+                </Text>
+              </View>
+
+              {/* Selection Category */}
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                <TouchableOpacity
+                  onPress={() => setUnfoundedCategory('false_alarm')}
+                  style={{
+                    flex: 1,
+                    padding: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    alignItems: 'center',
+                    backgroundColor: unfoundedCategory === 'false_alarm' ? '#FFFBEB' : '#F8FAFC',
+                    borderColor: unfoundedCategory === 'false_alarm' ? '#F59E0B' : '#E2E8F0',
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'false_alarm' ? '#B45309' : '#475569' }}>
+                    ⚠️ False Alarm
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Good faith / Left scene</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setUnfoundedCategory('prank')}
+                  style={{
+                    flex: 1,
+                    padding: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    alignItems: 'center',
+                    backgroundColor: unfoundedCategory === 'prank' ? '#FEF2F2' : '#F8FAFC',
+                    borderColor: unfoundedCategory === 'prank' ? '#EF4444' : '#E2E8F0',
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'prank' ? '#DC2626' : '#475569' }}>
+                    🚨 Intentional Prank
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Fabricated hoax</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Reason text input */}
+              <TextInput
+                value={unfoundedReason}
+                onChangeText={setUnfoundedReason}
+                placeholder="Enter observations (e.g. Conducted area sweep, no patient found, caller unreachable)..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={3}
+                style={{
+                  backgroundColor: '#F8FAFC',
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                  borderRadius: 12,
+                  padding: 12,
+                  fontSize: 12,
+                  color: '#1E293B',
+                  marginBottom: 16,
+                  textAlignVertical: 'top',
+                  height: 75,
+                }}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  disabled={isSubmittingUnfounded}
+                  onPress={() => setShowUnfoundedModal(false)}
+                  style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isSubmittingUnfounded}
+                  onPress={handleConfirmUnfounded}
+                  style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {isSubmittingUnfounded ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Submit & Free</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* Waiver Modal */}
         <Modal

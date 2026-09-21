@@ -10,6 +10,7 @@ import MapboxGL from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { StatusChip } from '@/shared/components';
 import { ArrowLeft, Navigation, AlertTriangle, MapPin, Clock, User, Phone, PhoneCall, Ambulance, FileText, Crosshair, CheckCircle } from 'lucide-react-native';
+import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
 
 import { getActiveDispatches, acceptDispatch, updateDispatchStatus } from '@/shared/api/dispatches';
 import { useGpsStatusTransition, useLiveDispatchTracking, useRealtime } from '@/shared/hooks';
@@ -26,6 +27,7 @@ export default function DispatchScreen() {
   const [dispatch, setDispatch] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [isDeclining, setIsDeclining] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapboxGL.Camera>(null);
@@ -151,7 +153,7 @@ export default function DispatchScreen() {
     }
   }, [dispatch, isLoading]);
 
-  const { missionRefreshTrigger } = useMissionAlarm();
+  const { missionRefreshTrigger, clearMission } = useMissionAlarm();
 
   const fetchDispatch = useCallback(async () => {
     setIsLoading(true);
@@ -274,14 +276,32 @@ export default function DispatchScreen() {
   };
 
   const confirmDecline = async () => {
-    if (!dispatch) return;
+    if (!dispatch || isDeclining) return;
+    setIsDeclining(true);
     try {
       await updateDispatchStatus(dispatch.id, 'cancelled');
+      if (typeof clearMission === 'function') {
+        clearMission();
+      }
+      setDispatch(null);
       setShowDeclineModal(false);
-      handleBack();
+      Alert.alert(
+        'Mission Declined',
+        'You have declined this dispatch mission. The command center has been notified.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              router.replace('/(responder)');
+            }
+          }
+        ]
+      );
     } catch (e) {
       console.error(e);
-      Alert.alert('Error', 'Failed to decline dispatch.');
+      Alert.alert('Error', 'Failed to decline dispatch. Please check your connection and try again.');
+    } finally {
+      setIsDeclining(false);
     }
   };
 
@@ -400,30 +420,25 @@ export default function DispatchScreen() {
           initialRegion={hasValidCoords ? { latitude: parsedLat, longitude: parsedLng } : undefined}
         >
           
-          {/* Custom Incident Marker */}
+          {/* Clean Incident Destination Marker (No Circular Container) */}
           {hasValidCoords ? (
-            <MapboxGL.PointAnnotation id="dispatchDestination" coordinate={[parsedLng, parsedLat]}>
-              <View className="items-center justify-center w-24 h-24 bg-red-500/10 rounded-full">
-                <View className="w-20 h-20 bg-red-500/20 rounded-full items-center justify-center absolute" />
-                <View className="w-14 h-14 bg-red-500 rounded-full border-[4px] border-white shadow-2xl items-center justify-center">
-                  <AlertTriangle size={24} color="#ffffff" strokeWidth={2.5} />
-                </View>
-                <View className="absolute bottom-2 w-4 h-4 bg-red-600 rounded-full border-4 border-white shadow-sm" />
-              </View>
+            <MapboxGL.PointAnnotation 
+              id="dispatchDestination" 
+              coordinate={[parsedLng, parsedLat]}
+              anchor={{ x: 0.5, y: 1.0 }}
+            >
+              <IncidentLocationPin size={38} />
             </MapboxGL.PointAnnotation>
           ) : null}
 
-          {/* Custom Responder Puck */}
+          {/* Clean Directional Responder Arrow (Arrow Only, No Circular Container) */}
           {userLocation ? (
-            <MapboxGL.PointAnnotation id="responderPuck" coordinate={[userLocation.longitude, userLocation.latitude]}>
-              <View className="items-center justify-center w-32 h-32 bg-emerald-500/20 rounded-full">
-                <View className="w-24 h-24 bg-emerald-500/40 rounded-full items-center justify-center absolute border border-emerald-400/50" />
-                <View className="w-16 h-16 bg-emerald-500 rounded-full border-[4px] border-white shadow-2xl items-center justify-center" style={{ elevation: 10, shadowColor: '#10B981', shadowOpacity: 0.8, shadowRadius: 15 }}>
-                  <View style={{ transform: [{ rotate: `${userLocation.heading || 0}deg` }] }}>
-                    <Navigation size={28} color="#ffffff" fill="#ffffff" />
-                  </View>
-                </View>
-              </View>
+            <MapboxGL.PointAnnotation 
+              id="responderPuck" 
+              coordinate={[userLocation.longitude, userLocation.latitude]}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <ResponderNavigationArrow heading={userLocation.heading || 0} size={36} />
             </MapboxGL.PointAnnotation>
           ) : null}
 
@@ -688,7 +703,7 @@ export default function DispatchScreen() {
       </View>
 
       {/* Premium Decline Confirmation Modal */}
-      <Modal animationType="fade" transparent={true} visible={showDeclineModal} onRequestClose={() => setShowDeclineModal(false)}>
+      <Modal animationType="fade" transparent={true} visible={showDeclineModal} onRequestClose={() => !isDeclining && setShowDeclineModal(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalContent}>
             <View className="items-center mb-4">
@@ -699,11 +714,25 @@ export default function DispatchScreen() {
               <Text className="text-slate-500 text-center font-medium">Are you sure you want to decline this mission? This action will notify the command center.</Text>
             </View>
             <View style={styles.modalButtonRow}>
-              <TouchableOpacity onPress={() => setShowDeclineModal(false)} activeOpacity={0.8} style={styles.btnModalCancel}>
+              <TouchableOpacity 
+                onPress={() => setShowDeclineModal(false)} 
+                disabled={isDeclining} 
+                activeOpacity={0.8} 
+                style={[styles.btnModalCancel, isDeclining && { opacity: 0.5 }]}
+              >
                 <Text style={styles.btnModalCancelText}>CANCEL</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={confirmDecline} activeOpacity={0.8} style={styles.btnModalConfirm}>
-                <Text style={styles.btnTextWhite}>YES, DECLINE</Text>
+              <TouchableOpacity 
+                onPress={confirmDecline} 
+                disabled={isDeclining} 
+                activeOpacity={0.8} 
+                style={[styles.btnModalConfirm, isDeclining && { opacity: 0.6 }]}
+              >
+                {isDeclining ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.btnTextWhite}>YES, DECLINE</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

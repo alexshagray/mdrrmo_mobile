@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter as useExpoRouter, useLocalSearchParams as useExpoSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
@@ -7,7 +7,7 @@ import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
 import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle } from 'lucide-react-native';
 import { useLiveDispatchTracking } from '@/shared/hooks';
-import { updateDispatchStatus } from '@/shared/api/dispatches';
+import { updateDispatchStatus, reportUnfoundedDispatch } from '@/shared/api/dispatches';
 import {
   getDistance,
   calculateBearing,
@@ -24,6 +24,8 @@ import {
   ResponderNavigationArrow,
   IncidentLocationPin,
 } from '@/shared/components/Map/NavigationMarkers';
+
+const ARRIVAL_RADIUS_METERS = 50;
 
 export default function NavigationScreen() {
   const router = useExpoRouter();
@@ -72,18 +74,18 @@ export default function NavigationScreen() {
     activeRouteRef.current = routeCoords;
   }, [routeCoords]);
 
-  // Proximity to scene: must be within 10 meters of the incident pin
+  // Proximity to scene: must be within 50 meters of the incident pin
   const distanceToScene = displayedLocation
     ? getDistance(displayedLocation.latitude, displayedLocation.longitude, destination.latitude, destination.longitude)
     : Infinity;
-  const isWithinRange = distanceToScene <= 10;
+  const isWithinRange = distanceToScene <= ARRIVAL_RADIUS_METERS;
 
   const handleArrived = async () => {
     if (isArriving) return;
     if (!isWithinRange) {
       Alert.alert(
         'Proximity Requirement',
-        `You must be within 10 meters of the incident location pin to mark arrival. You are currently ${Math.round(distanceToScene)}m away.`
+        `You must be within ${ARRIVAL_RADIUS_METERS} meters of the incident location pin to mark arrival. You are currently ${Math.round(distanceToScene)}m away.`
       );
       return;
     }
@@ -101,6 +103,40 @@ export default function NavigationScreen() {
       router.replace('/(responder)');
     } finally {
       setIsArriving(false);
+    }
+  };
+
+  // Report No Incident Found / False Alarm on Scene
+  const [showUnfoundedModal, setShowUnfoundedModal] = useState(false);
+  const [unfoundedCategory, setUnfoundedCategory] = useState<'false_alarm' | 'prank'>('false_alarm');
+  const [unfoundedReason, setUnfoundedReason] = useState('');
+  const [isSubmittingUnfounded, setIsSubmittingUnfounded] = useState(false);
+
+  const handleConfirmUnfounded = async () => {
+    if (!dispatchId || isSubmittingUnfounded) return;
+    const finalReason = unfoundedReason.trim() || 'Responders arrived on scene. Conducted area sweep; zero patients or incident found.';
+    setIsSubmittingUnfounded(true);
+    try {
+      await reportUnfoundedDispatch(dispatchId, {
+        reason: finalReason,
+        category: unfoundedCategory,
+      });
+      setShowUnfoundedModal(false);
+      Alert.alert(
+        'Mission Closed',
+        'Negative result reported. Your unit and crew have been released back to Available.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(responder)'),
+          }
+        ]
+      );
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Failed to submit report. Please check your connection and try again.');
+    } finally {
+      setIsSubmittingUnfounded(false);
     }
   };
 
@@ -506,7 +542,7 @@ export default function NavigationScreen() {
                 <AlertTriangle size={15} color="#f59e0b" style={{ marginRight: 6 }} />
                 <Text className="text-amber-400 text-xs font-semibold text-center">
                   {displayedLocation
-                    ? `Must be within 10m to mark arrival (${Math.round(distanceToScene)}m away)`
+                    ? `Must be within ${ARRIVAL_RADIUS_METERS}m to mark arrival (${Math.round(distanceToScene)}m away)`
                     : 'Acquiring GPS to verify arrival proximity...'}
                 </Text>
               </View>
@@ -536,9 +572,110 @@ export default function NavigationScreen() {
                 </View>
               )}
             </TouchableOpacity>
+
+            {/* Report No Incident / False Alarm on Scene Button */}
+            <TouchableOpacity
+              onPress={() => setShowUnfoundedModal(true)}
+              activeOpacity={0.8}
+              style={styles.btnUnfounded}
+            >
+              <AlertTriangle size={15} color="#F59E0B" style={{ marginRight: 6 }} />
+              <Text style={styles.btnUnfoundedText}>
+                No Incident Found / False Alarm
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Modal to report Negative on Scene / False Alarm / Prank */}
+      <Modal
+        visible={showUnfoundedModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => !isSubmittingUnfounded && setShowUnfoundedModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContent}>
+            <View className="items-center mb-3">
+              <View className="w-14 h-14 bg-amber-100 rounded-full items-center justify-center mb-2">
+                <AlertTriangle size={28} color="#D97706" />
+              </View>
+              <Text className="text-lg font-bold text-slate-800 text-center">
+                Report Negative on Scene
+              </Text>
+              <Text className="text-slate-500 text-xs text-center mt-1">
+                If there is no incident or victim found at this location, report it to cancel this mission and release your ambulance.
+              </Text>
+            </View>
+
+            {/* Selection Category */}
+            <View className="flex-row gap-2 mb-3">
+              <TouchableOpacity
+                onPress={() => setUnfoundedCategory('false_alarm')}
+                className={`flex-1 p-2.5 rounded-xl border items-center ${
+                  unfoundedCategory === 'false_alarm'
+                    ? 'bg-amber-50 border-amber-500'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <Text className={`text-xs font-bold ${unfoundedCategory === 'false_alarm' ? 'text-amber-700' : 'text-slate-600'}`}>
+                  ⚠️ False Alarm
+                </Text>
+                <Text className="text-[10px] text-slate-400 text-center mt-0.5">Good faith / Left scene</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setUnfoundedCategory('prank')}
+                className={`flex-1 p-2.5 rounded-xl border items-center ${
+                  unfoundedCategory === 'prank'
+                    ? 'bg-red-50 border-red-500'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <Text className={`text-xs font-bold ${unfoundedCategory === 'prank' ? 'text-red-700' : 'text-slate-600'}`}>
+                  🚨 Intentional Prank
+                </Text>
+                <Text className="text-[10px] text-slate-400 text-center mt-0.5">Fabricated hoax</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Reason text input */}
+            <TextInput
+              value={unfoundedReason}
+              onChangeText={setUnfoundedReason}
+              placeholder="Enter details (e.g. Conducted area sweep, no patient found, caller unreachable)..."
+              placeholderTextColor="#94A3B8"
+              multiline
+              numberOfLines={3}
+              className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 mb-4"
+              style={{ textAlignVertical: 'top', height: 75 }}
+            />
+
+            <View className="flex-row gap-3">
+              <TouchableOpacity
+                disabled={isSubmittingUnfounded}
+                onPress={() => setShowUnfoundedModal(false)}
+                className="flex-1 py-3 rounded-xl bg-slate-100 items-center justify-center"
+              >
+                <Text className="text-xs font-bold text-slate-600">Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                disabled={isSubmittingUnfounded}
+                onPress={handleConfirmUnfounded}
+                className="flex-1 py-3 rounded-xl bg-red-600 items-center justify-center"
+              >
+                {isSubmittingUnfounded ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text className="text-xs font-bold text-white">Submit & Free Unit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -572,5 +709,41 @@ const styles = StyleSheet.create({
   },
   btnArrivedTextDisabled: {
     color: '#64748b',
+  },
+  btnUnfounded: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(71, 85, 105, 0.6)',
+  },
+  btnUnfoundedText: {
+    color: '#FCD34D',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
   },
 });

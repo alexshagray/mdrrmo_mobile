@@ -20,6 +20,7 @@ import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import MapboxGL from '@rnmapbox/maps';
 import { MapView, Avatar, LocationPermissionModal } from '@/shared/components';
+import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
 import {
   Clock,
   MapPin,
@@ -546,11 +547,11 @@ export default function TrackScreen() {
       if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
         setAmbulanceCoords((prev) => {
           if (!prev) return { latitude: lat, longitude: lng, heading };
-          const dist = getDistance(prev.latitude, prev.longitude, lat, lng);
           const incLat = parseFloat(activeIncident.incident_latitude);
           const incLng = parseFloat(activeIncident.incident_longitude);
 
-          if (dist > 25 && !isNaN(incLat) && !isNaN(incLng)) {
+          // Fetch initial road route if not yet calculated
+          if (routeCoords.length === 0 && !isNaN(incLat) && !isNaN(incLng)) {
             fetchRoute(lat, lng, incLat, incLng);
           }
           return { latitude: lat, longitude: lng, heading: heading ?? prev.heading };
@@ -841,51 +842,30 @@ export default function TrackScreen() {
         )}
 
         {/* ─── 2. EMERGENCY / INCIDENT LOCATION MARKER ─── */}
+        {/* ─── 2. CLEAN INCIDENT DESTINATION PIN (NO CIRCULAR CONTAINER) ─── */}
         {hasIncidentCoords && (
           <MapboxGL.PointAnnotation
             id="incident-marker"
             coordinate={[incidentLng, incidentLat]}
             title="Emergency Location"
+            anchor={{ x: 0.5, y: 1.0 }}
           >
-            <View style={styles.incidentMarkerContainer}>
-              <MapPin size={34} color="#DC2626" fill="#DC2626" strokeWidth={1.5} />
-              <View style={styles.incidentLabelBadge}>
-                <Text style={styles.incidentLabelText}>Emergency Scene</Text>
-              </View>
-            </View>
+            <IncidentLocationPin size={38} />
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* ─── 3. HIGH-VISIBILITY RESPONDER PUCK WITH HEADING & PULSE ─── */}
+        {/* ─── 3. CLEAN RESPONDER NAVIGATION ARROW (NO CIRCLE, ARROW ONLY) ─── */}
         {hasAmbulanceCoords && (
           <MapboxGL.PointAnnotation
             id="responder-marker"
             coordinate={[ambLng!, ambLat!]}
             title={unitName}
+            anchor={{ x: 0.5, y: 0.5 }}
           >
-            <View style={styles.responderMarkerContainer}>
-              {ambulanceCoords?.heading !== undefined && !isArrived ? (
-                <View
-                  style={{
-                    transform: [{ rotate: `${ambulanceCoords.heading}deg` }],
-                  }}
-                >
-                  <Navigation
-                    size={32}
-                    color={isArrived ? '#059669' : '#2563EB'}
-                    fill={isArrived ? '#059669' : '#2563EB'}
-                  />
-                </View>
-              ) : (
-                <Ambulance
-                  size={34}
-                  color={isArrived ? '#059669' : '#2563EB'}
-                  strokeWidth={2.4}
-                />
-              )}
-
+            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+              <ResponderNavigationArrow heading={ambulanceCoords?.heading || 0} size={36} />
               {/* Floating Unit Name Label */}
-              <View style={styles.responderLabelPill}>
+              <View style={[styles.responderLabelPill, { marginTop: 4 }]}>
                 <View style={styles.responderLiveDot} />
                 <Text style={styles.responderLabelText}>{unitName}</Text>
               </View>
