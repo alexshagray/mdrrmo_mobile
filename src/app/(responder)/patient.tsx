@@ -675,8 +675,13 @@ export default function PatientCareRecordScreen() {
       }
     } catch (error: any) {
       console.log('Error creating walk-in dispatch:', error);
-      const errMsg = error?.response?.data?.message || 'Failed to create Walk-In PCR.';
-      Alert.alert('Notice', errMsg);
+      const serverMessage = error?.response?.data?.message;
+      const validationErrors = error?.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join('\n')
+        : null;
+      const statusText = error?.response?.status ? ` (Status ${error.response.status})` : '';
+      const errMsg = serverMessage || validationErrors || error?.message || 'Failed to create Walk-In PCR.';
+      Alert.alert('Notice', `${errMsg}${statusText}`);
     } finally {
       setIsCreatingWalkIn(false);
     }
