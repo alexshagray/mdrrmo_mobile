@@ -143,12 +143,13 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
         setLastSentAt(new Date());
       } catch (err) {
         if (err?.response?.status === 422) {
-          // Inactive, completed, or cancelled mission - stop tracking cleanly
+          // Inactive, completed, or cancelled mission - stop tracking cleanly without warning noise
           setIsTracking(false);
           isCancelled = true;
           if (subscription) {
             subscription.remove();
           }
+          return;
         }
         console.warn('Failed to transmit live dispatch location:', err?.response?.data?.message || err?.message || err);
       } finally {

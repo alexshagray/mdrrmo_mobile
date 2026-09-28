@@ -24,6 +24,25 @@ export const uploadResidentPhotoApi = async (formData) => {
   return response.data;
 };
 
+export const deleteResidentPhotoApi = async () => {
+  const response = await apiClient.delete('/resident/profile/photo');
+  return response.data;
+};
+
+export const uploadResponderPhotoApi = async (formData) => {
+  const response = await apiClient.post('/responder/profile/photo', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const deleteResponderPhotoApi = async () => {
+  const response = await apiClient.delete('/responder/profile/photo');
+  return response.data;
+};
+
 export const changeResidentPasswordApi = async (data) => {
   const response = await apiClient.put('/resident/profile/password', data);
   return response.data;

@@ -5,6 +5,7 @@ import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import { AlertTriangle, X, MapPin, Activity } from 'lucide-react-native';
 import Constants from 'expo-constants';
+import Toast from 'react-native-toast-message';
 import { updatePushTokenApi } from '../api/auth';
 import { useAuth } from '../auth/authContext';
 import { useRealtime } from '../hooks/useRealtime';
@@ -23,12 +24,18 @@ interface MissionAlarmContextType {
   incomingMission: any;
   clearMission: () => void;
   missionRefreshTrigger: number;
+  latestVerifiedIncident: any;
+  clearVerifiedNotification: () => void;
+  verifiedIncidentsTrigger: number;
 }
 
 const MissionAlarmContext = createContext<MissionAlarmContextType>({
   incomingMission: null,
   clearMission: () => {},
   missionRefreshTrigger: 0,
+  latestVerifiedIncident: null,
+  clearVerifiedNotification: () => {},
+  verifiedIncidentsTrigger: 0,
 });
 
 const { width, height } = Dimensions.get('window');
@@ -36,10 +43,49 @@ const { width, height } = Dimensions.get('window');
 export function MissionAlarmProvider({ children }: { children: React.ReactNode }) {
   const [incomingMission, setIncomingMission] = useState<any>(null);
   const [missionRefreshTrigger, setMissionRefreshTrigger] = useState<number>(0);
+  const [latestVerifiedIncident, setLatestVerifiedIncident] = useState<any>(null);
+  const [verifiedIncidentsTrigger, setVerifiedIncidentsTrigger] = useState<number>(0);
   const [sound, setSound] = useState<AudioPlayer | null>(null);
   const { user, isAuthenticated } = useAuth();
   const { echo } = useRealtime();
   const router = useRouter();
+
+  // Deduplication tracker: prevent repeated alerts for the same verified incident
+  const notifiedIncidentIds = useRef<Set<number>>(new Set());
+
+  // Light notification handler for newly verified incidents (noticeable, gentle, not aggressive emergency alarm)
+  const handleVerifiedIncidentNotification = (data: any) => {
+    const rawId = data?.incident_id || data?.id;
+    const incidentId = rawId ? Number(rawId) : null;
+
+    if (incidentId && notifiedIncidentIds.current.has(incidentId)) {
+      return;
+    }
+    if (incidentId) {
+      notifiedIncidentIds.current.add(incidentId);
+    }
+
+    // 1. Light vibration (two gentle 150ms pulses, NOT continuous emergency siren loop)
+    try {
+      Vibration.vibrate([0, 150, 100, 150]);
+    } catch (e) {
+      console.log('Error triggering light vibration:', e);
+    }
+
+    // 2. Visual Toast banner
+    const typeName = data?.incident_type || data?.type || 'Emergency';
+    const loc = data?.location || data?.barangay || 'Opol, Misamis Oriental';
+
+    Toast.show({
+      type: 'info',
+      text1: '🔔 New Verified Incident',
+      text2: `${typeName} in ${loc} is verified and ready for dispatch.`,
+      visibilityTime: 6000,
+    });
+
+    setLatestVerifiedIncident(data);
+    setVerifiedIncidentsTrigger(prev => prev + 1);
+  };
 
   // Register for Push Notifications
   useEffect(() => {
@@ -97,6 +143,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       if (data?.type === 'new_mission' && data?.dispatch_id) {
         setIncomingMission(data);
         setMissionRefreshTrigger(prev => prev + 1);
+      } else if (data?.type === 'verified_incident_available') {
+        handleVerifiedIncidentNotification(data);
       }
     });
 
@@ -105,6 +153,9 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       if (data?.type === 'new_mission' && data?.dispatch_id) {
         setIncomingMission(data);
         setMissionRefreshTrigger(prev => prev + 1);
+      } else if (data?.type === 'verified_incident_available') {
+        handleVerifiedIncidentNotification(data);
+        router.push('/(responder)');
       }
     });
 
@@ -114,19 +165,20 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
-  // Handle WebSocket Event
+  // Handle WebSocket Events (Personal Responder Channel & Team-wide Responders Channel)
   useEffect(() => {
     if (!echo || !user?.id || typeof (echo as any).private !== 'function') return;
 
-    let channel: any = null;
+    let userChannel: any = null;
+    let respondersChannel: any = null;
+
     try {
-      channel = (echo as any).private(`responder.${user.id}`);
+      userChannel = (echo as any).private(`responder.${user.id}`);
+      respondersChannel = (echo as any).private('responders');
     } catch (err) {
-      console.warn('Failed to subscribe to responder private channel:', err);
+      console.warn('Failed to subscribe to responder realtime channels:', err);
       return;
     }
-
-    if (!channel) return;
 
     const handleMissionEvent = (e: any) => {
       console.log('Realtime dispatch event received on responder channel:', e);
@@ -144,17 +196,47 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       setMissionRefreshTrigger(prev => prev + 1);
     };
 
-    channel.listen('DispatchCreated', handleMissionEvent);
-    channel.listen('.DispatchCreated', handleMissionEvent);
-    channel.listen('DispatchStatusUpdated', handleStatusEvent);
-    channel.listen('.DispatchStatusUpdated', handleStatusEvent);
+    const handleVerifiedEvent = (e: any) => {
+      console.log('Realtime IncidentVerified event received on responders channel:', e);
+      const inc = e.incident || e;
+      const notifData = e.notification || {
+        incident_id: inc.id,
+        incident_type: inc.incident_type?.name || 'Emergency',
+        priority: inc.priority || 'Moderate',
+        location: inc.place_of_incident || inc.incident_address || 'Opol, Misamis Oriental',
+        barangay: inc.resident?.resident_profile?.barangay?.barangay_name || null,
+        verified_at: inc.verified_at || new Date().toISOString(),
+        report_source: inc.report_source,
+      };
+      handleVerifiedIncidentNotification(notifData);
+    };
+
+    if (userChannel) {
+      userChannel.listen('DispatchCreated', handleMissionEvent);
+      userChannel.listen('.DispatchCreated', handleMissionEvent);
+      userChannel.listen('DispatchStatusUpdated', handleStatusEvent);
+      userChannel.listen('.DispatchStatusUpdated', handleStatusEvent);
+      userChannel.listen('IncidentVerified', handleVerifiedEvent);
+      userChannel.listen('.IncidentVerified', handleVerifiedEvent);
+    }
+
+    if (respondersChannel) {
+      respondersChannel.listen('IncidentVerified', handleVerifiedEvent);
+      respondersChannel.listen('.IncidentVerified', handleVerifiedEvent);
+    }
 
     return () => {
-      if (channel) {
-        channel.stopListening('DispatchCreated');
-        channel.stopListening('.DispatchCreated');
-        channel.stopListening('DispatchStatusUpdated');
-        channel.stopListening('.DispatchStatusUpdated');
+      if (userChannel) {
+        userChannel.stopListening('DispatchCreated');
+        userChannel.stopListening('.DispatchCreated');
+        userChannel.stopListening('DispatchStatusUpdated');
+        userChannel.stopListening('.DispatchStatusUpdated');
+        userChannel.stopListening('IncidentVerified');
+        userChannel.stopListening('.IncidentVerified');
+      }
+      if (respondersChannel) {
+        respondersChannel.stopListening('IncidentVerified');
+        respondersChannel.stopListening('.IncidentVerified');
       }
     };
   }, [echo, user]);
@@ -252,7 +334,16 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   const incidentType = inc?.incident_type?.name || 'Emergency Dispatch';
 
   return (
-    <MissionAlarmContext.Provider value={{ incomingMission, clearMission, missionRefreshTrigger }}>
+    <MissionAlarmContext.Provider
+      value={{
+        incomingMission,
+        clearMission,
+        missionRefreshTrigger,
+        latestVerifiedIncident,
+        clearVerifiedNotification: () => setLatestVerifiedIncident(null),
+        verifiedIncidentsTrigger,
+      }}
+    >
       {children}
       {incomingMission && (
         <View style={styles.overlay}>

@@ -167,7 +167,7 @@ const initialFormData = {
   civil_status: '',
   incident_address: '',
   age: '',
-  
+
   // Assessment
   assessment_findings: [] as string[],
   assessment_markers: [] as any[],
@@ -181,7 +181,7 @@ const initialFormData = {
 
   // GCS
   glasgow_coma_scale: { eye: 0, verbal: 0, motor: 0, total: 0 },
-  
+
   // Times
   dispatch_time: '',
   en_route_time: '',
@@ -189,14 +189,14 @@ const initialFormData = {
   transport_time: '',
   arrived_hf_time: '',
   departed_hf_time: '',
-  
+
   // Disposition & Transport
   disposition: [] as string[],
   special_instructions: '',
   transported: false,
   transported_to: '',
   received_by: '',
-  
+
   // Footer / Signatures
   responders: '',
   waiver_signed: false,
@@ -251,7 +251,7 @@ export default function PatientCareRecordScreen() {
   const [showWitnessModal, setShowWitnessModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isWalkIn, setIsWalkIn] = useState(false);
-  const [walkInCoords, setWalkInCoords] = useState<{latitude: number, longitude: number, address: string} | null>(null);
+  const [walkInCoords, setWalkInCoords] = useState<{ latitude: number, longitude: number, address: string } | null>(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [complaintSearch, setComplaintSearch] = useState('');
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
@@ -397,9 +397,9 @@ export default function PatientCareRecordScreen() {
         const existingPatient = pcr?.patient;
 
         // Auto-populate incident location from place of incident, report coordinates, or existing PCR
-        let defaultPlaceOfIncident = pcr?.place_of_incident 
-          || dispatch.incident?.place_of_incident 
-          || dispatch.incident?.location 
+        let defaultPlaceOfIncident = pcr?.place_of_incident
+          || dispatch.incident?.place_of_incident
+          || dispatch.incident?.location
           || '';
 
         if ((!defaultPlaceOfIncident || defaultPlaceOfIncident.includes('MDRRMO Station')) && dispatch.incident) {
@@ -422,18 +422,18 @@ export default function PatientCareRecordScreen() {
         const residentHomeAddress = residentAddressParts.join(', ');
 
         const defaultHomeAddress = (
-          pcr?.incident_address || 
-          existingPatient?.address || 
-          existingPatient?.street || 
-          residentHomeAddress || 
-          resident?.address || 
+          pcr?.incident_address ||
+          existingPatient?.address ||
+          existingPatient?.street ||
+          residentHomeAddress ||
+          resident?.address ||
           ''
         );
 
         // Auto-fill Chief Complaint from what the dispatcher entered (or incident type)
-        const defaultChiefComplaint = pcr?.chief_complaint 
-          || dispatch.incident?.chief_complaint 
-          || dispatch.incident?.incident_type?.name 
+        const defaultChiefComplaint = pcr?.chief_complaint
+          || dispatch.incident?.chief_complaint
+          || dispatch.incident?.incident_type?.name
           || '';
 
         // Auto-fill Nature of Call based on incident type or existing field
@@ -449,17 +449,17 @@ export default function PatientCareRecordScreen() {
 
         // Comprehensive demographic resolution
         const resolvedBirthdate = existingPatient?.birthdate || residentProfile?.birthdate || '';
-        const resolvedAge = resolvedBirthdate 
-          ? String(calculateAge(resolvedBirthdate)) 
+        const resolvedAge = resolvedBirthdate
+          ? String(calculateAge(resolvedBirthdate))
           : (existingPatient?.age ? String(existingPatient.age) : (pcr?.age ? String(pcr.age) : ''));
 
         const resolvedGender = existingPatient?.gender || pcr?.gender || residentProfile?.gender || 'male';
 
         const resolvedContact = (
-          pcr?.contact_number || 
-          existingPatient?.contact_number || 
-          resident?.phone_number || 
-          dispatch.incident?.caller_phone_number || 
+          pcr?.contact_number ||
+          existingPatient?.contact_number ||
+          resident?.phone_number ||
+          dispatch.incident?.caller_phone_number ||
           ''
         );
 
@@ -498,16 +498,16 @@ export default function PatientCareRecordScreen() {
           ...(pcr ? {
             assessment_findings: pcr.assessment || prev.assessment_findings,
             assessment_markers: pcr.assessment_markers || prev.assessment_markers,
-            
+
             vital_signs: pcr.vital_signs || prev.vital_signs,
             glasgow_coma_scale: pcr.glasgow_coma_scale || prev.glasgow_coma_scale,
-            
+
             disposition: pcr.disposition || prev.disposition,
             special_instructions: pcr.special_instructions || prev.special_instructions,
             transported: pcr.transported !== undefined ? pcr.transported : prev.transported,
             transported_to: pcr.transported_to || prev.transported_to,
             received_by: pcr.received_by || prev.received_by,
-            
+
             patient_signature: pcr.patient_signature || pcr.waiver_signature || prev.patient_signature,
             witness_name: pcr.witness_name || prev.witness_name,
             witness_signature: pcr.witness_signature || prev.witness_signature,
@@ -596,7 +596,7 @@ export default function PatientCareRecordScreen() {
         longitude: coords.longitude,
         place_of_incident: realLocationName,
       });
-      
+
       // 4. Update state
       setActiveDispatch(res.data);
       setIsWalkIn(true);
@@ -669,7 +669,7 @@ export default function PatientCareRecordScreen() {
       const parts = query.split(/\s+/);
       const first_name = parts[0] || 'Unknown';
       const last_name = parts.slice(1).join(' ') || 'Unknown';
-      
+
       const payload: any = {
         first_name,
         last_name,
@@ -755,13 +755,13 @@ export default function PatientCareRecordScreen() {
 
   const handleNext = async () => {
     let newErrors: Record<string, string> = {};
-    
+
     // Step Validation
     if (step === 1) {
       if (!formData.patient_id) {
         newErrors.patient_id = 'Please select or create a patient first.';
       }
-      
+
       if (!formData.age) {
         newErrors.age = 'Age is required.';
       } else {
@@ -770,18 +770,18 @@ export default function PatientCareRecordScreen() {
           newErrors.age = 'Please enter a valid age between 0 and 120.';
         }
       }
-      
+
       if (!formData.nature_of_call) newErrors.nature_of_call = 'Nature of Call is required.';
-      
+
       if (!formData.place_of_incident) {
         newErrors.place_of_incident = 'Place of Incident is required.';
       }
       if (!formData.incident_address) {
         newErrors.incident_address = 'Resident Home Address is required.';
       }
-      
+
       if (!formData.chief_complaint) newErrors.chief_complaint = 'Chief Complaint is required.';
-      
+
       if (formData.contact_number) {
         const phPhoneRegex = /^09\d{9}$/;
         if (!phPhoneRegex.test(formData.contact_number)) {
@@ -819,7 +819,7 @@ export default function PatientCareRecordScreen() {
       setErrors(newErrors);
       return;
     }
-    
+
     setErrors({});
 
     const saved = await saveCurrentStep();
@@ -831,7 +831,7 @@ export default function PatientCareRecordScreen() {
   const handleFinalSubmit = async () => {
     const saved = await saveCurrentStep();
     if (!saved) return;
-    
+
     setIsSaving(true);
     try {
       // If an optional scene photo was taken, upload it
@@ -886,12 +886,12 @@ export default function PatientCareRecordScreen() {
   const updateVital = (takeIdx: number, field: string, val: string) => {
     const newVitals = [...formData.vital_signs];
     newVitals[takeIdx] = { ...newVitals[takeIdx], [field]: val };
-    
+
     // Auto-set time on first entry for this take if time is empty
     if (field !== 'time' && !newVitals[takeIdx].time) {
       newVitals[takeIdx].time = formatTime12ForVitals(new Date().toISOString());
     }
-    
+
     setFormData({ ...formData, vital_signs: newVitals });
   };
 
@@ -941,16 +941,16 @@ export default function PatientCareRecordScreen() {
         style={[styles.input, errors.patient_id ? styles.inputError : null]}
         placeholder="Patient Name"
         value={formData.searchQuery}
-        onChangeText={(txt) => { 
-          setFormData({...formData, searchQuery: txt, patient_id: null}); 
-          setErrors({...errors, patient_id: ''});
-          handleSearch(txt); 
+        onChangeText={(txt) => {
+          setFormData({ ...formData, searchQuery: txt, patient_id: null });
+          setErrors({ ...errors, patient_id: '' });
+          handleSearch(txt);
         }}
       />
       {renderError('patient_id')}
       {isSearching && <ActivityIndicator />}
       {searchResults.map(p => (
-        <TouchableOpacity key={p.id} style={styles.resultItem} onPress={() => { selectPatient(p); setErrors({...errors, patient_id: ''}); }}>
+        <TouchableOpacity key={p.id} style={styles.resultItem} onPress={() => { selectPatient(p); setErrors({ ...errors, patient_id: '' }); }}>
           <Text style={styles.resultName}>{p.first_name} {p.last_name}</Text>
           <Text style={styles.resultSub}>Patient ID: PAT-{p.id} • {p.gender ? p.gender.charAt(0).toUpperCase() + p.gender.slice(1) : 'Gender N/A'}{p.age ? ` • ${p.age} yrs` : ''}</Text>
           {(p.address || p.street) && (
@@ -973,7 +973,7 @@ export default function PatientCareRecordScreen() {
         <Text style={styles.label}>Gender</Text>
         <View style={styles.checkboxContainer}>
           {['male', 'female'].map(g => (
-            <TouchableOpacity key={g} style={[styles.checkbox, formData.gender === g && styles.checkboxActive]} onPress={() => setFormData({...formData, gender: g})}>
+            <TouchableOpacity key={g} style={[styles.checkbox, formData.gender === g && styles.checkboxActive]} onPress={() => setFormData({ ...formData, gender: g })}>
               <Text style={[styles.checkboxText, formData.gender === g && styles.checkboxTextActive]}>{g.charAt(0).toUpperCase() + g.slice(1)}</Text>
             </TouchableOpacity>
           ))}
@@ -986,14 +986,14 @@ export default function PatientCareRecordScreen() {
           keyboardType="numeric"
           maxLength={3}
           value={formData.age}
-          onChangeText={(v) => { 
+          onChangeText={(v) => {
             const numericValue = v.replace(/[^0-9]/g, '');
-            setFormData({...formData, age: numericValue}); 
-            setErrors({...errors, age: ''}); 
+            setFormData({ ...formData, age: numericValue });
+            setErrors({ ...errors, age: '' });
           }}
         />
         {renderError('age')}
-        
+
         <Text style={styles.label}>Contact Number</Text>
         <TextInput
           style={[styles.input, errors.contact_number ? styles.inputError : null]}
@@ -1001,23 +1001,23 @@ export default function PatientCareRecordScreen() {
           keyboardType="phone-pad"
           maxLength={11}
           value={formData.contact_number}
-          onChangeText={(v) => { setFormData({...formData, contact_number: v}); setErrors({...errors, contact_number: ''}); }}
+          onChangeText={(v) => { setFormData({ ...formData, contact_number: v }); setErrors({ ...errors, contact_number: '' }); }}
         />
         {renderError('contact_number')}
-        
+
         <Text style={styles.label}>Resident Home Address</Text>
         <TextInput
           style={[styles.input, errors.incident_address ? styles.inputError : null]}
           placeholder="Patient's home or registered address"
           value={formData.incident_address}
-          onChangeText={(v) => { setFormData({...formData, incident_address: v, address: v}); setErrors({...errors, incident_address: ''}); }}
+          onChangeText={(v) => { setFormData({ ...formData, incident_address: v, address: v }); setErrors({ ...errors, incident_address: '' }); }}
         />
         {renderError('incident_address')}
-        
+
         <Text style={styles.label}>Civil Status</Text>
         <View style={styles.checkboxContainer}>
           {['single', 'married', 'widowed', 'child', 'separated'].map(s => (
-            <TouchableOpacity key={s} style={[styles.checkbox, formData.civil_status === s && styles.checkboxActive]} onPress={() => setFormData({...formData, civil_status: s})}>
+            <TouchableOpacity key={s} style={[styles.checkbox, formData.civil_status === s && styles.checkboxActive]} onPress={() => setFormData({ ...formData, civil_status: s })}>
               <Text style={[styles.checkboxText, formData.civil_status === s && styles.checkboxTextActive]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
             </TouchableOpacity>
           ))}
@@ -1026,13 +1026,13 @@ export default function PatientCareRecordScreen() {
         <Text style={styles.label}>Nature of Call</Text>
         <View style={styles.checkboxContainer}>
           {['emergency', 'transport', 'standby', 'non-emergency', 'medical assistance'].map(n => (
-            <TouchableOpacity key={n} style={[styles.checkbox, formData.nature_of_call === n && styles.checkboxActive, errors.nature_of_call ? styles.inputError : null]} onPress={() => { setFormData({...formData, nature_of_call: n}); setErrors({...errors, nature_of_call: ''}); }}>
+            <TouchableOpacity key={n} style={[styles.checkbox, formData.nature_of_call === n && styles.checkboxActive, errors.nature_of_call ? styles.inputError : null]} onPress={() => { setFormData({ ...formData, nature_of_call: n }); setErrors({ ...errors, nature_of_call: '' }); }}>
               <Text style={[styles.checkboxText, formData.nature_of_call === n && styles.checkboxTextActive]}>{n.charAt(0).toUpperCase() + n.slice(1)}</Text>
             </TouchableOpacity>
           ))}
         </View>
         {renderError('nature_of_call')}
-        
+
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, marginBottom: 8 }}>
           <Text style={[styles.label, { marginTop: 0, marginBottom: 0 }]}>Place of Incident</Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1077,9 +1077,9 @@ export default function PatientCareRecordScreen() {
           Auto-filled from incident report location. You can edit or refine this.
         </Text>
         {renderError('place_of_incident')}
-        
+
         <Text style={styles.label}>Chief Complaint</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.input, { justifyContent: 'center', height: 56, marginBottom: 16 }, errors.chief_complaint ? styles.inputError : null]}
           onPress={() => setShowComplaintModal(true)}
         >
@@ -1096,23 +1096,23 @@ export default function PatientCareRecordScreen() {
     <View style={styles.content}>
       <Text style={styles.title}>Step 2: Assessment</Text>
       {renderError('assessment')}
-      <BodyDiagram 
-        markers={formData.assessment_markers} 
-        onAddMarker={(m) => { setFormData({...formData, assessment_markers: [...formData.assessment_markers, m]}); setErrors({...errors, assessment: ''}); }}
-        onRemoveMarker={(id) => setFormData({...formData, assessment_markers: formData.assessment_markers.filter(m => m.id !== id)})}
+      <BodyDiagram
+        markers={formData.assessment_markers}
+        onAddMarker={(m) => { setFormData({ ...formData, assessment_markers: [...formData.assessment_markers, m] }); setErrors({ ...errors, assessment: '' }); }}
+        onRemoveMarker={(id) => setFormData({ ...formData, assessment_markers: formData.assessment_markers.filter(m => m.id !== id) })}
       />
-      
+
       <View style={{ marginTop: 24, backgroundColor: '#f8fafc', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#e2e8f0' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
           <FileText size={18} color="#0f172a" />
           <Text style={[styles.label, { marginTop: 0, marginBottom: 0, marginLeft: 8 }]}>Special Instructions / Notes</Text>
         </View>
-        <TextInput 
-          style={[styles.inputArea, { marginBottom: 0, backgroundColor: '#fff', minHeight: 100 }]} 
-          placeholder="Add any special instructions or additional assessment notes here..." 
-          multiline 
-          value={formData.special_instructions} 
-          onChangeText={(v) => setFormData({...formData, special_instructions: v})} 
+        <TextInput
+          style={[styles.inputArea, { marginBottom: 0, backgroundColor: '#fff', minHeight: 100 }]}
+          placeholder="Add any special instructions or additional assessment notes here..."
+          multiline
+          value={formData.special_instructions}
+          onChangeText={(v) => setFormData({ ...formData, special_instructions: v })}
         />
       </View>
     </View>
@@ -1121,18 +1121,18 @@ export default function PatientCareRecordScreen() {
   const renderStep3 = () => (
     <View style={styles.content}>
       <Text style={styles.title}>Step 3: Vital Signs</Text>
-      
+
       <View style={{ backgroundColor: '#e0f2fe', padding: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
         <Stethoscope size={20} color="#0369a1" />
         <Text style={{ color: '#0369a1', marginLeft: 8, fontSize: 14, fontWeight: '600' }}>Record up to 3 sets of vital signs.</Text>
       </View>
 
       {[0, 1, 2].map((take) => {
-        const isLocked = take > 0 && !formData.vital_signs[take-1].bp;
+        const isLocked = take > 0 && !formData.vital_signs[take - 1].bp;
         const isError = take === 0 && errors.vital_signs;
-        
+
         return (
-          <View key={take} style={[styles.card, { borderRadius: 20, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: isError ? '#f87171' : '#e2e8f0', backgroundColor: '#fff' }, isLocked ? {opacity: 0.4} : null]} pointerEvents={isLocked ? 'none' : 'auto'}>
+          <View key={take} style={[styles.card, { borderRadius: 20, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: isError ? '#f87171' : '#e2e8f0', backgroundColor: '#fff' }, isLocked ? { opacity: 0.4 } : null]} pointerEvents={isLocked ? 'none' : 'auto'}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 12 }}>
               <View style={{ backgroundColor: '#f1f5f9', width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
                 <Text style={{ fontWeight: 'bold', color: '#0f172a', fontSize: 16 }}>{take + 1}</Text>
@@ -1149,19 +1149,19 @@ export default function PatientCareRecordScreen() {
                   <Clock size={14} color="#64748b" />
                   <Text style={[styles.label, { marginBottom: 0, marginLeft: 4, marginTop: 0 }]}>Time</Text>
                 </View>
-                <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}>
-                  <TextInput 
-                    style={[styles.input, {flex: 1, marginBottom: 0, paddingHorizontal: 8, textAlign: 'center', borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0}]} 
-                    placeholder="00:00" 
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0, paddingHorizontal: 8, textAlign: 'center', borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 }]}
+                    placeholder="00:00"
                     keyboardType="numeric"
                     maxLength={5}
-                    value={(formData.vital_signs[take].time || '').split(' ')[0]} 
-                    onChangeText={(v) => { 
-                      handleTimeDigitsChange(take, v); 
-                      setErrors({...errors, vital_signs: ''}); 
-                    }} 
+                    value={(formData.vital_signs[take].time || '').split(' ')[0]}
+                    onChangeText={(v) => {
+                      handleTimeDigitsChange(take, v);
+                      setErrors({ ...errors, vital_signs: '' });
+                    }}
                   />
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={{ backgroundColor: '#0f172a', paddingHorizontal: 12, borderTopRightRadius: 12, borderBottomRightRadius: 12, height: 49.5, justifyContent: 'center' }}
                     onPress={() => toggleAmPm(take)}
                   >
@@ -1176,7 +1176,7 @@ export default function PatientCareRecordScreen() {
                   <Activity size={14} color="#64748b" />
                   <Text style={[styles.label, { marginBottom: 0, marginLeft: 4, marginTop: 0 }]}>O2 Sat</Text>
                 </View>
-                <TextInput style={styles.input} placeholder="%" keyboardType="numeric" maxLength={3} value={formData.vital_signs[take].spo2} onChangeText={(v) => { updateVital(take, 'spo2', v.replace(/\D/g, '')); setErrors({...errors, vital_signs: ''}); }} />
+                <TextInput style={styles.input} placeholder="%" keyboardType="numeric" maxLength={3} value={formData.vital_signs[take].spo2} onChangeText={(v) => { updateVital(take, 'spo2', v.replace(/\D/g, '')); setErrors({ ...errors, vital_signs: '' }); }} />
               </View>
             </View>
             <View style={styles.row}>
@@ -1185,14 +1185,14 @@ export default function PatientCareRecordScreen() {
                   <Activity size={14} color="#64748b" />
                   <Text style={[styles.label, { marginBottom: 0, marginLeft: 4, marginTop: 0 }]}>PR/HR</Text>
                 </View>
-                <TextInput style={styles.input} placeholder="bpm" keyboardType="numeric" maxLength={3} value={formData.vital_signs[take].pr} onChangeText={(v) => { updateVital(take, 'pr', v.replace(/\D/g, '')); setErrors({...errors, vital_signs: ''}); }} />
+                <TextInput style={styles.input} placeholder="bpm" keyboardType="numeric" maxLength={3} value={formData.vital_signs[take].pr} onChangeText={(v) => { updateVital(take, 'pr', v.replace(/\D/g, '')); setErrors({ ...errors, vital_signs: '' }); }} />
               </View>
               <View style={styles.flex1}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                   <Activity size={14} color="#64748b" />
                   <Text style={[styles.label, { marginBottom: 0, marginLeft: 4, marginTop: 0 }]}>RR</Text>
                 </View>
-                <TextInput style={styles.input} placeholder="cpm" keyboardType="numeric" maxLength={3} value={formData.vital_signs[take].rr} onChangeText={(v) => { updateVital(take, 'rr', v.replace(/\D/g, '')); setErrors({...errors, vital_signs: ''}); }} />
+                <TextInput style={styles.input} placeholder="cpm" keyboardType="numeric" maxLength={3} value={formData.vital_signs[take].rr} onChangeText={(v) => { updateVital(take, 'rr', v.replace(/\D/g, '')); setErrors({ ...errors, vital_signs: '' }); }} />
               </View>
             </View>
             <View style={styles.row}>
@@ -1201,14 +1201,14 @@ export default function PatientCareRecordScreen() {
                   <Activity size={14} color="#64748b" />
                   <Text style={[styles.label, { marginBottom: 0, marginLeft: 4, marginTop: 0 }]}>BP</Text>
                 </View>
-                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="120/80" keyboardType="numbers-and-punctuation" maxLength={7} value={formData.vital_signs[take].bp} onChangeText={(v) => { updateVital(take, 'bp', v.replace(/[^0-9/]/g, '')); setErrors({...errors, vital_signs: ''}); }} />
+                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="120/80" keyboardType="numbers-and-punctuation" maxLength={7} value={formData.vital_signs[take].bp} onChangeText={(v) => { updateVital(take, 'bp', v.replace(/[^0-9/]/g, '')); setErrors({ ...errors, vital_signs: '' }); }} />
               </View>
               <View style={styles.flex1}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                   <Stethoscope size={14} color="#64748b" />
                   <Text style={[styles.label, { marginBottom: 0, marginLeft: 4, marginTop: 0 }]}>Temp (Opt)</Text>
                 </View>
-                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="°C" value={formData.vital_signs[take].temp} onChangeText={(v) => { updateVital(take, 'temp', v); setErrors({...errors, vital_signs: ''}); }} />
+                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="°C" value={formData.vital_signs[take].temp} onChangeText={(v) => { updateVital(take, 'temp', v); setErrors({ ...errors, vital_signs: '' }); }} />
               </View>
             </View>
           </View>
@@ -1219,7 +1219,7 @@ export default function PatientCareRecordScreen() {
   );
 
   const renderStep4 = () => {
-    const setGcs = (field: 'eye'|'verbal'|'motor', val: number) => {
+    const setGcs = (field: 'eye' | 'verbal' | 'motor', val: number) => {
       const newGcs = { ...formData.glasgow_coma_scale, [field]: val };
       newGcs.total = newGcs.eye + newGcs.verbal + newGcs.motor;
       setFormData({ ...formData, glasgow_coma_scale: newGcs });
@@ -1231,31 +1231,31 @@ export default function PatientCareRecordScreen() {
     const gcsTotal = formData.glasgow_coma_scale.total;
     let severityColor = '#0f172a';
     let severityLabel = 'Incomplete';
-    
+
     if (formData.glasgow_coma_scale.eye > 0 && formData.glasgow_coma_scale.verbal > 0 && formData.glasgow_coma_scale.motor > 0) {
       if (gcsTotal <= 8) { severityColor = '#e11d48'; severityLabel = 'Severe Head Injury'; }
       else if (gcsTotal <= 12) { severityColor = '#f59e0b'; severityLabel = 'Moderate Head Injury'; }
       else { severityColor = '#10b981'; severityLabel = 'Mild Head Injury / Normal'; }
     }
 
-    const renderOptions = (field: 'eye'|'verbal'|'motor', title: string, options: {l: string, v: number}[]) => (
+    const renderOptions = (field: 'eye' | 'verbal' | 'motor', title: string, options: { l: string, v: number }[]) => (
       <View style={{ marginBottom: 24, backgroundColor: '#fff', borderRadius: 20, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: '#e2e8f0' }}>
         <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 12 }}>{title}</Text>
         {options.map((opt, idx) => {
           const isActive = formData.glasgow_coma_scale[field] === opt.v;
           return (
-            <TouchableOpacity 
-              key={field + opt.v} 
-              style={{ 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                padding: 16, 
-                borderRadius: 12, 
+            <TouchableOpacity
+              key={field + opt.v}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 16,
+                borderRadius: 12,
                 marginBottom: idx === options.length - 1 ? 0 : 8,
                 backgroundColor: isActive ? '#f0f9ff' : '#f8fafc',
                 borderWidth: 1.5,
                 borderColor: isActive ? '#38bdf8' : '#f1f5f9'
-              }} 
+              }}
               onPress={() => setGcs(field, opt.v)}
             >
               <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: isActive ? '#0284c7' : '#e2e8f0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
@@ -1272,7 +1272,7 @@ export default function PatientCareRecordScreen() {
     return (
       <View style={styles.content}>
         <Text style={styles.title}>Step 4: Glasgow Coma Scale</Text>
-        
+
         <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 20, marginBottom: 24, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' }}>
           <Text style={{ fontSize: 14, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Total Score</Text>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -1285,29 +1285,29 @@ export default function PatientCareRecordScreen() {
         </View>
 
         {renderOptions('eye', 'Best Eye Response (E)', [
-          {l: 'Spontaneous-open with blinking at baseline', v: 4},
-          {l: 'Opens to verbal command, speech, or shout', v: 3},
-          {l: 'Open to pain, not applied to face', v: 2},
-          {l: 'None', v: 1}
+          { l: 'Spontaneous-open with blinking at baseline', v: 4 },
+          { l: 'Opens to verbal command, speech, or shout', v: 3 },
+          { l: 'Open to pain, not applied to face', v: 2 },
+          { l: 'None', v: 1 }
         ])}
 
         {renderOptions('verbal', 'Best Verbal Response (V)', [
-          {l: 'Oriented', v: 5},
-          {l: 'Confused conversation, but able to answer questions', v: 4},
-          {l: 'Inappropriate responses, words discernible', v: 3},
-          {l: 'Incomprehensible speech', v: 2},
-          {l: 'None', v: 1}
+          { l: 'Oriented', v: 5 },
+          { l: 'Confused conversation, but able to answer questions', v: 4 },
+          { l: 'Inappropriate responses, words discernible', v: 3 },
+          { l: 'Incomprehensible speech', v: 2 },
+          { l: 'None', v: 1 }
         ])}
 
         {renderOptions('motor', 'Best Motor Response (M)', [
-          {l: 'Obeys commands for movement', v: 6},
-          {l: 'Purposeful movement to painful stimulus', v: 5},
-          {l: 'Withdraws from pain', v: 4},
-          {l: 'Abnormal (spastic) flexion, decorticate posture', v: 3},
-          {l: 'Extensor (rigid) response, decerebrate posture', v: 2},
-          {l: 'None', v: 1}
+          { l: 'Obeys commands for movement', v: 6 },
+          { l: 'Purposeful movement to painful stimulus', v: 5 },
+          { l: 'Withdraws from pain', v: 4 },
+          { l: 'Abnormal (spastic) flexion, decorticate posture', v: 3 },
+          { l: 'Extensor (rigid) response, decerebrate posture', v: 2 },
+          { l: 'None', v: 1 }
         ])}
-        
+
         {renderError('gcs')}
       </View>
     );
@@ -1342,21 +1342,21 @@ export default function PatientCareRecordScreen() {
           {dispositionOptions.map((f, idx) => {
             const isActive = formData.disposition.includes(f);
             const displayText = f === 'Treated,Recovered' ? 'Treated, Recovered' : f;
-            
+
             return (
-              <TouchableOpacity 
-                key={f} 
-                style={{ 
-                  flexDirection: 'row', 
-                  alignItems: 'center', 
-                  padding: 16, 
-                  borderRadius: 12, 
+              <TouchableOpacity
+                key={f}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  padding: 16,
+                  borderRadius: 12,
                   marginBottom: idx === dispositionOptions.length - 1 ? 0 : 8,
                   backgroundColor: isActive ? '#f0f9ff' : '#f8fafc',
                   borderWidth: 1.5,
                   borderColor: isActive ? '#38bdf8' : '#f1f5f9'
-                }} 
-                onPress={() => { toggleArrayItem('disposition', f); setErrors({...errors, disposition: ''}); }}
+                }}
+                onPress={() => { toggleArrayItem('disposition', f); setErrors({ ...errors, disposition: '' }); }}
               >
                 <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: isActive ? '#0284c7' : '#cbd5e1', backgroundColor: isActive ? '#0284c7' : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                   {isActive && <Check size={16} color="#fff" />}
@@ -1366,7 +1366,7 @@ export default function PatientCareRecordScreen() {
             );
           })}
         </View>
-        
+
         {renderError('disposition')}
       </View>
     );
@@ -1375,7 +1375,7 @@ export default function PatientCareRecordScreen() {
   const renderStep6 = () => (
     <View style={styles.content}>
       <Text style={styles.title}>Step 6: Transport</Text>
-      
+
       <View style={{ backgroundColor: '#e0f2fe', padding: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
         <Truck size={20} color="#0369a1" />
         <Text style={{ color: '#0369a1', marginLeft: 8, fontSize: 14, fontWeight: '600', flex: 1 }}>Provide transport and endorsement details.</Text>
@@ -1396,14 +1396,14 @@ export default function PatientCareRecordScreen() {
           <Truck size={16} color="#0f172a" />
           <Text style={[styles.label, { marginTop: 0, marginBottom: 0, marginLeft: 6 }]}>Transported To:</Text>
         </View>
-        <TextInput style={[styles.input, errors.transported_to ? styles.inputError : null, { backgroundColor: '#f8fafc', marginBottom: 20 }]} placeholder="e.g., General Hospital" value={formData.transported_to} onChangeText={(v) => { setFormData({...formData, transported_to: v}); setErrors({...errors, transported_to: ''}); }} />
+        <TextInput style={[styles.input, errors.transported_to ? styles.inputError : null, { backgroundColor: '#f8fafc', marginBottom: 20 }]} placeholder="e.g., General Hospital" value={formData.transported_to} onChangeText={(v) => { setFormData({ ...formData, transported_to: v }); setErrors({ ...errors, transported_to: '' }); }} />
         {renderError('transported_to')}
-        
+
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
           <User size={16} color="#0f172a" />
           <Text style={[styles.label, { marginTop: 0, marginBottom: 0, marginLeft: 6 }]}>Received By:</Text>
         </View>
-        <TextInput style={[styles.input, errors.received_by ? styles.inputError : null, { backgroundColor: '#f8fafc', marginBottom: 8 }]} placeholder="e.g., Dr. Smith / RN Doe" value={formData.received_by} onChangeText={(v) => { setFormData({...formData, received_by: v}); setErrors({...errors, received_by: ''}); }} />
+        <TextInput style={[styles.input, errors.received_by ? styles.inputError : null, { backgroundColor: '#f8fafc', marginBottom: 8 }]} placeholder="e.g., Dr. Smith / RN Doe" value={formData.received_by} onChangeText={(v) => { setFormData({ ...formData, received_by: v }); setErrors({ ...errors, received_by: '' }); }} />
         {renderError('received_by')}
       </View>
     </View>
@@ -1411,11 +1411,11 @@ export default function PatientCareRecordScreen() {
 
   const renderStep7 = () => {
     const patientName = `${formData.first_name} ${formData.last_name}`.trim() || '____________';
-    
+
     return (
       <View style={styles.content}>
         <Text style={styles.title}>Step 7: Signatures</Text>
-        
+
         <View style={{ backgroundColor: '#e0f2fe', padding: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
           <FileText size={20} color="#0369a1" />
           <Text style={{ color: '#0369a1', marginLeft: 8, fontSize: 14, fontWeight: '600', flex: 1 }}>Obtain necessary signatures for authorization.</Text>
@@ -1431,18 +1431,18 @@ export default function PatientCareRecordScreen() {
               <Text style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>Patient's consent for treatment</Text>
             </View>
           </View>
-          
+
           {formData.waiver_signature ? (
             <View style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef3c7' : '#f0fdf4', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fde68a' : '#bbf7d0' }}>
               <Check size={20} color={formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#d97706' : '#16a34a'} />
               <Text style={{ fontSize: 15, fontWeight: '700', color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#b45309' : '#16a34a', marginLeft: 8, flex: 1 }}>
                 {formData.waiver_signature === 'UNABLE_TO_SIGN' ? 'Marked Unable to Sign (Unconscious)' : 'Waiver Signed'}
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => {
                   setFormData(prev => ({ ...prev, waiver_signature: '', patient_signature: '' }));
                   setShowWaiverModal(true);
-                }} 
+                }}
                 style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef9c3' : '#dcfce7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
               >
                 <Text style={{ color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#a16207' : '#15803d', fontWeight: '700', fontSize: 12 }}>RE-SIGN</Text>
@@ -1489,7 +1489,7 @@ export default function PatientCareRecordScreen() {
 
   const renderStep8 = () => {
     const uniqueAssessments = Array.from(new Set(formData.assessment_markers.map(m => m.label).filter(Boolean)));
-    
+
     const SummaryRow = ({ icon: Icon, title, value }: any) => (
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 }}>
         <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 16 }}>
@@ -1519,7 +1519,7 @@ export default function PatientCareRecordScreen() {
           <SummaryRow icon={Activity} title="Assessment Findings" value={uniqueAssessments.length > 0 ? uniqueAssessments.join(', ') : 'No injuries marked'} />
           <SummaryRow icon={Stethoscope} title="Glasgow Coma Scale" value={`Total: ${formData.glasgow_coma_scale.total} / 15`} />
           <SummaryRow icon={Truck} title="Disposition" value={formData.disposition.length > 0 ? formData.disposition.join(', ') : 'None selected'} />
-          
+
           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
             <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 16 }}>
               <FileText size={20} color="#0f172a" />
@@ -1664,8 +1664,8 @@ export default function PatientCareRecordScreen() {
           )}
         </View>
 
-        <TouchableOpacity 
-          onPress={handleFinalSubmit} 
+        <TouchableOpacity
+          onPress={handleFinalSubmit}
           disabled={isSaving}
           style={{ width: '100%', paddingVertical: 18, borderRadius: 16, backgroundColor: isSaving ? '#94a3b8' : '#10b981', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
         >
@@ -1709,9 +1709,9 @@ export default function PatientCareRecordScreen() {
               <Text className="text-slate-700 font-bold">Check for Active Mission</Text>
             </TouchableOpacity>
 
-            <Button 
-              title="Create Walk-In PCR" 
-              onPress={() => setShowWalkInModal(true)} 
+            <Button
+              title="Create Walk-In PCR"
+              onPress={() => setShowWalkInModal(true)}
               style={{ width: '100%', backgroundColor: '#e11d48' }}
             />
           </View>
@@ -1738,14 +1738,14 @@ export default function PatientCareRecordScreen() {
                 </Text>
               </View>
               <View className="flex-row justify-between space-x-3 mt-4">
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setShowWalkInModal(false)}
                   disabled={isCreatingWalkIn}
                   className="flex-1 py-3.5 bg-slate-100 rounded-xl items-center"
                 >
                   <Text className="text-slate-600 font-bold">CANCEL</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={handleConfirmWalkIn}
                   disabled={isCreatingWalkIn}
                   className="flex-1 py-3.5 bg-rose-600 rounded-xl items-center shadow-sm flex-row justify-center"
@@ -1779,7 +1779,7 @@ export default function PatientCareRecordScreen() {
           <View className="w-20 h-20 bg-amber-50 rounded-3xl items-center justify-center mb-5 border border-amber-200/60 shadow-sm shadow-amber-200">
             <Lock size={38} color="#D97706" strokeWidth={2.25} />
           </View>
-          
+
           <View className="bg-amber-100/70 px-3 py-1 rounded-full mb-3">
             <Text className="text-amber-800 text-[11px] font-extrabold uppercase tracking-wider">
               {statusLabel}
@@ -1789,7 +1789,7 @@ export default function PatientCareRecordScreen() {
           <Text className="text-slate-900 font-black text-2xl tracking-tight mb-2 text-center">
             Arrival on Scene Required
           </Text>
-          
+
           <Text className="text-slate-500 text-sm text-center mb-6 leading-relaxed">
             The Patient Care Record (PCR) unlocks once you arrive at the incident scene and your status transitions to <Text className="font-bold text-slate-700">Arrived on Scene</Text>.
           </Text>
@@ -1844,7 +1844,7 @@ export default function PatientCareRecordScreen() {
       <KeyboardAvoidingView style={styles.flex1} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Header title={`PCR: ${activeDispatch.incident?.tracking_number || 'Walk-In'}`} />
         {renderStepIndicator()}
-        
+
         {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
@@ -2018,13 +2018,13 @@ export default function PatientCareRecordScreen() {
                 </View>
                 <Text style={styles.modalTitle}>Refusal of Care Waiver</Text>
               </View>
-              
+
               <Text style={styles.waiverText}>
                 By signing this form, I, <Text style={styles.waiverName}>{formData.first_name ? `${formData.first_name} ${formData.last_name}` : '____________'}</Text>, am releasing OPOL RESCUE TEAM of any liability and/or medical claim from my decision to refuse care against medical advice.
               </Text>
 
-              <TouchableOpacity 
-                style={[styles.checkbox, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxActive, { marginBottom: 16 }]} 
+              <TouchableOpacity
+                style={[styles.checkbox, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxActive, { marginBottom: 16 }]}
                 onPress={() => {
                   setFormData(prev => {
                     if (prev.waiver_signature === 'UNABLE_TO_SIGN') {
@@ -2039,10 +2039,10 @@ export default function PatientCareRecordScreen() {
                   Patient is unable to sign waiver (e.g., Unconscious, Minor)
                 </Text>
               </TouchableOpacity>
-              
+
               {formData.waiver_signature === 'UNABLE_TO_SIGN' ? (
-                <TouchableOpacity 
-                  style={[styles.signButton, { marginTop: 10 }]} 
+                <TouchableOpacity
+                  style={[styles.signButton, { marginTop: 10 }]}
                   onPress={() => {
                     setFormData(prev => ({ ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' }));
                     setShowWaiverModal(false);
@@ -2051,17 +2051,17 @@ export default function PatientCareRecordScreen() {
                   <Text style={styles.signButtonText}>Confirm & Close</Text>
                 </TouchableOpacity>
               ) : (
-                <SignaturePad 
+                <SignaturePad
                   descriptionText="Please sign below:"
-                  onOK={(sig) => { 
-                    setFormData(prev => ({ ...prev, waiver_signature: sig, patient_signature: sig })); 
-                    setShowWaiverModal(false); 
-                  }} 
-                  onEmpty={() => {}} 
+                  onOK={(sig) => {
+                    setFormData(prev => ({ ...prev, waiver_signature: sig, patient_signature: sig }));
+                    setShowWaiverModal(false);
+                  }}
+                  onEmpty={() => { }}
                 />
               )}
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => {
                   setShowWaiverModal(false);
@@ -2088,15 +2088,15 @@ export default function PatientCareRecordScreen() {
                 </View>
                 <Text style={styles.modalTitle}>Witness Information</Text>
               </View>
-              
+
               <Text style={styles.label}>Name (Optional)</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="Witness Name / Relationship" 
-                value={formData.witness_name} 
-                onChangeText={(v) => setFormData({...formData, witness_name: v})} 
+              <TextInput
+                style={styles.input}
+                placeholder="Witness Name / Relationship"
+                value={formData.witness_name}
+                onChangeText={(v) => setFormData({ ...formData, witness_name: v })}
               />
-              
+
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <Text style={[styles.label, { marginTop: 0, marginRight: 8, marginBottom: 0 }]}>Date:</Text>
                 <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '600' }}>
@@ -2104,16 +2104,16 @@ export default function PatientCareRecordScreen() {
                 </Text>
               </View>
 
-              <SignaturePad 
+              <SignaturePad
                 descriptionText="Please sign below:"
-                onOK={(sig) => { 
-                  setFormData({...formData, witness_signature: sig}); 
-                  setShowWitnessModal(false); 
-                }} 
-                onEmpty={() => {}} 
+                onOK={(sig) => {
+                  setFormData({ ...formData, witness_signature: sig });
+                  setShowWitnessModal(false);
+                }}
+                onEmpty={() => { }}
               />
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => setShowWitnessModal(false)}
               >
@@ -2145,8 +2145,8 @@ export default function PatientCareRecordScreen() {
                     key={index}
                     style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}
                     onPress={() => {
-                      setFormData({...formData, chief_complaint: complaint});
-                      setErrors({...errors, chief_complaint: ''});
+                      setFormData({ ...formData, chief_complaint: complaint });
+                      setErrors({ ...errors, chief_complaint: '' });
                       setShowComplaintModal(false);
                       setComplaintSearch('');
                     }}
@@ -2179,7 +2179,7 @@ const styles = StyleSheet.create({
   stepContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20, gap: 8 },
   stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#cbd5e1' },
   stepActive: { backgroundColor: '#3b82f6', width: 24 },
-  
+
   // MODAL STYLES
   modalOverlay: {
     flex: 1,

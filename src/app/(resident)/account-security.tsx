@@ -365,32 +365,28 @@ export default function AccountSecurityScreen() {
               </Text>
               <View className="flex-row items-center">
                 <View
-                  className={`w-3.5 h-3.5 rounded-full items-center justify-center mr-2 ${
-                    isMinLength ? 'bg-emerald-500' : 'bg-slate-200'
-                  }`}
+                  className="w-3.5 h-3.5 rounded-full items-center justify-center mr-2"
+                  style={{ backgroundColor: isMinLength ? '#10B981' : '#E2E8F0' }}
                 >
                   <Text className="text-white text-[9px] font-bold">✓</Text>
                 </View>
                 <Text
-                  className={`text-xs ${
-                    isMinLength ? 'text-emerald-700 font-bold' : 'text-slate-400'
-                  }`}
+                  className="text-xs"
+                  style={{ color: isMinLength ? '#047857' : '#94A3B8', fontWeight: isMinLength ? '700' : '400' }}
                 >
                   Minimum 8 characters
                 </Text>
               </View>
               <View className="flex-row items-center">
                 <View
-                  className={`w-3.5 h-3.5 rounded-full items-center justify-center mr-2 ${
-                    isMatching ? 'bg-emerald-500' : 'bg-slate-200'
-                  }`}
+                  className="w-3.5 h-3.5 rounded-full items-center justify-center mr-2"
+                  style={{ backgroundColor: isMatching ? '#10B981' : '#E2E8F0' }}
                 >
                   <Text className="text-white text-[9px] font-bold">✓</Text>
                 </View>
                 <Text
-                  className={`text-xs ${
-                    isMatching ? 'text-emerald-700 font-bold' : 'text-slate-400'
-                  }`}
+                  className="text-xs"
+                  style={{ color: isMatching ? '#047857' : '#94A3B8', fontWeight: isMatching ? '700' : '400' }}
                 >
                   Passwords match
                 </Text>
@@ -400,11 +396,10 @@ export default function AccountSecurityScreen() {
             <TouchableOpacity
               onPress={handleChangePassword}
               disabled={isLoading || !isMinLength || !isMatching}
-              className={`py-3.5 rounded-2xl flex-row items-center justify-center ${
-                !isMinLength || !isMatching
-                  ? 'bg-slate-200'
-                  : 'bg-slate-900 shadow-md active:bg-slate-800'
-              }`}
+              className="py-3.5 rounded-2xl flex-row items-center justify-center"
+              style={{
+                backgroundColor: !isMinLength || !isMatching ? '#E2E8F0' : '#0F172A',
+              }}
               activeOpacity={0.8}
             >
               {isLoading ? (
@@ -413,9 +408,8 @@ export default function AccountSecurityScreen() {
                 <>
                   <Lock size={16} color={!isMinLength || !isMatching ? '#94A3B8' : '#FFFFFF'} />
                   <Text
-                    className={`font-bold text-sm ml-2 ${
-                      !isMinLength || !isMatching ? 'text-slate-400' : 'text-white'
-                    }`}
+                    className="font-bold text-sm ml-2"
+                    style={{ color: !isMinLength || !isMatching ? '#94A3B8' : '#FFFFFF' }}
                   >
                     Change Password
                   </Text>
@@ -427,7 +421,7 @@ export default function AccountSecurityScreen() {
           {/* Secure Logout Section */}
           <TouchableOpacity
             onPress={handleLogout}
-            className="bg-white border border-rose-200 py-3.5 px-5 rounded-2xl flex-row items-center justify-center active:bg-rose-50 mb-4"
+            className="bg-white border border-rose-200 py-3.5 px-5 rounded-2xl flex-row items-center justify-center mb-4"
             activeOpacity={0.8}
           >
             <LogOut size={17} color="#E11D48" />

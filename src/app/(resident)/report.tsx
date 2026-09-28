@@ -174,6 +174,7 @@ export default function ReportScreen() {
   const [dismissedRejectedId, setDismissedRejectedId] = useState<number | null>(null);
 
   const fetchIncidents = useCallback(async () => {
+    if (!user || user.role !== 'resident') return;
     try {
       const res = await getMyReports();
       const incidents = Array.isArray(res.data)

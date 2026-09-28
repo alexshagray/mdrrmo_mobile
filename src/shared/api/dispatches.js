@@ -1,5 +1,10 @@
 import apiClient from './client';
 
+export const getAvailableIncidents = async () => {
+  const response = await apiClient.get('/responder/incidents/available');
+  return response.data;
+};
+
 export const getActiveDispatches = async () => {
   const response = await apiClient.get('/responder/dispatches');
   return response.data;

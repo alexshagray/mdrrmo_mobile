@@ -8,9 +8,12 @@ import {
   Image,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import Toast from 'react-native-toast-message';
 import {
   User,
   HeartPulse,
@@ -23,21 +26,24 @@ import {
   ChevronRight,
   Shield,
   Edit3,
+  Camera,
   Mail,
   Smartphone,
   ShieldCheck,
 } from 'lucide-react-native';
 import { useAuth } from '@/shared/hooks';
 import { Avatar } from '@/shared/components';
-import { getResidentProfileApi } from '@/shared/api/residents';
+import { getResidentProfileApi, uploadResidentPhotoApi, deleteResidentPhotoApi } from '@/shared/api/residents';
 import { getMyReports } from '@/shared/api/incidents';
+import { resolveImageUrl } from '@/shared/utils/imageUrl';
 
 export default function ResidentProfileScreen() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
 
   const [profileData, setProfileData] = useState<any>(null);
   const [reportCount, setReportCount] = useState<number>(0);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -70,7 +76,119 @@ export default function ResidentProfileScreen() {
     : 'Resident Citizen';
   const email = currentUser?.email || 'resident@example.com';
   const phone = currentUser?.phone_number || currentUser?.phone || 'No phone registered';
-  const photoUrl = currentUser?.profile_photo_url;
+  const photoUrl = resolveImageUrl(currentUser?.profile_photo_url);
+
+  // Photo Upload & Delete Actions
+  const handleUploadPhoto = async (uri: string) => {
+    try {
+      setIsUploadingPhoto(true);
+      const filename = uri.split('/').pop() || 'photo.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      const formData = new FormData();
+      formData.append('photo', {
+        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+        name: filename,
+        type: type,
+      } as any);
+
+      await uploadResidentPhotoApi(formData);
+      await refreshUser?.();
+      await loadProfile();
+      Toast.show({
+        type: 'success',
+        text1: 'Photo Updated',
+        text2: 'Your profile photo has been updated successfully.',
+      });
+    } catch (err: any) {
+      console.error('Photo upload error:', err);
+      Alert.alert('Upload Failed', err?.response?.data?.message || 'Could not update profile photo.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Camera permission is required to take a profile photo.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        await handleUploadPhoto(result.assets[0].uri);
+      }
+    } catch (e) {
+      console.error('Camera error:', e);
+    }
+  };
+
+  const pickFromGallery = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Gallery permission is required to choose a profile photo.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        await handleUploadPhoto(result.assets[0].uri);
+      }
+    } catch (e) {
+      console.error('Gallery picker error:', e);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    Alert.alert('Remove Photo', 'Are you sure you want to remove your profile photo?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setIsUploadingPhoto(true);
+            await deleteResidentPhotoApi();
+            await refreshUser?.();
+            await loadProfile();
+            Toast.show({
+              type: 'success',
+              text1: 'Photo Removed',
+              text2: 'Your profile photo has been removed.',
+            });
+          } catch (e: any) {
+            Alert.alert('Error', 'Failed to remove profile photo.');
+          } finally {
+            setIsUploadingPhoto(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handlePhotoAction = () => {
+    const buttons: any[] = [
+      { text: 'Take Photo', onPress: takePhoto },
+      { text: 'Choose from Gallery', onPress: pickFromGallery },
+    ];
+    if (photoUrl) {
+      buttons.push({ text: 'Remove Photo', style: 'destructive', onPress: handleRemovePhoto });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+
+    Alert.alert('Change Profile Photo', 'Select an option to update your photo:', buttons);
+  };
 
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -127,9 +245,13 @@ export default function ResidentProfileScreen() {
             elevation: 3,
           }}
         >
-          {/* Profile Photo */}
+          {/* Profile Photo with Click-to-Change */}
           <View className="relative mb-3.5">
-            <View className="w-24 h-24 rounded-full bg-slate-100 border-2 border-white shadow-md items-center justify-center overflow-hidden">
+            <TouchableOpacity
+              onPress={handlePhotoAction}
+              activeOpacity={0.85}
+              className="w-24 h-24 rounded-full bg-slate-100 border-2 border-white shadow-md items-center justify-center overflow-hidden"
+            >
               {photoUrl ? (
                 <Image
                   source={{ uri: photoUrl }}
@@ -143,14 +265,21 @@ export default function ResidentProfileScreen() {
                   className="bg-indigo-600 text-white font-bold"
                 />
               )}
-            </View>
+
+              {/* Uploading Spinner */}
+              {isUploadingPhoto && (
+                <View className="absolute inset-0 bg-black/50 items-center justify-center">
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                </View>
+              )}
+            </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => router.push('/(resident)/personal-info')}
+              onPress={handlePhotoAction}
               className="absolute bottom-0 right-0 w-7 h-7 bg-slate-900 rounded-full border-2 border-white items-center justify-center shadow-sm"
               activeOpacity={0.8}
             >
-              <Edit3 size={13} color="#FFFFFF" />
+              <Camera size={13} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 

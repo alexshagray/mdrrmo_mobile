@@ -268,9 +268,8 @@ export default function PersonalInfoScreen() {
                   }}
                   placeholder="e.g. Juan"
                   placeholderTextColor="#94A3B8"
-                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm ${
-                    errors.firstName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600 focus:bg-white'
-                  }`}
+                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm ${errors.firstName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600 focus:bg-white'
+                    }`}
                 />
                 {errors.firstName && (
                   <Text className="text-rose-500 text-xs mt-1 ml-1">{errors.firstName}</Text>
@@ -302,9 +301,8 @@ export default function PersonalInfoScreen() {
                   }}
                   placeholder="e.g. Dela Cruz"
                   placeholderTextColor="#94A3B8"
-                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm ${
-                    errors.lastName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600 focus:bg-white'
-                  }`}
+                  className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm ${errors.lastName ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600 focus:bg-white'
+                    }`}
                 />
                 {errors.lastName && (
                   <Text className="text-rose-500 text-xs mt-1 ml-1">{errors.lastName}</Text>
@@ -323,9 +321,8 @@ export default function PersonalInfoScreen() {
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#94A3B8"
                     maxLength={10}
-                    className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm ${
-                      errors.birthdate ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600 focus:bg-white'
-                    }`}
+                    className={`bg-slate-50 border rounded-2xl px-4 py-3 text-slate-900 text-sm ${errors.birthdate ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600 focus:bg-white'
+                      }`}
                   />
                   {errors.birthdate && (
                     <Text className="text-rose-500 text-xs mt-1 ml-1">{errors.birthdate}</Text>
@@ -349,17 +346,15 @@ export default function PersonalInfoScreen() {
                     <TouchableOpacity
                       key={g}
                       onPress={() => setGender(g)}
-                      className={`flex-1 py-2.5 rounded-xl items-center border ${
-                        gender === g
+                      className={`flex-1 py-2.5 rounded-xl items-center border ${gender === g
                           ? 'bg-blue-50 border-blue-500'
                           : 'bg-slate-50 border-slate-200'
-                      }`}
+                        }`}
                       activeOpacity={0.7}
                     >
                       <Text
-                        className={`text-xs font-bold capitalize ${
-                          gender === g ? 'text-blue-700' : 'text-slate-600'
-                        }`}
+                        className={`text-xs font-bold capitalize ${gender === g ? 'text-blue-700' : 'text-slate-600'
+                          }`}
                       >
                         {g}
                       </Text>
@@ -451,17 +446,15 @@ export default function PersonalInfoScreen() {
                       <TouchableOpacity
                         key={b.id}
                         onPress={() => setBarangayId(b.id)}
-                        className={`px-3.5 py-2 rounded-xl border ${
-                          barangayId === b.id
+                        className={`px-3.5 py-2 rounded-xl border ${barangayId === b.id
                             ? 'bg-amber-50 border-amber-500'
                             : 'bg-slate-50 border-slate-200'
-                        }`}
+                          }`}
                         activeOpacity={0.7}
                       >
                         <Text
-                          className={`text-xs font-bold ${
-                            barangayId === b.id ? 'text-amber-800' : 'text-slate-600'
-                          }`}
+                          className={`text-xs font-bold ${barangayId === b.id ? 'text-amber-800' : 'text-slate-600'
+                            }`}
                         >
                           {b.barangay_name}
                         </Text>

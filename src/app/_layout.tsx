@@ -8,6 +8,7 @@ import '../../global.css';
 
 import { MissionAlarmProvider } from '@/shared/contexts/MissionAlarmContext';
 import { ResidentAlertProvider } from '@/shared/contexts/ResidentAlertContext';
+import Toast from 'react-native-toast-message';
 
 function RootLayoutNav() {
   const { user, role, isLoading, isAuthenticated } = useAuth();
@@ -27,7 +28,9 @@ function RootLayoutNav() {
       router.replace('/login');
     } else if (isAuthenticated) {
       // Redirect to appropriate app if authenticated
-      if (role === 'responder' && segments[0] !== '(responder)') {
+      if (role === 'responder' && user?.password_change_required && segments[0] !== 'force-change-password') {
+        router.replace('/force-change-password');
+      } else if (role === 'responder' && !user?.password_change_required && segments[0] !== '(responder)') {
         router.replace('/(responder)');
       } else if (role === 'resident' && segments[0] !== '(resident)') {
         router.replace('/(resident)');
@@ -36,7 +39,7 @@ function RootLayoutNav() {
           router.replace('/login');
       }
     }
-  }, [isAuthenticated, isLoading, role, segments]);
+  }, [isAuthenticated, isLoading, role, segments, user]);
 
   if (isLoading || !rootNavigationState?.key) {
     return <Loading fullScreen message="Restoring Session..." />;
@@ -52,10 +55,12 @@ function RootLayoutNav() {
           <Stack.Screen name="register" />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="reset-password" />
+          <Stack.Screen name="force-change-password" />
           <Stack.Screen name="(responder)" />
           <Stack.Screen name="(resident)" />
         </Stack>
       </ResidentAlertProvider>
+      <Toast />
     </MissionAlarmProvider>
   );
 }

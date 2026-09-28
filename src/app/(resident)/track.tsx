@@ -458,6 +458,7 @@ export default function TrackScreen() {
 
   // Fetch Incident Reports
   const fetchIncidents = useCallback(async () => {
+    if (!user || user.role !== 'resident') return;
     try {
       const res = await getMyReports();
       const incidents = Array.isArray(res.data) ? res.data : Array.isArray(res) ? res : [];

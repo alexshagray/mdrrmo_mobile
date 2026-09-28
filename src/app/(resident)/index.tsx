@@ -133,6 +133,11 @@ export default function HomeScreen() {
   const [activeGuide, setActiveGuide] = useState<DisasterGuide | null>(null);
 
   const fetchIncidents = useCallback(async () => {
+    if (!user || user.role !== 'resident') {
+      setLoadingReports(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const res = await getMyReports();
       const incidents = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);

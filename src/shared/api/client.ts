@@ -35,6 +35,19 @@ apiClient.interceptors.response.use(
   async (error) => {
     const status = error.response ? error.response.status : null;
     
+    if (status === 422) {
+      const isLocationPing = error.config?.url?.includes('/location');
+      if (!isLocationPing) {
+        console.warn(
+          '[API 422 Validation Error]',
+          error.config?.method?.toUpperCase(),
+          error.config?.url,
+          '\nData:',
+          JSON.stringify(error.response?.data, null, 2)
+        );
+      }
+    }
+    
     if (status === 401) {
       // Unauthorized: token expired or invalid
       await clearSession();
