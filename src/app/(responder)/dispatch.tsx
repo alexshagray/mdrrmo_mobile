@@ -182,6 +182,15 @@ export default function DispatchScreen() {
     fetchDispatch();
   }, [missionRefreshTrigger, fetchDispatch]);
 
+  // Periodic polling fallback
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDispatch();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [fetchDispatch]);
+
   // Track User Location for the custom puck
   useEffect(() => {
     let locationSub: Location.LocationSubscription | null = null;

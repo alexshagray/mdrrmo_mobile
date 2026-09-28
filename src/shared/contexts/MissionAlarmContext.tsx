@@ -7,6 +7,7 @@ import { AlertTriangle, X, MapPin, Activity } from 'lucide-react-native';
 import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { updatePushTokenApi } from '../api/auth';
+import { getActiveDispatches } from '../api/dispatches';
 import { useAuth } from '../auth/authContext';
 import { useRealtime } from '../hooks/useRealtime';
 
@@ -52,6 +53,54 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
   // Deduplication tracker: prevent repeated alerts for the same verified incident
   const notifiedIncidentIds = useRef<Set<number>>(new Set());
+  // Dismissed tracker: prevent re-alerting for the same mission once acknowledged
+  const dismissedMissionIds = useRef<Set<number>>(new Set());
+
+  // Periodic heartbeat to automatically detect new missions without requiring scroll/refresh
+  useEffect(() => {
+    if (!isAuthenticated || user?.role !== 'responder') return;
+
+    let isMounted = true;
+
+    const checkActiveMissions = async () => {
+      try {
+        const res = await getActiveDispatches();
+        if (!isMounted) return;
+        const activeList = (res?.data || []).filter((item: any) => 
+          !['completed', 'cancelled'].includes(item.dispatch_status)
+        );
+
+        if (activeList.length > 0) {
+          const latest = activeList[0];
+          // If status is assigned and not dismissed yet, auto-trigger the mission alarm & modal!
+          if (latest.dispatch_status === 'assigned' && !dismissedMissionIds.current.has(latest.id)) {
+            setIncomingMission((prev: any) => {
+              if (prev && (prev.dispatch_id === latest.id || prev.dispatch?.id === latest.id)) {
+                return prev;
+              }
+              return {
+                dispatch_id: latest.id,
+                dispatch: latest,
+                type: 'new_mission',
+              };
+            });
+            setMissionRefreshTrigger(prev => prev + 1);
+          }
+        }
+      } catch (err) {
+        // Silently ignore network blips
+      }
+    };
+
+    // Run initial check and then poll every 5 seconds
+    checkActiveMissions();
+    const interval = setInterval(checkActiveMissions, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, user?.role, user?.id]);
 
   // Light notification handler for newly verified incidents (noticeable, gentle, not aggressive emergency alarm)
   const handleVerifiedIncidentNotification = (data: any) => {
@@ -182,13 +231,29 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
     const handleMissionEvent = (e: any) => {
       console.log('Realtime dispatch event received on responder channel:', e);
-      const dispatchId = e.dispatch?.id || e.id;
-      setIncomingMission({
-        dispatch_id: dispatchId,
-        dispatch: e.dispatch,
-        type: 'new_mission',
-      });
-      setMissionRefreshTrigger(prev => prev + 1);
+      const d = e.dispatch || e;
+      const dispatchId = d?.id || e.dispatch_id;
+      
+      const crewUsers = d?.crew || [];
+      const crewIds = crewUsers.map((c: any) => c.id || c.user_id);
+      const userTeam = user?.responder_profile?.team || user?.team;
+      const isForUser = 
+        !user?.id ||
+        d?.driver_id === user.id ||
+        d?.emt_id === user.id ||
+        crewIds.includes(user.id) ||
+        (userTeam && d?.team && String(d.team).toLowerCase() === String(userTeam).toLowerCase());
+
+      if (isForUser && dispatchId) {
+        if (!dismissedMissionIds.current.has(dispatchId)) {
+          setIncomingMission({
+            dispatch_id: dispatchId,
+            dispatch: d,
+            type: 'new_mission',
+          });
+        }
+        setMissionRefreshTrigger(prev => prev + 1);
+      }
     };
 
     const handleStatusEvent = (e: any) => {
@@ -221,6 +286,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     }
 
     if (respondersChannel) {
+      respondersChannel.listen('DispatchCreated', handleMissionEvent);
+      respondersChannel.listen('.DispatchCreated', handleMissionEvent);
       respondersChannel.listen('IncidentVerified', handleVerifiedEvent);
       respondersChannel.listen('.IncidentVerified', handleVerifiedEvent);
     }
@@ -235,6 +302,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         userChannel.stopListening('.IncidentVerified');
       }
       if (respondersChannel) {
+        respondersChannel.stopListening('DispatchCreated');
+        respondersChannel.stopListening('.DispatchCreated');
         respondersChannel.stopListening('IncidentVerified');
         respondersChannel.stopListening('.IncidentVerified');
       }
@@ -312,6 +381,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         }
       } catch (e) {}
       setSound(null);
+    }
+    if (incomingMission?.dispatch_id) {
+      dismissedMissionIds.current.add(incomingMission.dispatch_id);
+    }
+    if (incomingMission?.dispatch?.id) {
+      dismissedMissionIds.current.add(incomingMission.dispatch.id);
     }
     setIncomingMission(null);
   };

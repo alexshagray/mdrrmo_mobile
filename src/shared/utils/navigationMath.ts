@@ -88,14 +88,50 @@ export const projectPointOnSegment = (
 };
 
 /**
+ * Calculates the exact minimum perpendicular distance from a location to any segment along the route.
+ */
+export const getMinDistanceToRoute = (
+  currentLocation: LatLng,
+  routeCoordinates: LatLng[]
+): { minDistance: number; nearestSegmentIndex: number; nearestPoint: LatLng } => {
+  if (routeCoordinates.length < 2) {
+    if (routeCoordinates.length === 1) {
+      const dist = getDistance(
+        currentLocation.latitude,
+        currentLocation.longitude,
+        routeCoordinates[0].latitude,
+        routeCoordinates[0].longitude
+      );
+      return { minDistance: dist, nearestSegmentIndex: 0, nearestPoint: routeCoordinates[0] };
+    }
+    return { minDistance: Infinity, nearestSegmentIndex: -1, nearestPoint: currentLocation };
+  }
+
+  let minDistance = Infinity;
+  let nearestSegmentIndex = 0;
+  let nearestPoint: LatLng = routeCoordinates[0];
+
+  for (let i = 0; i < routeCoordinates.length - 1; i++) {
+    const proj = projectPointOnSegment(currentLocation, routeCoordinates[i], routeCoordinates[i + 1]);
+    if (proj.distance < minDistance) {
+      minDistance = proj.distance;
+      nearestSegmentIndex = i;
+      nearestPoint = proj.point;
+    }
+  }
+
+  return { minDistance, nearestSegmentIndex, nearestPoint };
+};
+
+/**
  * Finds the nearest road segment on the route ahead of the responder.
- * Uses a forward-looking window so that the route doesn't snap backwards to already completed segments.
+ * Searches with full route coverage for accurate off-route tracking.
  */
 export const findNearestRoadSegment = (
   currentLocation: LatLng,
   routeCoordinates: LatLng[],
   startIndex: number = 0,
-  lookAheadCount: number = 15
+  lookAheadCount: number = 0
 ): {
   segmentIndex: number;
   snappedPoint: LatLng;
@@ -105,7 +141,9 @@ export const findNearestRoadSegment = (
   if (routeCoordinates.length < 2) return null;
 
   const start = Math.max(0, Math.min(startIndex, routeCoordinates.length - 2));
-  const end = Math.min(routeCoordinates.length - 1, start + lookAheadCount);
+  const end = lookAheadCount > 0
+    ? Math.min(routeCoordinates.length - 1, start + lookAheadCount)
+    : routeCoordinates.length - 1;
 
   let bestDist = Infinity;
   let bestIndex = start;
@@ -142,7 +180,7 @@ export const trimRouteProgress = (
   routeCoordinates: LatLng[],
   currentLocation: LatLng,
   lastSegmentIndex: number = 0,
-  snapThresholdMeters: number = 30
+  snapThresholdMeters: number = 25
 ): {
   remainingRoute: LatLng[];
   displayLocation: LatLng;
@@ -163,50 +201,43 @@ export const trimRouteProgress = (
   }
 
   if (routeCoordinates.length === 1) {
+    const dist = getDistance(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      routeCoordinates[0].latitude,
+      routeCoordinates[0].longitude
+    );
     return {
       remainingRoute: routeCoordinates,
       displayLocation: currentLocation,
       segmentIndex: 0,
-      crossTrackDistance: getDistance(
-        currentLocation.latitude,
-        currentLocation.longitude,
-        routeCoordinates[0].latitude,
-        routeCoordinates[0].longitude
-      ),
-      isSnapped: false,
+      crossTrackDistance: dist,
+      isSnapped: dist <= snapThresholdMeters,
       segmentBearing: 0,
     };
   }
 
-  const match = findNearestRoadSegment(currentLocation, routeCoordinates, lastSegmentIndex, 20);
+  const { minDistance, nearestSegmentIndex, nearestPoint } = getMinDistanceToRoute(currentLocation, routeCoordinates);
 
-  if (!match) {
-    return {
-      remainingRoute: routeCoordinates,
-      displayLocation: currentLocation,
-      segmentIndex: lastSegmentIndex,
-      crossTrackDistance: 0,
-      isSnapped: false,
-      segmentBearing: 0,
-    };
-  }
-
-  const isSnapped = match.crossTrackDistance <= snapThresholdMeters;
+  const isSnapped = minDistance <= snapThresholdMeters;
   // If within snap threshold, map-match the displayed location to the road
-  const displayLocation = isSnapped ? match.snappedPoint : currentLocation;
+  const displayLocation = isSnapped ? nearestPoint : currentLocation;
 
-  // Build remaining forward route: starts at vehicle's location/snapped position, followed by subsequent road vertices
-  const remainingRoute: LatLng[] = [
-    displayLocation,
-    ...routeCoordinates.slice(match.segmentIndex + 1),
-  ];
+  const p1 = routeCoordinates[nearestSegmentIndex];
+  const p2 = routeCoordinates[nearestSegmentIndex + 1] || p1;
+  const segmentBearing = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+
+  // Build remaining forward route: if snapped, starts at snapped point and continues forward
+  const remainingRoute: LatLng[] = isSnapped
+    ? [displayLocation, ...routeCoordinates.slice(nearestSegmentIndex + 1)]
+    : routeCoordinates;
 
   return {
     remainingRoute,
     displayLocation,
-    segmentIndex: match.segmentIndex,
-    crossTrackDistance: match.crossTrackDistance,
+    segmentIndex: nearestSegmentIndex,
+    crossTrackDistance: minDistance,
     isSnapped,
-    segmentBearing: match.segmentBearing,
+    segmentBearing,
   };
 };

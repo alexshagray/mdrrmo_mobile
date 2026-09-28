@@ -45,7 +45,7 @@ export default function ForceChangePasswordScreen() {
     setErrors({});
 
     try {
-      await apiClient.put('/api/responder/profile/password', {
+      await apiClient.put('/responder/profile/password', {
         current_password: currentPassword,
         password: password,
         password_confirmation: passwordConfirmation,
@@ -58,6 +58,7 @@ export default function ForceChangePasswordScreen() {
       });
       
       await refreshUser(); // This will refresh the user and `password_change_required` should become false
+      router.replace('/(responder)');
     } catch (err: any) {
       const serverMsg =
         err?.response?.data?.message ||

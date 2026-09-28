@@ -5,7 +5,7 @@ import { useRouter as useExpoRouter, useLocalSearchParams as useExpoSearchParams
 import * as Location from 'expo-location';
 import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
-import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle } from 'lucide-react-native';
+import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { useLiveDispatchTracking } from '@/shared/hooks';
 import { updateDispatchStatus, reportUnfoundedDispatch } from '@/shared/api/dispatches';
 import {
@@ -157,6 +157,7 @@ export default function NavigationScreen() {
         const result = await fetchRoadRoute(startLat, startLng, destLat, destLng, controller.signal);
 
         if (result && result.coordinates.length >= 2) {
+          activeRouteRef.current = result.coordinates;
           setRouteCoords(result.coordinates);
           setRouteInfo({
             distance: result.distanceFormatted,
@@ -269,16 +270,16 @@ export default function NavigationScreen() {
             const currentActiveRoute = activeRouteRef.current;
 
             if (currentActiveRoute.length >= 2) {
-              // Project onto active road route
-              const trimResult = trimRouteProgress(currentActiveRoute, currentRaw, 0, 32);
+              // Project onto active road route with 25m road snap threshold
+              const trimResult = trimRouteProgress(currentActiveRoute, currentRaw, 0, 25);
 
               if (trimResult.isSnapped) {
                 // Snapped cleanly to road segment:
-                // Update displayed location on the road
                 setDisplayedLocation(trimResult.displayLocation);
 
-                // Dynamically remove completed road segment behind responder
+                // Dynamically update active road route behind responder
                 setRouteCoords(trimResult.remainingRoute);
+                activeRouteRef.current = trimResult.remainingRoute;
                 deviationCounterRef.current = 0;
 
                 // Dynamically calculate remaining road distance along the active remaining path
@@ -300,22 +301,21 @@ export default function NavigationScreen() {
                   });
                 }
               } else {
-                // Not snapped (e.g. GPS drifted or user took another street):
+                // Not snapped (vehicle took another street or deviated from path):
                 setDisplayedLocation(currentRaw);
 
                 // 3. INTELLIGENT AUTOMATIC REROUTING
-                const deviationThreshold = Math.max(38, currentAccuracy + 12);
+                // If responder is > 25 meters away from the route, they are off-route
+                const isOffRoute = trimResult.crossTrackDistance > 25;
                 const now = Date.now();
+                const canRecalculate = (now - lastRecalcTimeRef.current > 3500) && !isCalculatingRef.current;
 
-                if (
-                  trimResult.crossTrackDistance > deviationThreshold &&
-                  currentSpeed > 0.8 &&
-                  now - lastRecalcTimeRef.current > 6000
-                ) {
+                if (isOffRoute) {
                   deviationCounterRef.current += 1;
 
-                  if (deviationCounterRef.current >= 2) {
-                    console.log('Vehicle deviated from route, recalculating fresh road path...');
+                  // Trigger recalculation if off-route for 2 GPS fixes (>25m) OR immediately if far off (>40m)
+                  if ((deviationCounterRef.current >= 2 || trimResult.crossTrackDistance > 40) && canRecalculate) {
+                    console.log(`[Navigation] Off-route by ${Math.round(trimResult.crossTrackDistance)}m. Recalculating fresh road path...`);
                     lastRecalcTimeRef.current = now;
                     deviationCounterRef.current = 0;
                     calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
@@ -326,6 +326,10 @@ export default function NavigationScreen() {
               }
             } else {
               setDisplayedLocation(currentRaw);
+              if (!isCalculatingRef.current && (Date.now() - lastRecalcTimeRef.current > 3500)) {
+                lastRecalcTimeRef.current = Date.now();
+                calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
+              }
             }
 
             // 4. CAMERA FOLLOWING (FPV MODE)
@@ -488,6 +492,24 @@ export default function NavigationScreen() {
         {/* Bottom Panel */}
         <View className="px-4 mb-4 flex-col items-end" pointerEvents="box-none">
           <View className="flex-col items-center mb-6 space-y-4" pointerEvents="box-none">
+            {/* Manual Recalculate Route Button */}
+            <TouchableOpacity
+              onPress={() => {
+                if (displayedLocation && !isCalculating) {
+                  lastRecalcTimeRef.current = Date.now();
+                  calculateRoute(displayedLocation.latitude, displayedLocation.longitude, destination.latitude, destination.longitude);
+                }
+              }}
+              disabled={isCalculating}
+              className="w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto mb-3 bg-slate-900/90 border-slate-700/50"
+            >
+              {isCalculating ? (
+                <ActivityIndicator size="small" color="#34d399" />
+              ) : (
+                <RefreshCw size={22} color="#34d399" />
+              )}
+            </TouchableOpacity>
+
             {/* Overview Map Button */}
             <TouchableOpacity
               onPress={handleOverview}

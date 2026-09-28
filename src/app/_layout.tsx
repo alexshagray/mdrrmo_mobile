@@ -28,9 +28,9 @@ function RootLayoutNav() {
       router.replace('/login');
     } else if (isAuthenticated) {
       // Redirect to appropriate app if authenticated
-      if (role === 'responder' && user?.password_change_required && segments[0] !== 'force-change-password') {
-        router.replace('/force-change-password');
-      } else if (role === 'responder' && !user?.password_change_required && segments[0] !== '(responder)') {
+      if (role === 'responder' && (user?.password_change_required || user?.password_change_required === 1) && (segments[0] as string) !== 'force-change-password') {
+        router.replace('/force-change-password' as any);
+      } else if (role === 'responder' && !(user?.password_change_required || user?.password_change_required === 1) && segments[0] !== '(responder)') {
         router.replace('/(responder)');
       } else if (role === 'resident' && segments[0] !== '(resident)') {
         router.replace('/(resident)');

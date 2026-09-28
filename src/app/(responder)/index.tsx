@@ -18,6 +18,7 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const { missionRefreshTrigger, verifiedIncidentsTrigger, latestVerifiedIncident, clearVerifiedNotification } = useMissionAlarm();
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
+  const [todayStats, setTodayStats] = useState({ completed_missions: 0, patients_assisted: 0 });
   const [availableIncidents, setAvailableIncidents] = useState<any[]>([]);
   const [selectedVerifiedIncident, setSelectedVerifiedIncident] = useState<any | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -26,6 +27,12 @@ export default function DashboardScreen() {
   const fetchDispatches = async () => {
     try {
       const res = await getActiveDispatches();
+      if (res?.today_stats) {
+        setTodayStats({
+          completed_missions: Number(res.today_stats.completed_missions || 0),
+          patients_assisted: Number(res.today_stats.patients_assisted || 0),
+        });
+      }
       const activeList = (res.data || []).filter((item: any) => 
         !['completed', 'cancelled'].includes(item.dispatch_status)
       );
@@ -105,6 +112,16 @@ export default function DashboardScreen() {
     fetchAvailableIncidents();
     fetchCrew();
   }, [missionRefreshTrigger, verifiedIncidentsTrigger]);
+
+  // Automatic real-time polling so missions appear instantly without needing to pull down or scroll
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDispatches();
+      fetchAvailableIncidents();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -236,7 +253,10 @@ export default function DashboardScreen() {
             Today's Activity
           </Text>
         </View>
-        <DispatchSummaryCard />
+        <DispatchSummaryCard
+          completedMissions={todayStats.completed_missions}
+          patientsAssisted={todayStats.patients_assisted}
+        />
 
         {/* Crew Roster */}
         <CrewCard

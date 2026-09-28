@@ -2,7 +2,15 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { CheckCircle2, Users } from 'lucide-react-native';
 
-export function DispatchSummaryCard() {
+interface DispatchSummaryCardProps {
+  completedMissions?: number;
+  patientsAssisted?: number;
+}
+
+export function DispatchSummaryCard({
+  completedMissions = 0,
+  patientsAssisted = 0,
+}: DispatchSummaryCardProps) {
   return (
     <View className="flex-row gap-3 mb-6">
       {/* Completed Dispatches Card */}
@@ -24,7 +32,7 @@ export function DispatchSummaryCard() {
             TODAY
           </Text>
         </View>
-        <Text className="text-3xl font-black text-slate-900 tracking-tight">4</Text>
+        <Text className="text-3xl font-black text-slate-900 tracking-tight">{completedMissions}</Text>
         <Text className="text-slate-400 text-[11px] font-bold uppercase tracking-wider mt-0.5">
           Completed Missions
         </Text>
@@ -49,7 +57,7 @@ export function DispatchSummaryCard() {
             SERVED
           </Text>
         </View>
-        <Text className="text-3xl font-black text-slate-900 tracking-tight">12</Text>
+        <Text className="text-3xl font-black text-slate-900 tracking-tight">{patientsAssisted}</Text>
         <Text className="text-slate-400 text-[11px] font-bold uppercase tracking-wider mt-0.5">
           Patients Assisted
         </Text>
@@ -57,3 +65,4 @@ export function DispatchSummaryCard() {
     </View>
   );
 }
+
