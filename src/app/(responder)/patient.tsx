@@ -252,6 +252,7 @@ export default function PatientCareRecordScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isWalkIn, setIsWalkIn] = useState(false);
   const [walkInCoords, setWalkInCoords] = useState<{ latitude: number, longitude: number, address: string } | null>(null);
+  const cachedWalkInLocRef = useRef<{ latitude: number, longitude: number } | null>(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [complaintSearch, setComplaintSearch] = useState('');
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
@@ -569,35 +570,86 @@ export default function PatientCareRecordScreen() {
     }
   };
 
+  const handleOpenWalkInModal = () => {
+    setShowWalkInModal(true);
+    // Background pre-fetch position while user is viewing the confirmation modal
+    Location.getLastKnownPositionAsync({})
+      .then(pos => {
+        if (pos?.coords) {
+          cachedWalkInLocRef.current = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          };
+        }
+      })
+      .catch(() => {});
+  };
+
   const handleConfirmWalkIn = async () => {
     setIsCreatingWalkIn(true);
     try {
-      // 1. Request location permission
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      let coords = { latitude: 0, longitude: 0 };
+      let coords = cachedWalkInLocRef.current || { latitude: 0, longitude: 0 };
       let addressStr = '';
 
-      if (status === 'granted') {
-        // 2. Get GPS Location
-        const location = await Location.getCurrentPositionAsync({});
-        coords.latitude = location.coords.latitude;
-        coords.longitude = location.coords.longitude;
-        addressStr = await resolveAddressFromCoords(coords.latitude, coords.longitude);
+      if (coords.latitude === 0 && coords.longitude === 0) {
+        try {
+          const { status } = await Location.getForegroundPermissionsAsync();
+          let hasPerm = status === 'granted';
+          if (!hasPerm) {
+            const req = await Location.requestForegroundPermissionsAsync();
+            hasPerm = req.status === 'granted';
+          }
+
+          if (hasPerm) {
+            // 1. Try fast last known position (instant - 5ms)
+            const lastKnown = await Location.getLastKnownPositionAsync({});
+            if (lastKnown?.coords && (lastKnown.coords.latitude !== 0 || lastKnown.coords.longitude !== 0)) {
+              coords = {
+                latitude: lastKnown.coords.latitude,
+                longitude: lastKnown.coords.longitude,
+              };
+            } else {
+              // 2. Fast balanced position with max 1.5s timeout race
+              const loc = await Promise.race([
+                Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+              ]);
+              if (loc?.coords) {
+                coords = {
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                };
+              }
+            }
+          }
+        } catch (locErr) {
+          console.log('Fast location check error:', locErr);
+        }
       }
 
-      // 3. Real readable place of incident where responder followed the family/citizen
-      const realLocationName = addressStr && addressStr.trim()
-        ? addressStr
-        : 'Incident Scene, Opol, Misamis Oriental';
+      // Fast address resolution check (max 800ms) or default to standard scene
+      let realLocationName = 'Incident Scene, Opol, Misamis Oriental';
+      if (coords.latitude && coords.longitude) {
+        try {
+          const fastGeocode = await Promise.race([
+            resolveAddressFromCoords(coords.latitude, coords.longitude),
+            new Promise<string>((resolve) => setTimeout(() => resolve(''), 800)),
+          ]);
+          if (fastGeocode && fastGeocode.trim()) {
+            realLocationName = fastGeocode;
+            addressStr = fastGeocode;
+          }
+        } catch {}
+      }
 
-      // Call API with coords AND real resolved address
+      // Call API immediately
       const res = await createWalkInDispatch({
         latitude: coords.latitude,
         longitude: coords.longitude,
         place_of_incident: realLocationName,
       });
 
-      // 4. Update state
+      // Update state instantly so user can start filling out PCR
       setActiveDispatch(res.data);
       setIsWalkIn(true);
       setWalkInCoords({ ...coords, address: realLocationName });
@@ -611,6 +663,16 @@ export default function PatientCareRecordScreen() {
       }));
       setShowWalkInModal(false);
       setStep(1);
+
+      // In background: If address was default generic, refine it asynchronously
+      if (!addressStr && coords.latitude && coords.longitude) {
+        resolveAddressFromCoords(coords.latitude, coords.longitude).then((bgAddress) => {
+          if (bgAddress && bgAddress.trim() && !bgAddress.includes('Opol, Misamis Oriental')) {
+            setFormData(prev => ({ ...prev, place_of_incident: bgAddress }));
+            setWalkInCoords(prev => prev ? { ...prev, address: bgAddress } : { latitude: coords.latitude, longitude: coords.longitude, address: bgAddress });
+          }
+        }).catch(() => {});
+      }
     } catch (error: any) {
       console.log('Error creating walk-in dispatch:', error);
       const errMsg = error?.response?.data?.message || 'Failed to create Walk-In PCR.';
@@ -1711,7 +1773,7 @@ export default function PatientCareRecordScreen() {
 
             <Button
               title="Create Walk-In PCR"
-              onPress={() => setShowWalkInModal(true)}
+              onPress={handleOpenWalkInModal}
               style={{ width: '100%', backgroundColor: '#e11d48' }}
             />
           </View>
