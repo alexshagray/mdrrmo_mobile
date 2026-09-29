@@ -10,6 +10,7 @@ import { updatePushTokenApi } from '../api/auth';
 import { getActiveDispatches } from '../api/dispatches';
 import { useAuth } from '../auth/authContext';
 import { useRealtime } from '../hooks/useRealtime';
+import { notificationService } from '../services/notificationService';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -55,6 +56,11 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   const notifiedIncidentIds = useRef<Set<number>>(new Set());
   // Dismissed tracker: prevent re-alerting for the same mission once acknowledged
   const dismissedMissionIds = useRef<Set<number>>(new Set());
+
+  // Setup Android notification channels on mount (mission_alarm channel plays alarm.mp3)
+  useEffect(() => {
+    notificationService.setupNotificationChannels();
+  }, []);
 
   // Periodic heartbeat to automatically detect new missions without requiring scroll/refresh
   useEffect(() => {

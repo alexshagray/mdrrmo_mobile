@@ -12,19 +12,44 @@ Notifications.setNotificationHandler({
 
 class NotificationService {
   /**
+   * Setup Android notification channels.
+   * MISSION_ALARM channel uses the custom alarm.mp3 sound so Android plays it
+   * automatically when a push notification arrives - even when app is backgrounded.
+   */
+  async setupNotificationChannels() {
+    if (Platform.OS !== 'android') return;
+
+    // Default channel for regular notifications
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'General Notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#208AEF',
+    });
+
+    // HIGH-PRIORITY mission alarm channel with custom alarm sound
+    // Android OS plays this sound automatically even when app is in background!
+    await Notifications.setNotificationChannelAsync('mission_alarm', {
+      name: 'Mission Alarm',
+      description: 'Emergency mission alerts with alarm sound',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'alarm.mp3',           // Must match filename in assets/sounds/
+      vibrationPattern: [0, 600, 300, 600, 300, 1000],
+      lightColor: '#EF4444',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      bypassDnd: true,              // Bypass Do Not Disturb for emergencies
+      enableVibrate: true,
+    });
+  }
+
+  /**
    * Request permissions and retrieve Expo Push Token
    */
   async registerForPushNotificationsAsync() {
     let token;
 
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
+    // Setup channels first
+    await this.setupNotificationChannels();
 
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -40,7 +65,6 @@ class NotificationService {
     }
 
     try {
-      // In a real app, you would pass your Expo project ID here
       token = (await Notifications.getExpoPushTokenAsync()).data;
       console.log('Expo Push Token:', token);
     } catch (e) {
