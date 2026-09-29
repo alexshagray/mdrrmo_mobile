@@ -46,7 +46,15 @@
           "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "sk.eyJ1IjoiaGFlbGVlaGVhdGhlciIsImEiOiJjbXJlZ29wMmkwMGFxMndzYTBic3ZvbWduIn0.TzpJckwAyTrhtb4la9pC1g"
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/alarm.mp3"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
