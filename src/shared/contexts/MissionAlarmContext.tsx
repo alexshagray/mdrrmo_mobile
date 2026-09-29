@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Vibration } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Vibration, AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
@@ -321,12 +321,11 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           // Vibrate phone continuously in emergency pulse pattern
           Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
 
-          // Set audio mode to ensure alarm plays in BOTH foreground and background,
-          // and overrides silent mode on Android/iOS
+          // Set audio mode to ensure alarm plays in foreground and overrides silent mode
           await setAudioModeAsync({
             playsInSilentMode: true,
-            shouldPlayInBackground: true,
-            staysActiveInBackground: true,
+            shouldPlayInBackground: false,
+            staysActiveInBackground: false,
           });
 
           if (!isCancelled) {
@@ -398,6 +397,24 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     }
     setIncomingMission(null);
   };
+
+  // Stop alarm when user backgrounds the app (goes to Facebook, etc.)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // Stop audio but keep the incomingMission state so alarm re-triggers when they return
+        Vibration.cancel();
+        if (sound) {
+          try {
+            sound.pause();
+          } catch (e) {}
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [sound]);
 
   const handleOpenMission = () => {
     clearMission();
