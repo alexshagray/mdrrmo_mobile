@@ -321,20 +321,28 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           // Vibrate phone continuously in emergency pulse pattern
           Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
 
+          // Set audio mode to ensure alarm plays in BOTH foreground and background,
+          // and overrides silent mode on Android/iOS
           await setAudioModeAsync({
             playsInSilentMode: true,
             shouldPlayInBackground: true,
+            staysActiveInBackground: true,
           });
 
           if (!isCancelled) {
-            const player = createAudioPlayer(
-              require('../../../assets/sounds/alarm.mp3'),
-            );
-            player.loop = true;
-            player.volume = 1.0;
-            player.play();
-            activePlayer = player;
-            setSound(player);
+            // Small delay to let audio session settle before playing
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            if (!isCancelled) {
+              const player = createAudioPlayer(
+                require('../../../assets/sounds/alarm.mp3'),
+              );
+              player.loop = true;
+              player.volume = 1.0;
+              player.play();
+              activePlayer = player;
+              setSound(player);
+            }
           }
         } catch (e) {
           console.log('Error playing alarm:', e);
