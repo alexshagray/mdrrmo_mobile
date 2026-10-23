@@ -31,7 +31,7 @@ export function EmergencyButton({
         marginHorizontal: 16,
         marginVertical: 10,
         borderRadius: 28,
-        shadowColor: '#E11D48',
+        shadowColor: '#FF3B30',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.35,
         shadowRadius: 18,
@@ -49,7 +49,7 @@ export function EmergencyButton({
         }}
       >
         <LinearGradient
-          colors={['#E11D48', '#BE123C', '#9F1239']}
+          colors={['#FF3B30', '#E62E24', '#CC2219']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{

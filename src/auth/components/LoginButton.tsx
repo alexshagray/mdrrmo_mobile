@@ -14,9 +14,9 @@ export function LoginButton({ title = "Sign In", onPress, isLoading }: LoginButt
       onPress={onPress}
       disabled={isLoading}
       activeOpacity={0.8}
-      className={`w-full rounded-2xl overflow-hidden shadow-lg shadow-blue-500/30 ${isLoading ? 'opacity-80' : ''}`}
+      className={`w-full rounded-2xl overflow-hidden shadow-lg shadow-blue-500/25 ${isLoading ? 'opacity-80' : ''}`}
     >
-      <View className="bg-blue-600 py-4 flex-row justify-center items-center">
+      <View className="bg-[#208AEF] py-4 flex-row justify-center items-center">
         {isLoading ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (

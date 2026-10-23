@@ -11,7 +11,7 @@ export function ForgotPasswordLink({ onPress }: ForgotPasswordLinkProps) {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text className="text-blue-600 text-sm font-bold">Forgot Password?</Text>
+      <Text className="text-[#208AEF] text-sm font-bold">Forgot Password?</Text>
     </TouchableOpacity>
   );
 }

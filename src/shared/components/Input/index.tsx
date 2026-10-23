@@ -40,7 +40,7 @@ export function Input({
     if (!icon) return null;
     if (React.isValidElement(icon)) {
       return React.cloneElement(icon as React.ReactElement<any>, {
-        color: error ? '#EF4444' : isFocused ? '#3B82F6' : '#94A3B8',
+        color: error ? '#EF4444' : isFocused ? '#208AEF' : '#94A3B8',
         size: 20
       });
     }
@@ -50,15 +50,15 @@ export function Input({
   return (
     <View className="mb-5" style={containerStyle}>
       {label && (
-        <Text className="text-slate-700 text-sm font-medium mb-2 ml-1">
+        <Text className="text-slate-800 text-sm font-semibold mb-2 ml-1">
           {label}
         </Text>
       )}
       
       <View 
-        className={`flex-row items-center bg-slate-50 rounded-2xl px-4 py-3 border transition-colors ${
-          error ? 'border-red-500 bg-red-50/30' :
-          isFocused ? 'border-blue-500 bg-blue-50/30' : 'border-slate-200'
+        className={`flex-row items-center bg-white rounded-2xl px-4 py-3.5 border ${
+          error ? 'border-[#EF4444] bg-red-50/20' :
+          isFocused ? 'border-[#208AEF] bg-blue-50/20' : 'border-slate-200/90'
         }`}
       >
         {renderIcon()}

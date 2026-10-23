@@ -137,7 +137,7 @@ export function LoginScreen({ config }: LoginScreenProps) {
           <View className="mt-8 flex-row justify-center items-center">
             <Text className="text-slate-500">Don't have an account? </Text>
             <Text 
-              className="text-blue-600 font-bold" 
+              className="text-[#208AEF] font-bold" 
               onPress={() => router.push('/register')}
             >
               Sign Up
