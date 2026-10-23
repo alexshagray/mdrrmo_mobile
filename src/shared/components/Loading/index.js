@@ -1,13 +1,31 @@
 import React from 'react';
-import { View, ActivityIndicator, Text } from 'react-native';
+import { View } from 'react-native';
+import { RingPulse } from '../RingPulse';
 
-export function Loading({ message = 'Loading...', fullScreen = false, className = '' }) {
-  const containerClass = fullScreen ? 'flex-1 absolute inset-0 bg-white/80 z-50 items-center justify-center' : `items-center justify-center p-8 flex-1 ${className}`;
+export function Loading({
+  message = 'Loading...',
+  fullScreen = false,
+  className = '',
+  size = 56,
+  color = '#7F77DD',
+  strokeWidth = 4,
+  trackColor = 'rgba(148, 163, 184, 0.28)',
+}) {
+  const containerClass = fullScreen
+    ? 'flex-1 absolute inset-0 bg-white/90 z-50 items-center justify-center'
+    : `items-center justify-center p-8 flex-1 ${className}`;
 
   return (
     <View className={containerClass}>
-      <ActivityIndicator size="large" color="#208AEF" />
-      {message && <Text className="mt-4 text-slate-500 font-medium">{message}</Text>}
+      <RingPulse
+        size={size}
+        color={color}
+        strokeWidth={strokeWidth}
+        trackColor={trackColor}
+        message={message}
+      />
     </View>
   );
 }
+
+export default Loading;

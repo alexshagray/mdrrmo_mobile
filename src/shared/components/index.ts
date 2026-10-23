@@ -16,3 +16,4 @@ export * from './LocationPermissionModal';
 export * from './Input';
 export * from './SignaturePad';
 export * from './BodyDiagram';
+export * from './RingPulse';
