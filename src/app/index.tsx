@@ -9,7 +9,7 @@ export default function Index() {
   if (isLoading) {
     return (
       <View className="flex-1 bg-white items-center justify-center">
-        <Loading message="Starting MDRRMO..." />
+        <Loading message="Starting OPOL RESQ..." />
       </View>
     );
   }

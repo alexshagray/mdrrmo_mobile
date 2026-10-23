@@ -113,7 +113,7 @@ export default function AccountSecurityScreen() {
   const handleLogout = () => {
     Alert.alert(
       'Confirm Sign Out',
-      'Are you sure you want to sign out of your MDRRMO account?',
+      'Are you sure you want to sign out of your OPOL RESQ account?',
       [
         { text: 'Cancel', style: 'cancel' },
         {

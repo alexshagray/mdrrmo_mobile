@@ -145,7 +145,7 @@ export default function DashboardScreen() {
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       <Header
         title={`Hello, ${user?.first_name || 'Responder'}`}
-        subtitle={`MDRRMO OPOL • UNIT ${user?.responder_profile?.team || 'ALPHA'}`}
+        subtitle={`OPOL RESQ • UNIT ${user?.responder_profile?.team || 'ALPHA'}`}
         className="bg-transparent"
       />
 

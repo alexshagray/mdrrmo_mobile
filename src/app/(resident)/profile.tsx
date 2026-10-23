@@ -224,7 +224,7 @@ export default function ResidentProfileScreen() {
         </View>
         <View className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full">
           <Text className="text-slate-600 font-bold text-[10px] tracking-widest uppercase">
-            MDRRMO OPOL
+            OPOL RESQ
           </Text>
         </View>
       </View>
@@ -555,7 +555,7 @@ export default function ResidentProfileScreen() {
 
             {/* Title & Description */}
             <Text className="text-xl font-black text-slate-900 text-center tracking-tight mb-2">
-              Sign Out of MDRRMO?
+              Sign Out of OPOL RESQ?
             </Text>
             <Text className="text-slate-500 text-sm text-center font-medium leading-5 mb-5 px-2">
               You will need to sign in again to report emergencies, view active missions, or receive live alerts.

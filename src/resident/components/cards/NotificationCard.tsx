@@ -54,7 +54,7 @@ export function NotificationCard({ notification, onPress }: NotificationCardProp
   const data: NotificationData = notification ?? {
     id: 1,
     title: 'System Update',
-    message: 'The MDRRMO system has been updated with new emergency protocols.',
+    message: 'The OPOL RESQ system has been updated with new emergency protocols.',
     time: 'Just now',
     type: 'info',
     unread: true,

@@ -76,7 +76,7 @@ export default function ForgotPasswordScreen() {
         <View className="flex-row items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20">
           <ShieldCheck size={14} color="#93C5FD" />
           <Text className="text-white/90 text-xs font-semibold uppercase tracking-wider">
-            MDRRMO Security
+            OPOL RESQ Security
           </Text>
         </View>
       </View>

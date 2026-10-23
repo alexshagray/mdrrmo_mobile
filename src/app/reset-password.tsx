@@ -98,7 +98,7 @@ export default function ResetPasswordScreen() {
         <View className="flex-row items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20">
           <ShieldCheck size={14} color="#93C5FD" />
           <Text className="text-white/90 text-xs font-semibold uppercase tracking-wider">
-            MDRRMO Security
+            OPOL RESQ Security
           </Text>
         </View>
       </View>
@@ -122,7 +122,7 @@ export default function ResetPasswordScreen() {
             </View>
 
             <Text className="text-slate-500 text-sm text-center leading-relaxed mb-6 px-2">
-              You can now use your new password to sign in to your MDRRMO account.
+              You can now use your new password to sign in to your OPOL RESQ account.
             </Text>
 
             <Button
@@ -144,7 +144,7 @@ export default function ResetPasswordScreen() {
                 Reset Password
               </Text>
               <Text className="text-slate-500 text-sm text-center mt-1.5 px-2 leading-relaxed">
-                Create a strong new password for your MDRRMO account.
+                Create a strong new password for your OPOL RESQ account.
               </Text>
             </View>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/shared/hooks';
 import Toast from 'react-native-toast-message';
@@ -160,7 +160,7 @@ export default function RegisterScreen() {
       Toast.show({
         type: 'success',
         text1: 'Registration Successful',
-        text2: 'Welcome to MDRRMO Opol EMS!',
+        text2: 'Welcome to OPOL RESQ!',
       });
     } else {
       if (result.error?.toLowerCase().includes('email')) {
@@ -193,8 +193,12 @@ export default function RegisterScreen() {
 
         {/* Branding & Welcome */}
         <View className="items-center">
-          <View className="w-14 h-14 rounded-2xl bg-white/20 border border-white/30 items-center justify-center mb-3 shadow-sm">
-            <ShieldCheck size={32} color="#FFFFFF" strokeWidth={2} />
+          <View className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 items-center justify-center mb-3 shadow-sm">
+            <Image
+              source={require('../../assets/images/opol-resq-logo.png')}
+              style={{ width: 44, height: 44 }}
+              resizeMode="contain"
+            />
           </View>
 
           <View className="flex-row items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/30 border border-blue-400/40 mb-2">
@@ -208,7 +212,7 @@ export default function RegisterScreen() {
             Create Account
           </Text>
           <Text className="text-blue-100 text-xs sm:text-sm text-center font-medium mt-1 max-w-xs">
-            Join the MDRRMO Opol network for fast emergency medical and disaster response.
+            Join the OPOL RESQ network by MDRRMO Opol for fast emergency medical and disaster response.
           </Text>
         </View>
       </Animated.View>
@@ -367,7 +371,7 @@ export default function RegisterScreen() {
 
         {/* Terms notice */}
         <Text className="text-[11px] text-slate-400 text-center leading-relaxed mt-3 px-2">
-          By signing up, you agree to MDRRMO's Terms of Service and Privacy Policy for resident emergency assistance.
+          By signing up, you agree to OPOL RESQ & MDRRMO's Terms of Service and Privacy Policy for resident emergency assistance.
         </Text>
 
         {/* Back to Sign In footer */}

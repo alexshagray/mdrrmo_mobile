@@ -82,9 +82,9 @@ const SERVICES: HotlineService[] = [
   },
   {
     id: 'mdrrmo',
-    name: 'MDRRMO',
-    shortLabel: 'Opol',
-    description: 'Disaster & emergency response',
+    name: 'OPOL RESQ',
+    shortLabel: 'MDRRMO',
+    description: '24/7 disaster & emergency response',
     number: '0881234567',
     icon: Siren,
     cardBg: '#FFFFFF',

@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Text } from 'react-native';
-import { ShieldPlus } from 'lucide-react-native';
+import { View, Text, Image } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 interface LogoHeaderProps {
@@ -13,18 +12,22 @@ export function LogoHeader({ appName, subtitle, children }: LogoHeaderProps) {
   return (
     <Animated.View 
       entering={FadeInDown.delay(100).duration(600).springify()} 
-      className="items-center mb-10 mt-8"
+      className="items-center mb-8 mt-6"
     >
-      <View className="bg-white/20 p-4 rounded-2xl mb-5 border border-white/30 shadow-sm">
-        <ShieldPlus size={48} color="#FFFFFF" strokeWidth={1.5} />
+      <View className="w-24 h-24 bg-white/10 rounded-3xl items-center justify-center mb-4 border border-white/20 shadow-md">
+        <Image
+          source={require('../../../../assets/images/opol-resq-logo.png')}
+          style={{ width: 72, height: 72 }}
+          resizeMode="contain"
+        />
       </View>
       
       {children}
       
-      <Text className="text-3xl font-extrabold text-white mb-2 text-center tracking-tight">
+      <Text className="text-3xl font-black text-white mb-1.5 text-center tracking-tight">
         {appName}
       </Text>
-      <Text className="text-blue-100 text-center font-medium text-base">
+      <Text className="text-blue-100 text-center font-medium text-sm px-6">
         {subtitle}
       </Text>
     </Animated.View>

@@ -249,7 +249,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
       <Header
         title={`Hi, ${userName} 👋`}
-        subtitle="MDRRMO OPOL • CITIZEN EMERGENCY PORTAL"
+        subtitle="OPOL RESQ • CITIZEN EMERGENCY PORTAL"
         className="bg-transparent pb-0"
       />
 

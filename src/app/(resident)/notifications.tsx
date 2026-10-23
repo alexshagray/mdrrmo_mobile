@@ -73,8 +73,8 @@ export default function NotificationsScreen() {
       // System announcement default
       generatedNotifs.push({
         id: 'system-opol-ems-online',
-        title: 'MDRRMO Emergency Services Online',
-        message: 'Opol Emergency Medical Response System is active 24/7. In life-threatening emergencies, call 0917-707-6765.',
+        title: 'OPOL RESQ Emergency Services Online',
+        message: 'OPOL RESQ Emergency Medical Response System by MDRRMO Opol is active 24/7. In life-threatening emergencies, call 0917-707-6765.',
         type: 'system',
         timestamp: new Date().toISOString(),
         read: readMap.get('system-opol-ems-online') || false,
