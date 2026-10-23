@@ -439,7 +439,7 @@ export default function DispatchScreen() {
   if (isLoading) {
     return (
       <View className="flex-1 bg-slate-100 items-center justify-center">
-         <ActivityIndicator size="large" color="#3b82f6" />
+         <ActivityIndicator size="large" color="#208AEF" />
          <Text className="mt-4 text-slate-500 font-medium">Loading dispatch data...</Text>
       </View>
     );
@@ -455,13 +455,13 @@ export default function DispatchScreen() {
           />
           <View className="absolute w-48 h-48 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" />
           <View className="absolute w-32 h-32 bg-blue-50 rounded-full items-center justify-center shadow-xl shadow-blue-200/40" />
-          <View className="absolute w-20 h-20 bg-blue-500 rounded-full items-center justify-center shadow-md shadow-blue-500/50">
+          <View className="absolute w-20 h-20 bg-[#208AEF] rounded-full items-center justify-center shadow-md shadow-blue-500/50">
             <Navigation size={36} color="#ffffff" />
           </View>
         </View>
         <View className="mt-12 items-center">
           <View className="bg-blue-100 px-4 py-1.5 rounded-full mb-4">
-            <Text className="text-blue-700 font-black text-xs tracking-widest uppercase">Monitoring</Text>
+            <Text className="text-[#208AEF] font-black text-xs tracking-widest uppercase">Monitoring</Text>
           </View>
           <Text className="text-3xl font-black text-slate-800 mb-3 text-center tracking-tight">Standby Mode</Text>
           <Text className="text-slate-500 text-center font-medium leading-relaxed px-4">
@@ -545,7 +545,7 @@ export default function DispatchScreen() {
             style={{ position: 'absolute', right: 16, bottom: 40 }}
             className="w-11 h-11 bg-white/95 rounded-full items-center justify-center shadow-lg border border-slate-200"
           >
-            <Crosshair size={20} color="#EF4444" />
+            <Crosshair size={20} color="#FF3B30" />
           </TouchableOpacity>
         )}
       </View>
@@ -592,7 +592,7 @@ export default function DispatchScreen() {
           <View className="bg-slate-50 rounded-2xl p-4 border border-slate-100 mb-5">
             <View className="flex-row items-start mb-4">
               <View className="w-8 h-8 rounded-full bg-blue-100 items-center justify-center mr-3 mt-1 shrink-0">
-                <MapPin size={16} color="#3B82F6" />
+                <MapPin size={16} color="#208AEF" />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center justify-between mb-1">
@@ -645,7 +645,7 @@ export default function DispatchScreen() {
               <View className="flex-row items-center justify-between mb-3">
                 <View className="flex-row items-center">
                   <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
-                    <Phone size={20} color="#2563EB" />
+                    <Phone size={20} color="#208AEF" />
                   </View>
                   <View>
                     <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider">Report Source</Text>
@@ -814,7 +814,7 @@ export default function DispatchScreen() {
           <View style={styles.modalContent}>
             <View className="items-center mb-4">
               <View className="w-16 h-16 bg-red-100 rounded-full items-center justify-center mb-4">
-                <AlertTriangle size={32} color="#EF4444" />
+                <AlertTriangle size={32} color="#FF3B30" />
               </View>
               <Text className="text-xl font-bold text-slate-800 text-center mb-2">Decline Dispatch?</Text>
               <Text className="text-slate-500 text-center font-medium">Are you sure you want to decline this mission? This action will notify the command center.</Text>
@@ -877,7 +877,7 @@ const styles = StyleSheet.create({
     pointerEvents: 'auto',
   },
   btnCreatePcr: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#208AEF',
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 16,
@@ -885,7 +885,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    shadowColor: '#2563eb',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -920,12 +920,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#208AEF',
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -949,12 +949,12 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#208AEF',
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -968,14 +968,14 @@ const styles = StyleSheet.create({
   },
   btnOpenMapFull: {
     width: '100%',
-    backgroundColor: '#059669',
+    backgroundColor: '#208AEF',
     paddingVertical: 18,
     paddingHorizontal: 20,
     borderRadius: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#059669',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -1056,11 +1056,11 @@ const styles = StyleSheet.create({
   btnModalConfirm: {
     flex: 1,
     paddingVertical: 14,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#FF3B30',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#ef4444',
+    shadowColor: '#FF3B30',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 6,

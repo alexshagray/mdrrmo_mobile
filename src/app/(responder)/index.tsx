@@ -153,7 +153,7 @@ export default function DashboardScreen() {
         className="flex-1 px-5"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 110 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#64748B" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#208AEF" />}
       >
 
         {/* Verified Incidents Ready for Dispatch (Standby Section) */}
@@ -165,14 +165,14 @@ export default function DashboardScreen() {
                   Verified Incidents
                 </Text>
                 <View className="bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-200">
-                  <Text className="text-blue-700 text-[10px] font-bold">
+                  <Text className="text-[#208AEF] text-[10px] font-bold">
                     {availableIncidents.length} READY
                   </Text>
                 </View>
               </View>
               <View className="flex-row items-center bg-blue-50 border border-blue-200/60 px-2 py-0.5 rounded-full">
-                <View className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5" />
-                <Text className="text-blue-600 text-[10px] font-bold uppercase tracking-wider">
+                <View className="w-1.5 h-1.5 rounded-full bg-[#208AEF] mr-1.5" />
+                <Text className="text-[#208AEF] text-[10px] font-bold uppercase tracking-wider">
                   STANDBY
                 </Text>
               </View>
@@ -189,7 +189,7 @@ export default function DashboardScreen() {
                   <View className="flex-row items-center justify-between mb-2">
                     <View className="flex-row items-center gap-2 flex-1 mr-2">
                       <View className="w-7 h-7 rounded-lg bg-blue-50 items-center justify-center border border-blue-100">
-                        <Bell size={14} color="#2563EB" />
+                        <Bell size={14} color="#208AEF" />
                       </View>
                       <Text className="font-bold text-slate-900 text-sm truncate flex-1" numberOfLines={1}>
                         {inc.type}
@@ -216,7 +216,7 @@ export default function DashboardScreen() {
                         Verified at {new Date(inc.verified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </Text>
                     </View>
-                    <Text className="text-blue-600 text-xs font-semibold">
+                    <Text className="text-[#208AEF] text-xs font-semibold">
                       View Details →
                     </Text>
                   </View>
@@ -233,9 +233,9 @@ export default function DashboardScreen() {
               <Text className="text-base font-bold text-slate-900 tracking-tight">
                 Active Assignment
               </Text>
-              <View className="flex-row items-center bg-rose-50 border border-rose-200/60 px-2 py-0.5 rounded-full">
-                <View className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5" />
-                <Text className="text-rose-600 text-[10px] font-bold uppercase tracking-wider">
+              <View className="flex-row items-center bg-red-50 border border-red-200/70 px-2 py-0.5 rounded-full">
+                <View className="w-1.5 h-1.5 rounded-full bg-[#FF3B30] mr-1.5" />
+                <Text className="text-[#FF3B30] text-[10px] font-bold uppercase tracking-wider">
                   LIVE
                 </Text>
               </View>
@@ -292,7 +292,7 @@ export default function DashboardScreen() {
               <View className="flex-row items-center justify-between pb-3 border-b border-slate-100">
                 <View className="flex-row items-center gap-2">
                   <View className="w-8 h-8 rounded-xl bg-blue-50 items-center justify-center border border-blue-100">
-                    <Bell size={16} color="#2563EB" />
+                    <Bell size={16} color="#208AEF" />
                   </View>
                   <View>
                     <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -317,7 +317,7 @@ export default function DashboardScreen() {
                 <View className="flex-row items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
                   <View>
                     <Text className="text-[10px] font-bold text-slate-400 uppercase">Status</Text>
-                    <Text className="text-xs font-bold text-blue-600 uppercase">
+                    <Text className="text-xs font-bold text-[#208AEF] uppercase">
                       {selectedVerifiedIncident.status || 'Verified'}
                     </Text>
                   </View>
@@ -367,7 +367,7 @@ export default function DashboardScreen() {
 
                 {/* Standby Note */}
                 <View className="flex-row items-start gap-2 bg-blue-50/70 p-3 rounded-xl border border-blue-200/60">
-                  <Info size={15} color="#2563EB" className="mt-0.5 shrink-0" />
+                  <Info size={15} color="#208AEF" className="mt-0.5 shrink-0" />
                   <Text className="text-[11px] text-blue-900 leading-tight flex-1">
                     Standby for Dispatcher Assignment. This incident is verified and will be dispatched by MDRRMO Operations.
                   </Text>
@@ -377,7 +377,8 @@ export default function DashboardScreen() {
               {/* Footer */}
               <TouchableOpacity
                 onPress={() => setSelectedVerifiedIncident(null)}
-                className="w-full bg-slate-900 py-3.5 rounded-xl items-center"
+                style={{ backgroundColor: '#208AEF' }}
+                className="w-full py-3.5 rounded-xl items-center"
               >
                 <Text className="text-white text-xs font-bold uppercase tracking-wider">
                   Dismiss

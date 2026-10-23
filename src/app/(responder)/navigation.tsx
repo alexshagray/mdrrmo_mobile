@@ -745,7 +745,7 @@ export default function NavigationScreen() {
               <TouchableOpacity
                 disabled={isSubmittingUnfounded}
                 onPress={handleConfirmUnfounded}
-                className="flex-1 py-3 rounded-xl bg-red-600 items-center justify-center"
+                className="flex-1 py-3 rounded-xl bg-[#FF3B30] items-center justify-center"
               >
                 {isSubmittingUnfounded ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />

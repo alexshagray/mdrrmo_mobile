@@ -36,7 +36,7 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
       {/* Top Header Badge & Status */}
       <View className="flex-row justify-between items-center mb-3.5">
         <View className="flex-row items-center bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200/60">
-          <AlertTriangle size={12} color="#DC2626" />
+          <AlertTriangle size={12} color="#FF3B30" />
           <Text className="text-slate-600 font-bold tracking-wider text-[11px] uppercase ml-1.5">
             {typeof data.id === 'number' ? `DSP-00${data.id}` : data.id}
           </Text>
@@ -76,15 +76,15 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
         activeOpacity={0.85}
         className={`py-3.5 px-5 rounded-2xl flex-row items-center justify-center ${
           isUrgent
-            ? 'bg-rose-600 active:bg-rose-700'
+            ? 'bg-[#FF3B30] active:opacity-90'
             : isEnRoute
-            ? 'bg-slate-900 active:bg-slate-800'
+            ? 'bg-[#208AEF] active:opacity-90'
             : 'bg-emerald-600 active:bg-emerald-700'
         }`}
         style={{
-          shadowColor: isUrgent ? '#E11D48' : '#0F172A',
+          shadowColor: isUrgent ? '#FF3B30' : isEnRoute ? '#208AEF' : '#059669',
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
+          shadowOpacity: 0.25,
           shadowRadius: 8,
           elevation: 3,
         }}

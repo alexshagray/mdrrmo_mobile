@@ -105,7 +105,7 @@ export default function HistoryScreen() {
       
       <View className="bg-slate-50 rounded-2xl p-3.5 mb-3.5 border border-slate-100 space-y-2">
         <View className="flex-row items-center">
-          <User size={13} color="#2563EB" />
+          <User size={13} color="#208AEF" />
           <Text className="text-slate-700 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
             <Text className="font-bold text-slate-900">Patient:</Text> {item.patient_name}
           </Text>
@@ -130,8 +130,8 @@ export default function HistoryScreen() {
           <Text className="text-slate-400 ml-1.5 text-xs font-medium">{item.date}</Text>
         </View>
         <View className="flex-row items-center bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
-          <Clock size={11} color="#2563EB" />
-          <Text className="text-blue-700 ml-1.5 text-[11px] font-mono font-bold tracking-wider">{item.time}</Text>
+          <Clock size={11} color="#208AEF" />
+          <Text className="text-[#208AEF] ml-1.5 text-[11px] font-mono font-bold tracking-wider">{item.time}</Text>
         </View>
       </View>
     </View>
@@ -154,7 +154,7 @@ export default function HistoryScreen() {
         </View>
         <TouchableOpacity 
           onPress={() => setIsFilterModalVisible(true)}
-          className={`h-10 w-10 rounded-xl flex items-center justify-center border ${filterDate ? 'bg-blue-600 border-blue-600' : 'bg-slate-100 border-slate-200/80'}`}
+          className={`h-10 w-10 rounded-xl flex items-center justify-center border ${filterDate ? 'bg-[#208AEF] border-[#208AEF]' : 'bg-slate-100 border-slate-200/80'}`}
         >
           <Filter size={16} color={filterDate ? '#FFFFFF' : '#64748B'} />
         </TouchableOpacity>
@@ -166,7 +166,7 @@ export default function HistoryScreen() {
             <TouchableOpacity 
               key={cat.id}
               onPress={() => setActiveCategory(cat.id)}
-              className={`mr-2 px-4 py-1.5 rounded-full border ${activeCategory === cat.id ? 'bg-slate-900 border-slate-900' : 'bg-white border-slate-200'}`}
+              className={`mr-2 px-4 py-1.5 rounded-full border ${activeCategory === cat.id ? 'bg-[#208AEF] border-[#208AEF] shadow-sm' : 'bg-white border-slate-200'}`}
             >
               <Text className={`font-bold text-xs ${activeCategory === cat.id ? 'text-white' : 'text-slate-600'}`}>
                 {cat.label}
@@ -179,7 +179,7 @@ export default function HistoryScreen() {
       <ScrollView className="flex-1 px-5 pt-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
         {isLoading ? (
           <View className="py-16 items-center justify-center">
-            <ActivityIndicator size="large" color="#2563EB" />
+            <ActivityIndicator size="large" color="#208AEF" />
             <Text className="text-slate-400 text-sm mt-3">Loading mission history...</Text>
           </View>
         ) : history.length === 0 ? (
@@ -206,7 +206,7 @@ export default function HistoryScreen() {
                 className="bg-white py-3.5 rounded-2xl items-center justify-center mb-8 border border-slate-200 flex-row active:bg-slate-50"
               >
                 {isPaginating ? (
-                  <ActivityIndicator size="small" color="#2563EB" />
+                  <ActivityIndicator size="small" color="#208AEF" />
                 ) : (
                   <Text className="text-slate-700 font-bold text-xs tracking-wider">LOAD MORE MISSIONS</Text>
                 )}
@@ -230,19 +230,20 @@ export default function HistoryScreen() {
             <Text className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-3">Filter by Date</Text>
             <View className="space-y-2.5 mb-6">
               {getRecentDates().map(dateObj => (
-                <TouchableOpacity key={dateObj.value} onPress={() => applyDateFilter(dateObj.value)} className={`p-3.5 rounded-2xl border ${filterDate === dateObj.value ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white'}`}>
-                  <Text className={`font-bold text-xs ${filterDate === dateObj.value ? 'text-blue-700' : 'text-slate-700'}`}>{dateObj.label}</Text>
+                <TouchableOpacity key={dateObj.value} onPress={() => applyDateFilter(dateObj.value)} className={`p-3.5 rounded-2xl border ${filterDate === dateObj.value ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                  <Text className={`font-bold text-xs ${filterDate === dateObj.value ? 'text-[#208AEF]' : 'text-slate-700'}`}>{dateObj.label}</Text>
                 </TouchableOpacity>
               ))}
               
-              <TouchableOpacity onPress={() => applyDateFilter('')} className={`p-3.5 rounded-2xl border ${filterDate === '' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white'}`}>
-                <Text className={`font-bold text-xs ${filterDate === '' ? 'text-blue-700' : 'text-slate-700'}`}>Any Date</Text>
+              <TouchableOpacity onPress={() => applyDateFilter('')} className={`p-3.5 rounded-2xl border ${filterDate === '' ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                <Text className={`font-bold text-xs ${filterDate === '' ? 'text-[#208AEF]' : 'text-slate-700'}`}>Any Date</Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity 
               onPress={() => setIsFilterModalVisible(false)}
-              className="bg-slate-900 py-3.5 rounded-2xl items-center active:bg-slate-800"
+              style={{ backgroundColor: '#208AEF' }}
+              className="py-3.5 rounded-2xl items-center active:opacity-90"
             >
               <Text className="text-white font-bold text-sm tracking-wider">APPLY FILTERS</Text>
             </TouchableOpacity>

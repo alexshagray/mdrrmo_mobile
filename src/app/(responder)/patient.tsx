@@ -3267,8 +3267,8 @@ export default function PatientCareRecordScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <View style={[styles.modalIconBg, { backgroundColor: '#eff6ff' }]}>
-                  <User size={28} color="#3b82f6" />
+                <View style={[styles.modalIconBg, { backgroundColor: '#F0F7FF' }]}>
+                  <User size={28} color="#208AEF" />
                 </View>
                 <Text style={styles.modalTitle}>Witness Information</Text>
               </View>
@@ -3362,7 +3362,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, marginTop: 15 },
   stepContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20, gap: 8 },
   stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#cbd5e1' },
-  stepActive: { backgroundColor: '#3b82f6', width: 24 },
+  stepActive: { backgroundColor: '#208AEF', width: 24 },
 
   // MODAL STYLES
   modalOverlay: {
@@ -3426,7 +3426,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   signButton: {
-    backgroundColor: '#e11d48',
+    backgroundColor: '#FF3B30',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3457,14 +3457,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   reSignText: {
-    color: '#3b82f6',
+    color: '#208AEF',
     fontWeight: '600',
     fontSize: 14,
   },
   input: { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, marginBottom: 16, fontSize: 16, color: '#0f172a' },
   inputArea: { backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, marginBottom: 16, fontSize: 16, color: '#0f172a', minHeight: 120, textAlignVertical: 'top' },
-  errorText: { color: '#e11d48', fontSize: 12, marginTop: -12, marginBottom: 12, marginLeft: 4, fontWeight: '600' },
-  inputError: { borderColor: '#e11d48', backgroundColor: '#fff1f2' },
+  errorText: { color: '#FF3B30', fontSize: 12, marginTop: -12, marginBottom: 12, marginLeft: 4, fontWeight: '600' },
+  inputError: { borderColor: '#FF3B30', backgroundColor: '#fff1f2' },
   resultItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   resultName: { fontSize: 16, fontWeight: '600' },
   resultSub: { fontSize: 13, color: '#64748b' },
@@ -3472,25 +3472,25 @@ const styles = StyleSheet.create({
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: '#e2e8f0', backgroundColor: '#fff', paddingHorizontal: 16 },
   navBtn: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, backgroundColor: '#e2e8f0' },
   navBtnDisabled: { opacity: 0.5 },
-  navBtnPrimary: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, backgroundColor: '#0f172a' },
+  navBtnPrimary: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, backgroundColor: '#208AEF' },
   navText: { color: '#0f172a', fontWeight: '600', fontSize: 16 },
-  navTextPrimary: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  navTextPrimary: { color: '#fff', fontWeight: '700', fontSize: 16 },
   checkboxContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 15 },
   checkbox: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1' },
-  checkboxActive: { backgroundColor: '#fee2e2', borderColor: '#f87171' },
+  checkboxActive: { backgroundColor: '#FEF2F2', borderColor: '#FF3B30' },
   checkboxText: { color: '#475569', fontSize: 14 },
-  checkboxTextActive: { color: '#b91c1c', fontWeight: '600' },
+  checkboxTextActive: { color: '#FF3B30', fontWeight: '700' },
   card: { padding: 15, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 15 },
   cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 10 },
   row: { flexDirection: 'row', gap: 10 },
-  gcsTotal: { fontSize: 18, fontWeight: 'bold', color: '#e11d48', marginBottom: 15, textAlign: 'center' },
+  gcsTotal: { fontSize: 18, fontWeight: 'bold', color: '#FF3B30', marginBottom: 15, textAlign: 'center' },
   radio: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  radioActive: { backgroundColor: '#fee2e2' },
+  radioActive: { backgroundColor: '#FEF2F2' },
   radioText: { fontSize: 15, color: '#334155' },
-  radioTextActive: { color: '#b91c1c', fontWeight: '600' },
+  radioTextActive: { color: '#FF3B30', fontWeight: '700' },
   summaryText: { fontSize: 15, marginBottom: 8, color: '#334155' },
-  createBtn: { padding: 15, backgroundColor: '#e0f2fe', borderRadius: 8, borderWidth: 1, borderColor: '#bae6fd', marginTop: 10, alignItems: 'center' },
-  createBtnText: { color: '#0369a1', fontWeight: 'bold' },
+  createBtn: { padding: 15, backgroundColor: '#F0F7FF', borderRadius: 12, borderWidth: 1, borderColor: '#BAE6FD', marginTop: 10, alignItems: 'center' },
+  createBtnText: { color: '#208AEF', fontWeight: 'bold' },
   unidentifiedQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fffbeb', borderWidth: 1.5, borderColor: '#fcd34d', paddingVertical: 12, borderRadius: 12, marginBottom: 16 },
   unidentifiedQuickBtnText: { color: '#b45309', fontWeight: '800', fontSize: 14 },
   unidentifiedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fffbeb', borderWidth: 1.5, borderColor: '#fcd34d', padding: 14, borderRadius: 14, marginBottom: 16, gap: 12 },

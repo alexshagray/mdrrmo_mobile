@@ -230,7 +230,7 @@ export default function ResponderProfileScreen() {
                 <Avatar
                   name={fullName}
                   size="xl"
-                  className="bg-slate-900 text-white font-bold"
+                  className="bg-[#208AEF] text-white font-bold"
                 />
               )}
 
@@ -262,8 +262,8 @@ export default function ResponderProfileScreen() {
 
           {/* Role & Badge Pills */}
           <View className="flex-row items-center gap-2 mb-3.5">
-            <View className="bg-rose-50 border border-rose-200/70 px-3 py-1 rounded-full">
-              <Text className="text-rose-700 font-bold text-[11px] tracking-wider uppercase">
+            <View className="bg-red-50 border border-red-200/70 px-3 py-1 rounded-full">
+              <Text className="text-[#FF3B30] font-bold text-[11px] tracking-wider uppercase">
                 {roleName}
               </Text>
             </View>
@@ -304,8 +304,8 @@ export default function ResponderProfileScreen() {
           }}
         >
           <View className="flex-row items-center mb-3">
-            <View className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
-              <Shield size={18} color="#2563EB" />
+            <View className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 items-center justify-center mr-3">
+              <Shield size={18} color="#208AEF" />
             </View>
             <View className="flex-1">
               <Text className="font-bold text-slate-900 text-sm">Emergency Medical Technician</Text>
@@ -316,8 +316,8 @@ export default function ResponderProfileScreen() {
           <View className="h-[1px] bg-slate-100 w-full mb-3" />
 
           <View className="flex-row items-center">
-            <View className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200/60 items-center justify-center mr-3">
-              <Award size={18} color="#4F46E5" />
+            <View className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 items-center justify-center mr-3">
+              <Award size={18} color="#208AEF" />
             </View>
             <View className="flex-1">
               <Text className="font-bold text-slate-900 text-sm">Basic Life Support (BLS)</Text>
@@ -405,11 +405,11 @@ export default function ResponderProfileScreen() {
         {/* Sign Out Button */}
         <TouchableOpacity
           onPress={handleLogout}
-          className="bg-white border border-rose-200 py-3.5 px-5 rounded-2xl flex-row items-center justify-center active:bg-rose-50 mb-4"
+          className="bg-white border border-red-200/80 py-3.5 px-5 rounded-2xl flex-row items-center justify-center active:bg-red-50 mb-4"
           activeOpacity={0.8}
         >
-          <LogOut size={17} color="#E11D48" />
-          <Text className="text-rose-600 font-bold text-xs ml-2 tracking-wider">
+          <LogOut size={17} color="#FF3B30" />
+          <Text className="text-[#FF3B30] font-bold text-xs ml-2 tracking-wider">
             SIGN OUT
           </Text>
         </TouchableOpacity>
@@ -434,8 +434,8 @@ export default function ResponderProfileScreen() {
             }}
           >
             {/* Soft glowing icon badge */}
-            <View className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 items-center justify-center mb-4 shadow-sm shadow-rose-100">
-              <LogOut size={28} color="#E11D48" strokeWidth={2.25} />
+            <View className="w-16 h-16 rounded-2xl bg-red-50 border border-red-100 items-center justify-center mb-4 shadow-sm shadow-red-100">
+              <LogOut size={28} color="#FF3B30" strokeWidth={2.25} />
             </View>
 
             {/* Title & Description */}
@@ -472,7 +472,8 @@ export default function ResponderProfileScreen() {
                 onPress={handleLogoutConfirm}
                 disabled={isLoggingOut}
                 activeOpacity={0.85}
-                className="w-full py-3.5 bg-rose-600 active:bg-rose-700 rounded-2xl items-center flex-row justify-center shadow-md shadow-rose-500/25"
+                className="w-full py-3.5 rounded-2xl items-center flex-row justify-center shadow-md shadow-red-500/25"
+                style={{ backgroundColor: '#FF3B30' }}
               >
                 {isLoggingOut ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />

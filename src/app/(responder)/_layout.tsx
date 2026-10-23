@@ -80,7 +80,7 @@ export default function ResponderLayout() {
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ focused }) => (
-            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-[#208AEF]' : ''}`}>
               <Home color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
@@ -91,7 +91,7 @@ export default function ResponderLayout() {
         options={{
           title: 'Dispatch',
           tabBarIcon: ({ focused }) => (
-            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-[#208AEF]' : ''}`}>
               <MapIcon color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
@@ -102,7 +102,7 @@ export default function ResponderLayout() {
         options={{
           title: 'Patient',
           tabBarIcon: ({ focused }) => (
-            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-[#208AEF]' : ''}`}>
               <UserCircle color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
@@ -113,7 +113,7 @@ export default function ResponderLayout() {
         options={{
           title: 'History',
           tabBarIcon: ({ focused }) => (
-            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-[#208AEF]' : ''}`}>
               <ClipboardList color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),
@@ -124,7 +124,7 @@ export default function ResponderLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
-            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-slate-900' : ''}`}>
+            <View className={`px-3 py-1.5 rounded-full items-center justify-center ${focused ? 'bg-[#208AEF]' : ''}`}>
               <User color={focused ? '#FFFFFF' : '#94A3B8'} size={20} strokeWidth={focused ? 2.5 : 2} />
             </View>
           ),

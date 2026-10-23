@@ -51,9 +51,9 @@ export function DispatchSummaryCard({
       >
         <View className="flex-row items-center justify-between mb-3">
           <View className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 items-center justify-center">
-            <Users size={18} color="#2563EB" />
+            <Users size={18} color="#208AEF" />
           </View>
-          <Text className="text-[10px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50/80 px-2 py-0.5 rounded-full">
+          <Text className="text-[10px] font-bold text-[#208AEF] uppercase tracking-widest bg-blue-50/80 px-2 py-0.5 rounded-full">
             SERVED
           </Text>
         </View>

@@ -19,7 +19,7 @@ export function TimelineCard({ events }: { events?: any[] }) {
         {data.map((event, index) => (
           <View key={index} className="flex-row mb-4 last:mb-0">
             <View className="items-center mr-4">
-              <View className={`w-3 h-3 rounded-full ${event.active ? 'bg-blue-600' : 'bg-slate-300'}`} />
+              <View className={`w-3 h-3 rounded-full ${event.active ? 'bg-[#208AEF]' : 'bg-slate-300'}`} />
               {index !== data.length - 1 && <View className="w-0.5 h-full bg-slate-200 mt-1" />}
             </View>
             <View className="flex-1 pb-4">
