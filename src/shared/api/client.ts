@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getToken, clearSession } from '../auth/secureStorage';
 import { disconnectWebSocket } from '../websocket/echo';
+import { offlineSync } from '../services/offlineSync';
 import ENV from '../config/env';
 
 export const API_URL = ENV.API_URL; 
@@ -48,6 +49,26 @@ apiClient.interceptors.response.use(
       }
     }
     
+    // Offline queue handling: Capture failed mutation requests (POST/PUT/PATCH) when network is down
+    const isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.message === 'Network Error';
+    if (isNetworkError) {
+      error.isNetworkError = true;
+    }
+    const method = error.config?.method?.toLowerCase();
+    const isMutation = ['post', 'put', 'patch'].includes(method || '');
+    const url = error.config?.url || '';
+    const isAuth = url.includes('/auth/');
+    const isLocationPing = url.includes('/location');
+    const isOfflineReplay = error.config?.headers?.['X-Offline-Replay'];
+
+    if (isNetworkError && isMutation && !isAuth && !isLocationPing && !isOfflineReplay) {
+      try {
+        await offlineSync.enqueueRequest(error.config.method, error.config.url, error.config.data);
+      } catch (err) {
+        console.warn('[OfflineSync] Failed to enqueue request:', err);
+      }
+    }
+
     if (status === 401) {
       // Unauthorized: token expired or invalid
       await clearSession();
@@ -60,5 +81,7 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+offlineSync.setClient(apiClient);
 
 export default apiClient;

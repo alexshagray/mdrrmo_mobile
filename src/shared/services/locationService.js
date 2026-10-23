@@ -11,10 +11,23 @@ class LocationService {
       return false;
     }
 
-    // Optional background tracking
-    // const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-    
     return true;
+  }
+
+  /**
+   * Request background location permissions (for continuous emergency tracking)
+   */
+  async requestBackgroundPermissions() {
+    try {
+      const hasForeground = await this.requestPermissions();
+      if (!hasForeground) return false;
+
+      const { status } = await Location.requestBackgroundPermissionsAsync();
+      return status === 'granted';
+    } catch (e) {
+      console.warn('Background location permission request error:', e);
+      return false;
+    }
   }
 
   /**

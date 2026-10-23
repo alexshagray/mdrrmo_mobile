@@ -5,6 +5,8 @@ import { View } from 'react-native';
 import { getActiveDispatches } from '@/shared/api/dispatches';
 import { useLiveDispatchTracking } from '@/shared/hooks';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
+import ConnectionBanner from '@/shared/components/ConnectionBanner';
+import { offlineMissionService } from '@/shared/services/offlineMissionService';
 
 export default function ResponderLayout() {
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
@@ -12,13 +14,30 @@ export default function ResponderLayout() {
 
   useEffect(() => {
     let isMounted = true;
+
+    // First attempt to load cached active mission so offline launch has immediate data
+    offlineMissionService.getActiveMission().then((cached) => {
+      if (isMounted && cached) {
+        setActiveDispatch(cached);
+      }
+    }).catch(() => {});
+
     getActiveDispatches().then(res => {
       if (isMounted && res?.data && res.data.length > 0) {
         setActiveDispatch(res.data[0]);
+        offlineMissionService.saveActiveMission(res.data[0]);
       } else if (isMounted) {
+        // Only clear if confirmed by server that no active dispatches exist
         setActiveDispatch(null);
+        offlineMissionService.clearActiveMission();
       }
-    }).catch(() => {});
+    }).catch(async () => {
+      // Network failed: do not remove active mission; keep cached mission
+      if (isMounted) {
+        const cached = await offlineMissionService.getActiveMission();
+        if (cached) setActiveDispatch(cached);
+      }
+    });
 
     return () => {
       isMounted = false;
@@ -27,7 +46,9 @@ export default function ResponderLayout() {
 
   useLiveDispatchTracking(activeDispatch?.id, activeDispatch?.dispatch_status, { driverId: activeDispatch?.driver_id });
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <ConnectionBanner />
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -131,5 +152,6 @@ export default function ResponderLayout() {
         }}
       />
     </Tabs>
+  </View>
   );
 }

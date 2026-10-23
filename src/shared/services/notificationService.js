@@ -1,14 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// Configure foreground notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+// NOTE: setNotificationHandler is set once in MissionAlarmContext.tsx.
+// Do NOT set it here to avoid duplicate/override conflicts.
 
 class NotificationService {
   /**
@@ -27,19 +21,25 @@ class NotificationService {
       lightColor: '#208AEF',
     });
 
-    // HIGH-PRIORITY mission alarm channel with custom alarm sound
-    // Android OS plays this sound automatically even when app is in background!
-    await Notifications.setNotificationChannelAsync('mission_alarm', {
+    // HIGH-PRIORITY mission alarm channel
+    // Emergency alerts use MAX importance and custom vibration pattern.
+    // The alarm siren (alarm.mp3) is played reliably by expo-audio in MissionAlarmContext.
+    const missionChannelOptions = {
       name: 'Mission Alarm',
-      description: 'Emergency mission alerts with alarm sound',
+      description: 'Emergency mission alerts with high-priority vibration',
       importance: Notifications.AndroidImportance.MAX,
-      sound: 'alarm.mp3',           // Must match filename in assets/sounds/
       vibrationPattern: [0, 600, 300, 600, 300, 1000],
       lightColor: '#EF4444',
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,              // Bypass Do Not Disturb for emergencies
       enableVibrate: true,
-    });
+    };
+
+    try {
+      await Notifications.setNotificationChannelAsync('mission_alarm_v2', missionChannelOptions);
+    } catch (e) {
+      console.warn('[NotificationService] Failed to set mission_alarm_v2 channel:', e);
+    }
   }
 
   /**

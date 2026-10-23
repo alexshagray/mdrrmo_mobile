@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { updateDispatchLocation } from '../api/dispatches';
 import { useAuth } from '../auth/authContext';
+import { startBackgroundLocation, stopBackgroundLocation } from '../services/backgroundLocationService';
 
 /**
  * Calculates distance in meters between two lat/lng pairs (Haversine formula)
@@ -45,6 +46,7 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
 
     if (!isActive) {
       setIsTracking(false);
+      stopBackgroundLocation();
       return;
     }
 
@@ -60,6 +62,9 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
         }
 
         setIsTracking(true);
+
+        // Start TaskManager background location tracking for screen-off / app minimized states
+        startBackgroundLocation(dispatchId, isDriver);
 
         // 1. Check last known position immediately
         const lastKnown = await Location.getLastKnownPositionAsync();
@@ -142,10 +147,22 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
         lastSentTimeRef.current = Date.now();
         setLastSentAt(new Date());
       } catch (err) {
+        const isNetwork = err?.isNetworkError || !err.response || err.code === 'ERR_NETWORK';
+        if (isNetwork) {
+          // Device is offline: GPS was collected locally and queued without aborting tracking
+          lastSentCoordsRef.current = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          };
+          lastSentTimeRef.current = Date.now();
+          return;
+        }
+
         if (err?.response?.status === 422) {
           // Inactive, completed, or cancelled mission - stop tracking cleanly without warning noise
           setIsTracking(false);
           isCancelled = true;
+          stopBackgroundLocation();
           if (subscription) {
             subscription.remove();
           }
@@ -164,6 +181,7 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
       if (subscription) {
         subscription.remove();
       }
+      stopBackgroundLocation();
       setIsTracking(false);
     };
   }, [dispatchId, dispatchStatus]);

@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import { ENV } from '../config/env';
 
 const isPlusCode = (text: string | null | undefined): boolean => {
   if (!text) return false;
@@ -11,6 +12,63 @@ const cleanFormattedAddress = (addr: string | null | undefined): string => {
 };
 
 /**
+ * Reverse geocodes using Mapbox Places API for high accuracy in Opol / Misamis Oriental
+ */
+export const reverseGeocodeMapbox = async (
+  latitude: number,
+  longitude: number
+): Promise<string | null> => {
+  const token = ENV?.MAPBOX_ACCESS_TOKEN;
+  if (!token) return null;
+
+  try {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${token}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!data?.features || data.features.length === 0) return null;
+
+    const first = data.features[0];
+    let placeName = first?.place_name || '';
+    if (!placeName) return null;
+
+    // Remove country suffix ", Philippines"
+    placeName = placeName.replace(/,\s*Philippines$/i, '').trim();
+
+    // Find the locality / barangay in the feature hierarchy if available
+    const localityFeature = data.features.find((f: any) =>
+      f.place_type?.includes('locality') || f.place_type?.includes('neighborhood')
+    );
+
+    const bName = localityFeature?.text;
+    if (bName && !placeName.toLowerCase().includes(`brgy. ${bName.toLowerCase()}`) && !placeName.toLowerCase().includes(`barangay ${bName.toLowerCase()}`)) {
+      if (placeName.includes(bName)) {
+        placeName = placeName.replace(bName, `Brgy. ${bName}`);
+      } else {
+        placeName = placeName.replace(/,\s*Opol/i, `, Brgy. ${bName}, Opol`);
+      }
+    }
+
+    // Ensure it's not just the bare town name
+    if (
+      placeName.toLowerCase() === 'opol, misamis oriental' ||
+      placeName.toLowerCase() === 'misamis oriental' ||
+      placeName.toLowerCase() === 'opol'
+    ) {
+      if (bName && bName.toLowerCase() !== 'opol') {
+        return `Brgy. ${bName}, Opol, Misamis Oriental`;
+      }
+      return null;
+    }
+
+    return placeName;
+  } catch (err) {
+    return null;
+  }
+};
+
+/**
  * Converts geographic coordinates into a human-readable real place/address name.
  * Excludes raw coordinates and Plus Codes.
  */
@@ -20,6 +78,16 @@ export const resolveAddressFromCoords = async (
 ): Promise<string> => {
   if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
     return 'Opol, Misamis Oriental';
+  }
+
+  // 1. Try Mapbox Reverse Geocoding first (accurate roads, POIs and Barangays in Opol)
+  try {
+    const mapboxResult = await reverseGeocodeMapbox(latitude, longitude);
+    if (mapboxResult && mapboxResult.trim().length > 0) {
+      return mapboxResult;
+    }
+  } catch (err) {
+    console.log('Mapbox geocoding error:', err);
   }
 
   try {

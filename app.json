@@ -20,6 +20,13 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.wedemboysz13.mdrrmo_mobile",
       "usesCleartextTraffic": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyB64wjKLuSSKUSc_hIHiv3o72YWaB7JWag"

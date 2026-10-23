@@ -52,12 +52,24 @@ export default function DashboardScreen() {
         const incLat = parseFloat(inc?.incident_latitude ?? inc?.latitude);
         const incLng = parseFloat(inc?.incident_longitude ?? inc?.longitude);
 
-        if ((!locationName || locationName.toLowerCase().includes('coordinate') || /^-?\d+\.\d+/.test(locationName.trim())) && !isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
-          locationName = await resolveAddressFromCoords(incLat, incLng);
+        const isGeneric =
+          !locationName ||
+          locationName.trim().toLowerCase() === 'opol, misamis oriental' ||
+          locationName.trim().toLowerCase() === 'opol' ||
+          locationName.toLowerCase().includes('coordinate') ||
+          /^-?\d+\.\d+/.test(locationName.trim());
+
+        if (isGeneric && !isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
+          const resolved = await resolveAddressFromCoords(incLat, incLng);
+          if (resolved && resolved.trim().toLowerCase() !== 'opol, misamis oriental') {
+            locationName = resolved;
+          } else if (inc?.barangay) {
+            locationName = `Brgy. ${inc.barangay}, Opol, Misamis Oriental`;
+          }
         }
 
         if (!locationName) {
-          locationName = 'Opol, Misamis Oriental';
+          locationName = inc?.barangay ? `Brgy. ${inc.barangay}, Opol, Misamis Oriental` : 'Opol, Misamis Oriental';
         }
 
         setActiveDispatch({
@@ -282,14 +294,14 @@ export default function DashboardScreen() {
                   <View className="w-8 h-8 rounded-xl bg-blue-50 items-center justify-center border border-blue-100">
                     <Bell size={16} color="#2563EB" />
                   </View>
-                  <div>
+                  <View>
                     <Text className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                       {selectedVerifiedIncident.incident_code || 'VERIFIED INCIDENT'}
                     </Text>
                     <Text className="text-base font-bold text-slate-900">
                       {selectedVerifiedIncident.type}
                     </Text>
-                  </div>
+                  </View>
                 </View>
                 <TouchableOpacity
                   onPress={() => setSelectedVerifiedIncident(null)}
@@ -303,24 +315,24 @@ export default function DashboardScreen() {
               <View className="py-4 space-y-3">
                 {/* Status & Priority */}
                 <View className="flex-row items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <div>
+                  <View>
                     <Text className="text-[10px] font-bold text-slate-400 uppercase">Status</Text>
                     <Text className="text-xs font-bold text-blue-600 uppercase">
                       {selectedVerifiedIncident.status || 'Verified'}
                     </Text>
-                  </div>
-                  <div>
+                  </View>
+                  <View>
                     <Text className="text-[10px] font-bold text-slate-400 uppercase">Priority</Text>
                     <Text className="text-xs font-bold text-amber-600 uppercase">
                       {selectedVerifiedIncident.priority || 'Moderate'}
                     </Text>
-                  </div>
-                  <div>
+                  </View>
+                  <View>
                     <Text className="text-[10px] font-bold text-slate-400 uppercase">Verified At</Text>
                     <Text className="text-xs font-semibold text-slate-700">
                       {new Date(selectedVerifiedIncident.verified_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </Text>
-                  </div>
+                  </View>
                 </View>
 
                 {/* Location */}

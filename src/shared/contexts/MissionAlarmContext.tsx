@@ -16,7 +16,7 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
@@ -327,11 +327,10 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           // Vibrate phone continuously in emergency pulse pattern
           Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
 
-          // Set audio mode to ensure alarm plays in foreground and overrides silent mode
+          // Set audio mode to ensure alarm plays in BOTH foreground and background
           await setAudioModeAsync({
             playsInSilentMode: true,
-            shouldPlayInBackground: false,
-            staysActiveInBackground: false,
+            shouldPlayInBackground: true,
           });
 
           if (!isCancelled) {
@@ -404,17 +403,13 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     setIncomingMission(null);
   };
 
-  // Stop alarm when user backgrounds the app (goes to Facebook, etc.)
+  // Alarm should continue ringing even when user backgrounds the app (goes to Facebook, etc.)
+  // We removed the pause logic here so responders don't miss missions while outside the app.
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // Stop audio but keep the incomingMission state so alarm re-triggers when they return
-        Vibration.cancel();
-        if (sound) {
-          try {
-            sound.pause();
-          } catch (e) {}
-        }
+        // Deliberately doing nothing to allow the alarm to keep playing in the background
+        console.log('App in background - Mission alarm is still active!');
       }
     };
 

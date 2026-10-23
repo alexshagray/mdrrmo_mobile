@@ -17,6 +17,8 @@ import { useGpsStatusTransition, useLiveDispatchTracking, useRealtime } from '@/
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
+import { resolveAddressFromCoords } from '@/shared/utils/location';
+import { offlineMissionService } from '@/shared/services/offlineMissionService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 // Sizes for the draggable panel
@@ -28,6 +30,7 @@ export default function DispatchScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [showDeclineModal, setShowDeclineModal] = useState(false);
   const [isDeclining, setIsDeclining] = useState(false);
+  const [resolvedExactLocation, setResolvedExactLocation] = useState<string>('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapboxGL.Camera>(null);
@@ -154,38 +157,46 @@ export default function DispatchScreen() {
   }, [dispatch, isLoading]);
 
   const { missionRefreshTrigger, clearMission } = useMissionAlarm();
+  const hasLoadedRef = useRef(false);
 
-  const fetchDispatch = useCallback(async () => {
-    setIsLoading(true);
+  const fetchDispatch = useCallback(async (isSilent = false) => {
+    if (!hasLoadedRef.current && !isSilent) {
+      setIsLoading(true);
+    }
     try {
       const data = await getActiveDispatches();
-      if (data.data && data.data.length > 0) {
-         setDispatch(data.data[0]);
-      } else {
-         setDispatch(null);
+      if (data?.data && data.data.length > 0) {
+        setDispatch(data.data[0]);
+      } else if (!data?.is_offline) {
+        setDispatch(null);
       }
     } catch (e) {
-      console.error(e);
+      console.log('Error fetching dispatches, loading cached offline mission:', e);
+      const cached = await offlineMissionService.getActiveMission();
+      if (cached) {
+        setDispatch(cached);
+      }
     } finally {
+      hasLoadedRef.current = true;
       setIsLoading(false);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      fetchDispatch();
+      fetchDispatch(hasLoadedRef.current);
     }, [fetchDispatch])
   );
 
   // Auto-refresh when real-time mission assignment or status arrives via WebSockets
   useEffect(() => {
-    fetchDispatch();
+    fetchDispatch(true);
   }, [missionRefreshTrigger, fetchDispatch]);
 
-  // Periodic polling fallback
+  // Periodic polling fallback (silent update without showing full-screen spinner)
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchDispatch();
+      fetchDispatch(true);
     }, 5000);
 
     return () => clearInterval(interval);
@@ -259,6 +270,52 @@ export default function DispatchScreen() {
     }
   }, [parsedLat, parsedLng, hasValidCoords]);
 
+  // Automatically resolve high-accuracy real address/street name if incident location is generic
+  useEffect(() => {
+    if (!hasValidCoords) return;
+
+    let isMounted = true;
+    const currentLoc =
+      dispatch?.incident?.place_of_incident ||
+      dispatch?.incident?.incident_address ||
+      dispatch?.incident?.address ||
+      dispatch?.incident?.location ||
+      '';
+
+    const lower = currentLoc.trim().toLowerCase();
+    const isGeneric =
+      !currentLoc ||
+      lower === 'opol, misamis oriental' ||
+      lower === 'opol' ||
+      lower === 'pinpointed emergency incident location' ||
+      lower.includes('coordinate') ||
+      /^-?\d+\.\d+/.test(currentLoc.trim());
+
+    if (isGeneric) {
+      resolveAddressFromCoords(parsedLat, parsedLng)
+        .then((addr) => {
+          if (isMounted && addr && addr.trim().toLowerCase() !== 'opol, misamis oriental') {
+            setResolvedExactLocation(addr);
+          }
+        })
+        .catch(() => {});
+    } else {
+      setResolvedExactLocation('');
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    hasValidCoords,
+    parsedLat,
+    parsedLng,
+    dispatch?.incident?.place_of_incident,
+    dispatch?.incident?.incident_address,
+    dispatch?.incident?.address,
+    dispatch?.incident?.location,
+  ]);
+
   const handleRecenterIncident = () => {
     if (mapRef.current && hasValidCoords) {
       mapRef.current?.setCamera({
@@ -321,11 +378,21 @@ export default function DispatchScreen() {
     if (!dispatch || isAccepting) return;
     setIsAccepting(true);
     try {
-      await acceptDispatch(dispatch.id);
-      setDispatch((prev: any) => ({ ...prev, dispatch_status: 'accepted' }));
-    } catch (e) {
+      const res = await acceptDispatch(dispatch.id);
+      setDispatch((prev: any) => ({
+        ...prev,
+        dispatch_status: 'accepted',
+        _has_pending_sync: res?.is_offline_queued ? true : prev?._has_pending_sync,
+      }));
+      if (res?.is_offline_queued) {
+        Alert.alert(
+          'Mission Accepted Offline',
+          'Your device is currently offline. Mission acceptance has been recorded locally and will synchronize with dispatch when internet is available.'
+        );
+      }
+    } catch (e: any) {
       console.error(e);
-      Alert.alert('Error', 'Failed to accept dispatch.');
+      Alert.alert('Error', e?.message || 'Failed to accept dispatch.');
     } finally {
       setIsAccepting(false);
     }
@@ -409,11 +476,29 @@ export default function DispatchScreen() {
   const resident = incident.resident || {};
   const incidentType = incident.incident_type || {}; 
 
+  const isGenericAddress = (addr: string | null | undefined): boolean => {
+    if (!addr) return true;
+    const lower = addr.trim().toLowerCase();
+    return (
+      lower === 'opol, misamis oriental' ||
+      lower === 'opol' ||
+      lower === 'pinpointed emergency incident location' ||
+      lower.includes('coordinate') ||
+      /^-?\d+\.\d+/.test(addr.trim())
+    );
+  };
+
   const exactLocationName = 
-    incident.place_of_incident || 
-    incident.incident_address || 
-    (incident.location_code ? `Location Marker ${incident.location_code}` : null) || 
-    incident.address || 
+    resolvedExactLocation ||
+    (!isGenericAddress(incident.place_of_incident) ? incident.place_of_incident : null) ||
+    (!isGenericAddress(incident.incident_address) ? incident.incident_address : null) ||
+    (!isGenericAddress(incident.address) ? incident.address : null) ||
+    (incident.barangay ? `Brgy. ${incident.barangay}, Opol, Misamis Oriental` : null) ||
+    (resident?.resident_profile?.barangay?.barangay_name ? `Brgy. ${resident.resident_profile.barangay.barangay_name}, Opol, Misamis Oriental` : null) ||
+    (incident.location_code ? `Location Marker ${incident.location_code}` : null) ||
+    incident.place_of_incident ||
+    incident.incident_address ||
+    incident.address ||
     'Pinpointed Emergency Incident Location';
 
   return (
@@ -469,7 +554,19 @@ export default function DispatchScreen() {
         <TouchableOpacity onPress={handleBack} className="bg-white/90 p-3 rounded-full shadow-lg border border-slate-200/50 pointer-events-auto">
           <ArrowLeft size={20} color="#1E293B" />
         </TouchableOpacity>
-        <StatusChip status={dispatch.dispatch_status} type="dispatch" />
+        <View className="flex-row items-center">
+          {dispatch._is_offline_cached && (
+            <View className="bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 mr-2 shadow-sm">
+              <Text className="text-amber-800 text-[10px] font-bold uppercase tracking-wider">Offline Cached</Text>
+            </View>
+          )}
+          {dispatch._has_pending_sync && (
+            <View className="bg-blue-100 px-2.5 py-1 rounded-full border border-blue-300 mr-2 shadow-sm">
+              <Text className="text-blue-800 text-[10px] font-bold uppercase tracking-wider">Pending Sync</Text>
+            </View>
+          )}
+          <StatusChip status={dispatch.dispatch_status} type="dispatch" />
+        </View>
       </View>
 
       <Animated.View 

@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Platform, StyleSheet, KeyboardAvoidingView, Modal, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Animated, Platform, StyleSheet, KeyboardAvoidingView, Modal, Image, AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Header, Button } from '@/shared/components';
 import { SignaturePad, BodyDiagram } from '@/shared/components';
-import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2 } from 'lucide-react-native';
-import { searchPatients, createPatient } from '@/shared/api/patients';
+import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2, AlertCircle, UserCheck, UserX, HelpCircle, Edit3, HeartPulse } from 'lucide-react-native';
+import { searchPatients, createPatient, identifyPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
+import { resolveAddressFromCoords } from '@/shared/utils/location';
+import { offlineMissionService } from '@/shared/services/offlineMissionService';
+import { offlineSyncService } from '@/shared/services/offlineSyncService';
 
 function debounce(func: Function, wait: number) {
   let timeout: any;
@@ -84,72 +88,6 @@ const cleanFormattedAddress = (addr: string | null | undefined): string => {
   return addr.replace(/^[A-Z0-9]{2,8}\+[A-Z0-9]{2,8}(,\s*)?/gi, '').trim();
 };
 
-const resolveAddressFromCoords = async (latitude: number, longitude: number): Promise<string> => {
-  if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) return '';
-  try {
-    const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (geocode && geocode.length > 0) {
-      const g = geocode[0];
-
-      // Clean street (ignore Unnamed Road or Plus codes)
-      let street = g.street || '';
-      if (street.toLowerCase().includes('unnamed') || isPlusCode(street)) {
-        street = '';
-      }
-      const streetLine = [g.streetNumber, street].filter(Boolean).join(' ');
-
-      // POI or establishment name (exclude Plus Codes or street duplicates)
-      const poiName = g.name && !isPlusCode(g.name) && g.name !== g.street && g.name !== g.city ? g.name : '';
-
-      // Barangay / District formatting (standard for Philippines)
-      let barangay = g.district || '';
-      if (barangay && !barangay.toLowerCase().startsWith('brgy') && !barangay.toLowerCase().startsWith('barangay')) {
-        barangay = `Brgy. ${barangay}`;
-      }
-
-      const city = g.city || 'Opol';
-      let province = 'Misamis Oriental';
-      if (g.subregion && !g.subregion.toLowerCase().includes('mindanao')) {
-        province = g.subregion;
-      } else if (g.region && !g.region.toLowerCase().includes('mindanao')) {
-        province = g.region;
-      }
-
-      const addressComponents = [
-        poiName,
-        streetLine,
-        barangay,
-        city,
-        province,
-      ].filter(Boolean);
-
-      const uniqueComponents = Array.from(new Set(addressComponents));
-      if (uniqueComponents.length >= 2) {
-        return uniqueComponents.join(', ');
-      }
-
-      // Fallback to formattedAddress cleaned of Plus Codes
-      if (g.formattedAddress) {
-        let cleaned = cleanFormattedAddress(g.formattedAddress);
-        cleaned = cleaned.replace(/Northern Mindanao/gi, 'Misamis Oriental').replace(/,\s*Philippines/gi, '').trim();
-        if (cleaned) {
-          if (barangay && !cleaned.toLowerCase().includes(g.district!.toLowerCase())) {
-            return `${barangay}, ${cleaned}`;
-          }
-          return cleaned;
-        }
-      }
-
-      if (uniqueComponents.length > 0) {
-        return uniqueComponents.join(', ');
-      }
-    }
-  } catch (err) {
-    console.log('Reverse geocoding error:', err);
-  }
-  return 'Opol, Misamis Oriental';
-};
-
 const TOTAL_STEPS = 8;
 
 const initialFormData = {
@@ -167,6 +105,7 @@ const initialFormData = {
   civil_status: '',
   incident_address: '',
   age: '',
+  is_unidentified: false,
 
   // Assessment
   assessment_findings: [] as string[],
@@ -238,7 +177,14 @@ const calculateAge = (birthdate: string): string => {
 export default function PatientCareRecordScreen() {
   const router = useRouter();
   const [step, setStep] = useState(1);
+  const [reachedReview, setReachedReview] = useState(false);
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
+
+  useEffect(() => {
+    if (step === TOTAL_STEPS && !reachedReview) {
+      setReachedReview(true);
+    }
+  }, [step, reachedReview]);
   const [isSaving, setIsSaving] = useState(false);
   const insets = useSafeAreaInsets();
   const [isLoading, setIsLoading] = useState(true);
@@ -258,18 +204,54 @@ export default function PatientCareRecordScreen() {
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
   const { missionRefreshTrigger } = useMissionAlarm();
 
-  // Optional Incident Scene Photo
-  const [pcrPhoto, setPcrPhoto] = useState<{
+  // Unidentified Patient selection modal state
+  const [showUnidentifiedModal, setShowUnidentifiedModal] = useState(false);
+  const [isCreatingUnidentified, setIsCreatingUnidentified] = useState(false);
+
+  // In-app feedback toast state
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+
+  const triggerToast = (msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setSuccessToast(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setSuccessToast(null);
+    }, 3500);
+  };
+
+  // Unidentified Patient identification modal state
+  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
+  const [identifyForm, setIdentifyForm] = useState({
+    first_name: '',
+    middle_name: '',
+    last_name: '',
+    age: '',
+    gender: 'male',
+    street: '',
+    contact_number: '',
+  });
+  const [isIdentifying, setIsIdentifying] = useState(false);
+
+  // Optional Incident Scene Photos (Max 3)
+  const [pcrPhotos, setPcrPhotos] = useState<{
+    id: string;
     uri: string;
     latitude: number;
     longitude: number;
     locationName: string;
     capturedAt: string;
     formattedDateTime: string;
-  } | null>(null);
+  }[]>([]);
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
 
-  const handleTakePcrPhoto = async () => {
+  const handleTakePcrPhoto = async (replaceIndex?: number) => {
+    if (typeof replaceIndex !== 'number' && pcrPhotos.length >= 3) {
+      Alert.alert('Limit Reached', 'You can attach a maximum of 3 scene photos.');
+      return;
+    }
+
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -317,14 +299,31 @@ export default function PatientCareRecordScreen() {
           locationName = 'Scene Location';
         }
 
-        setPcrPhoto({
+        const newPhotoItem = {
+          id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           uri,
           latitude: photoLat,
           longitude: photoLng,
           locationName: locationName || 'Scene Location',
           capturedAt: capturedAtIso,
           formattedDateTime,
-        });
+        };
+
+        if (typeof replaceIndex === 'number' && replaceIndex >= 0 && replaceIndex < pcrPhotos.length) {
+          setPcrPhotos(prev => {
+            const copy = [...prev];
+            copy[replaceIndex] = newPhotoItem;
+            return copy;
+          });
+          triggerToast(`Updated photo ${replaceIndex + 1}`);
+        } else {
+          setPcrPhotos(prev => {
+            const next = [...prev, newPhotoItem];
+            setSelectedPhotoIndex(next.length - 1);
+            return next;
+          });
+          triggerToast(`Attached photo ${pcrPhotos.length + 1} of 3`);
+        }
       }
     } catch (err: any) {
       console.warn('Error taking PCR photo:', err);
@@ -334,8 +333,28 @@ export default function PatientCareRecordScreen() {
     }
   };
 
-  const handleRemovePcrPhoto = () => {
-    setPcrPhoto(null);
+  const handleRemovePcrPhoto = (indexToRemove: number) => {
+    Alert.alert(
+      'Remove Photo',
+      `Are you sure you want to remove Photo ${indexToRemove + 1}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            setPcrPhotos(prev => {
+              const updated = prev.filter((_, idx) => idx !== indexToRemove);
+              if (selectedPhotoIndex >= updated.length) {
+                setSelectedPhotoIndex(Math.max(0, updated.length - 1));
+              }
+              return updated;
+            });
+            triggerToast('Photo removed');
+          },
+        },
+      ]
+    );
   };
 
   // Negative on Scene / False Alarm State
@@ -354,6 +373,9 @@ export default function PatientCareRecordScreen() {
         category: unfoundedCategory,
       });
       setShowUnfoundedModal(false);
+      if (activeDispatch?.id) {
+        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+      }
       setActiveDispatch(null);
       setFormData(initialFormData);
       Alert.alert(
@@ -374,6 +396,78 @@ export default function PatientCareRecordScreen() {
     }
   };
 
+  // Refs to allow background auto-save to access latest state values
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
+  const activeDispatchRef = useRef(activeDispatch);
+  activeDispatchRef.current = activeDispatch;
+
+  // Auto-persist draft to AsyncStorage on every change
+  useEffect(() => {
+    if (activeDispatch?.id && formData?.patient_id) {
+      AsyncStorage.setItem(`@pcr_draft_${activeDispatch.id}`, JSON.stringify(formData)).catch(() => {});
+    }
+  }, [formData, activeDispatch?.id]);
+
+  // Auto-persist scene photos to AsyncStorage
+  useEffect(() => {
+    if (activeDispatch?.id) {
+      if (pcrPhotos.length > 0) {
+        AsyncStorage.setItem(`@pcr_photos_${activeDispatch.id}`, JSON.stringify(pcrPhotos)).catch(() => {});
+      } else {
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+      }
+    }
+  }, [pcrPhotos, activeDispatch?.id]);
+
+  // When responder presses phone Home button or switches apps, save draft immediately to database
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        const curDispatch = activeDispatchRef.current;
+        const curForm = formDataRef.current;
+        if (curDispatch?.id && curForm?.patient_id) {
+          AsyncStorage.setItem(`@pcr_draft_${curDispatch.id}`, JSON.stringify(curForm)).catch(() => {});
+
+          const uniqueAssessments = Array.from(new Set(curForm.assessment_markers.map((m: any) => m.label).filter(Boolean)));
+          const payload = {
+            patient_id: curForm.patient_id,
+            gender: curForm.gender,
+            contact_number: curForm.contact_number,
+            nature_of_call: curForm.nature_of_call,
+            chief_complaint: curForm.chief_complaint,
+            place_of_incident: curForm.place_of_incident,
+            civil_status: curForm.civil_status,
+            incident_address: curForm.incident_address,
+            age: curForm.age,
+            assessment: uniqueAssessments,
+            assessment_markers: curForm.assessment_markers,
+            vital_signs: curForm.vital_signs,
+            glasgow_coma_scale: curForm.glasgow_coma_scale,
+            disposition: curForm.disposition,
+            special_instructions: curForm.special_instructions,
+            dispatch_time: normalizeTimeTo24(curForm.dispatch_time),
+            en_route_time: normalizeTimeTo24(curForm.en_route_time),
+            on_scene_time: normalizeTimeTo24(curForm.on_scene_time),
+            transported: curForm.transported,
+            transported_to: curForm.transported_to,
+            received_by: curForm.received_by,
+            patient_signature: curForm.patient_signature,
+            witness_name: curForm.witness_name,
+            witness_signature: curForm.witness_signature,
+            waiver_signature: curForm.waiver_signature,
+          };
+          updatePcr(curDispatch.id, payload).catch((err) => {
+            console.log('Background auto-save failed:', err?.message);
+          });
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, []);
+
   useEffect(() => {
     loadActiveDispatch();
   }, [missionRefreshTrigger]);
@@ -391,6 +485,31 @@ export default function PatientCareRecordScreen() {
         const dispatch = res.data[0];
         setActiveDispatch(dispatch);
         setIsWalkIn(false);
+
+        // Load any cached draft from AsyncStorage
+        let cachedDraft: any = null;
+        try {
+          const draftRaw = await AsyncStorage.getItem(`@pcr_draft_${dispatch.id}`);
+          if (draftRaw) {
+            cachedDraft = JSON.parse(draftRaw);
+          }
+        } catch (e) {
+          console.log('Error reading cached draft:', e);
+        }
+
+        // Load any cached scene photos from AsyncStorage
+        try {
+          const photosRaw = await AsyncStorage.getItem(`@pcr_photos_${dispatch.id}`);
+          if (photosRaw) {
+            const parsedPhotos = JSON.parse(photosRaw);
+            if (Array.isArray(parsedPhotos) && parsedPhotos.length > 0) {
+              setPcrPhotos(parsedPhotos);
+              setSelectedPhotoIndex(0);
+            }
+          }
+        } catch (e) {
+          console.log('Error reading cached photos:', e);
+        }
 
         const pcr = dispatch.patient_care_record;
         const resident = dispatch.incident?.resident;
@@ -469,52 +588,84 @@ export default function PatientCareRecordScreen() {
         const resolvedLastName = existingPatient?.last_name || resident?.last_name || '';
         const resolvedFullName = `${resolvedFirstName} ${resolvedLastName}`.trim();
 
-        setFormData(prev => ({
-          ...prev,
-          dispatch_time: formatTime24ForApi(dispatch.created_at),
-          en_route_time: formatTime24ForApi(dispatch.en_route_at),
-          on_scene_time: formatTime24ForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
-          responders: [
-            dispatch.team_leader ? `${dispatch.team_leader.first_name} ${dispatch.team_leader.last_name}` : null,
-            dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : null,
-            dispatch.emt ? `${dispatch.emt.first_name} ${dispatch.emt.last_name}` : null
-          ].filter(Boolean).join(', '),
-          place_of_incident: defaultPlaceOfIncident || prev.place_of_incident,
-          incident_address: pcr?.incident_address || dispatch.incident?.incident_address || defaultHomeAddress || prev.incident_address,
-          address: defaultHomeAddress || prev.address,
-          chief_complaint: defaultChiefComplaint || prev.chief_complaint,
-          nature_of_call: defaultNatureOfCall || prev.nature_of_call,
+        // Ensure Barangay is shown in Place of Incident so responders can easily just add Zone/Purok
+        if (!pcr?.place_of_incident && dispatch.incident?.barangay && defaultPlaceOfIncident && !defaultPlaceOfIncident.toLowerCase().includes(dispatch.incident.barangay.toLowerCase())) {
+          defaultPlaceOfIncident = `Brgy. ${dispatch.incident.barangay}, ${defaultPlaceOfIncident}`;
+        }
 
-          // Auto-populated Patient Demographics
-          patient_id: resolvedPatientId || prev.patient_id,
-          first_name: resolvedFirstName || prev.first_name,
-          last_name: resolvedLastName || prev.last_name,
-          birthdate: resolvedBirthdate || prev.birthdate,
-          gender: resolvedGender || prev.gender,
-          age: resolvedAge || prev.age,
-          contact_number: resolvedContact || prev.contact_number,
-          searchQuery: resolvedFullName || prev.searchQuery,
-          civil_status: pcr?.civil_status || existingPatient?.civil_status || prev.civil_status || 'single',
+        setFormData(prev => {
+          // Check if user already typed an address in memory or in cached draft
+          const userEnteredAddress = (prev.incident_address && !prev.incident_address.includes('Pending Identification'))
+            ? prev.incident_address
+            : (cachedDraft?.incident_address && !cachedDraft.incident_address.includes('Pending Identification') ? cachedDraft.incident_address : null);
 
-          ...(pcr ? {
-            assessment_findings: pcr.assessment || prev.assessment_findings,
-            assessment_markers: pcr.assessment_markers || prev.assessment_markers,
+          const cleanDefaultHome = (defaultHomeAddress && !defaultHomeAddress.includes('Pending Identification'))
+            ? defaultHomeAddress
+            : null;
 
-            vital_signs: pcr.vital_signs || prev.vital_signs,
-            glasgow_coma_scale: pcr.glasgow_coma_scale || prev.glasgow_coma_scale,
+          const cleanIncidentAddress = (dispatch.incident?.incident_address && !dispatch.incident.incident_address.includes('Pending Identification'))
+            ? dispatch.incident.incident_address
+            : null;
 
-            disposition: pcr.disposition || prev.disposition,
-            special_instructions: pcr.special_instructions || prev.special_instructions,
-            transported: pcr.transported !== undefined ? pcr.transported : prev.transported,
-            transported_to: pcr.transported_to || prev.transported_to,
-            received_by: pcr.received_by || prev.received_by,
+          const resolvedIncidentAddress = userEnteredAddress
+            || pcr?.incident_address
+            || cleanDefaultHome
+            || cleanIncidentAddress
+            || prev.incident_address
+            || cachedDraft?.incident_address
+            || '';
 
-            patient_signature: pcr.patient_signature || pcr.waiver_signature || prev.patient_signature,
-            witness_name: pcr.witness_name || prev.witness_name,
-            witness_signature: pcr.witness_signature || prev.witness_signature,
-            waiver_signature: pcr.waiver_signature || pcr.patient_signature || prev.waiver_signature,
-          } : {})
-        }));
+          return {
+            ...prev,
+            ...(cachedDraft || {}),
+            dispatch_time: formatTime24ForApi(dispatch.created_at),
+            en_route_time: formatTime24ForApi(dispatch.en_route_at),
+            on_scene_time: formatTime24ForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
+            responders: [
+              dispatch.team_leader ? `${dispatch.team_leader.first_name} ${dispatch.team_leader.last_name}` : null,
+              dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : null,
+              dispatch.emt ? `${dispatch.emt.first_name} ${dispatch.emt.last_name}` : null
+            ].filter(Boolean).join(', '),
+            place_of_incident: prev.place_of_incident?.trim() || cachedDraft?.place_of_incident?.trim() || defaultPlaceOfIncident || prev.place_of_incident,
+            incident_address: resolvedIncidentAddress,
+            address: resolvedIncidentAddress,
+            chief_complaint: prev.chief_complaint?.trim() || cachedDraft?.chief_complaint?.trim() || defaultChiefComplaint || prev.chief_complaint,
+            nature_of_call: prev.nature_of_call?.trim() || cachedDraft?.nature_of_call?.trim() || defaultNatureOfCall || prev.nature_of_call,
+
+            // Auto-populated Patient Demographics
+            patient_id: prev.patient_id || cachedDraft?.patient_id || resolvedPatientId,
+            first_name: prev.first_name?.trim() || cachedDraft?.first_name?.trim() || resolvedFirstName,
+            last_name: prev.last_name?.trim() || cachedDraft?.last_name?.trim() || resolvedLastName,
+            birthdate: prev.birthdate || cachedDraft?.birthdate || resolvedBirthdate,
+            gender: prev.gender || cachedDraft?.gender || resolvedGender,
+            age: prev.age?.trim() || cachedDraft?.age?.trim() || resolvedAge,
+            contact_number: prev.contact_number?.trim() || cachedDraft?.contact_number?.trim() || resolvedContact,
+            searchQuery: prev.searchQuery?.trim() || cachedDraft?.searchQuery?.trim() || resolvedFullName,
+            civil_status: prev.civil_status || cachedDraft?.civil_status || pcr?.civil_status || existingPatient?.civil_status || 'single',
+            is_unidentified: prev.is_unidentified !== undefined
+              ? prev.is_unidentified
+              : (cachedDraft?.is_unidentified !== undefined ? cachedDraft.is_unidentified : Boolean(existingPatient?.is_unidentified || pcr?.patient?.is_unidentified)),
+
+            ...(pcr ? {
+              assessment_findings: pcr.assessment || prev.assessment_findings,
+              assessment_markers: pcr.assessment_markers || prev.assessment_markers,
+
+              vital_signs: pcr.vital_signs || prev.vital_signs,
+              glasgow_coma_scale: pcr.glasgow_coma_scale || prev.glasgow_coma_scale,
+
+              disposition: pcr.disposition || prev.disposition,
+              special_instructions: pcr.special_instructions || prev.special_instructions,
+              transported: pcr.transported !== undefined ? pcr.transported : prev.transported,
+              transported_to: pcr.transported_to || prev.transported_to,
+              received_by: pcr.received_by || prev.received_by,
+
+              patient_signature: pcr.patient_signature || pcr.waiver_signature || prev.patient_signature,
+              witness_name: pcr.witness_name || prev.witness_name,
+              witness_signature: pcr.witness_signature || prev.witness_signature,
+              waiver_signature: pcr.waiver_signature || pcr.patient_signature || prev.waiver_signature,
+            } : {})
+          };
+        });
       } else {
         if (!isWalkIn) {
           setActiveDispatch(null);
@@ -558,8 +709,11 @@ export default function PatientCareRecordScreen() {
     const incLng = parseFloat(activeDispatch.incident.incident_longitude ?? activeDispatch.incident.longitude);
     if (!isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
       setIsResolvingLocation(true);
-      const address = await resolveAddressFromCoords(incLat, incLng);
-      setFormData(prev => ({ ...prev, place_of_incident: address || 'Opol, Misamis Oriental' }));
+      let address = await resolveAddressFromCoords(incLat, incLng) || 'Opol, Misamis Oriental';
+      if (activeDispatch.incident.barangay && !address.toLowerCase().includes(activeDispatch.incident.barangay.toLowerCase())) {
+        address = `Brgy. ${activeDispatch.incident.barangay}, ${address}`;
+      }
+      setFormData(prev => ({ ...prev, place_of_incident: address }));
       setErrors(prev => ({ ...prev, place_of_incident: '' }));
       setIsResolvingLocation(false);
     } else if (activeDispatch.incident.description) {
@@ -722,7 +876,8 @@ export default function PatientCareRecordScreen() {
         incident_address: homeAddress || prev.incident_address, // Resident Home Address
         civil_status: patient.civil_status || prev.civil_status || 'single',
         age: calculatedAge,
-        searchQuery: `${patient.first_name} ${patient.last_name}`
+        searchQuery: `${patient.first_name} ${patient.last_name}`,
+        is_unidentified: Boolean(patient.is_unidentified),
       };
     });
     setSearchResults([]);
@@ -771,6 +926,123 @@ export default function PatientCareRecordScreen() {
     }
   };
 
+  const handlePromptUnidentifiedPatient = () => {
+    setShowUnidentifiedModal(true);
+  };
+
+  const createUnidentifiedPatient = async (gender: string | null) => {
+    setIsCreatingUnidentified(true);
+    try {
+      const firstName = 'Unknown';
+      const lastName = gender === 'male' ? 'Male' : gender === 'female' ? 'Female' : 'Patient';
+      const sceneLoc = activeDispatch?.incident?.incident_address || 'Scene Location';
+      const payload = {
+        first_name: firstName,
+        last_name: lastName,
+        gender: gender || 'male',
+        age: '20-30',
+        address: `Pending Identification (${sceneLoc})`,
+        incident_address: `Pending Identification (${sceneLoc})`,
+        is_unidentified: true,
+      };
+
+      const res = await createPatient(payload);
+      if (res && (res.patient_id || res.id)) {
+        selectPatient({
+          ...res,
+          id: res.patient_id || res.id,
+          first_name: firstName,
+          last_name: lastName,
+          gender: gender || 'male',
+          age: '20-30',
+          address: payload.address,
+          is_unidentified: true,
+        });
+        setFormData(prev => ({
+          ...prev,
+          is_unidentified: true,
+          nature_of_call: prev.nature_of_call || 'emergency',
+          place_of_incident: prev.place_of_incident || sceneLoc,
+          chief_complaint: prev.chief_complaint || 'Unresponsive / Unidentified Patient',
+        }));
+        setErrors({});
+        setShowUnidentifiedModal(false);
+        triggerToast(`Unidentified Patient Set: ${firstName} ${lastName}`);
+      }
+    } catch (err: any) {
+      console.log('Error creating unidentified patient:', err?.response?.data || err?.message);
+      Alert.alert('Error', 'Failed to create unidentified patient.');
+    } finally {
+      setIsCreatingUnidentified(false);
+    }
+  };
+
+  const handleSelectGender = (newGender: string) => {
+    setFormData(prev => {
+      let updatedLastName = prev.last_name;
+      let updatedSearchQuery = prev.searchQuery;
+
+      if (prev.is_unidentified && (prev.first_name === 'Unknown' || prev.first_name === 'Unidentified')) {
+        updatedLastName = newGender === 'male' ? 'Male' : newGender === 'female' ? 'Female' : 'Patient';
+        updatedSearchQuery = `${prev.first_name} ${updatedLastName}`;
+        triggerToast(`Updated profile to Unknown ${updatedLastName}`);
+      }
+
+      return {
+        ...prev,
+        gender: newGender,
+        last_name: updatedLastName,
+        searchQuery: updatedSearchQuery,
+      };
+    });
+  };
+
+  const handleSaveIdentification = async () => {
+    if (!formData.patient_id) return;
+    if (!identifyForm.first_name.trim()) {
+      Alert.alert('Validation Error', 'First name is required.');
+      return;
+    }
+    if (!identifyForm.last_name.trim()) {
+      Alert.alert('Validation Error', 'Last name is required.');
+      return;
+    }
+
+    setIsIdentifying(true);
+    try {
+      const res = await identifyPatient(formData.patient_id, {
+        first_name: identifyForm.first_name.trim(),
+        middle_name: identifyForm.middle_name.trim() || null,
+        last_name: identifyForm.last_name.trim(),
+        age: identifyForm.age ? parseInt(identifyForm.age, 10) : null,
+        gender: identifyForm.gender || null,
+        street: identifyForm.street.trim() || null,
+        contact_number: identifyForm.contact_number.trim() || null,
+      });
+
+      const updated = res.patient || res;
+      setFormData(prev => ({
+        ...prev,
+        first_name: updated.first_name,
+        last_name: updated.last_name,
+        age: updated.age ? String(updated.age) : prev.age,
+        gender: updated.gender || prev.gender,
+        incident_address: updated.street || prev.incident_address,
+        address: updated.street || prev.address,
+        contact_number: updated.contact_number || prev.contact_number,
+        searchQuery: `${updated.first_name} ${updated.last_name}`,
+        is_unidentified: false,
+      }));
+      setShowIdentifyModal(false);
+      Alert.alert('Identification Verified', 'Patient identity has been permanently verified and locked.');
+    } catch (err: any) {
+      console.log('Error identifying patient:', err?.response?.data || err?.message);
+      Alert.alert('Error', err?.response?.data?.message || 'Failed to update patient identity.');
+    } finally {
+      setIsIdentifying(false);
+    }
+  };
+
   const saveCurrentStep = async () => {
     if (!activeDispatch || !formData.patient_id) return true;
     setIsSaving(true);
@@ -812,6 +1084,11 @@ export default function PatientCareRecordScreen() {
       return true;
     } catch (e: any) {
       console.log('PCR Save Error:', e.response?.data || e.message);
+      const isNetwork = e.isNetworkError || !e.response || e.code === 'ERR_NETWORK';
+      if (isNetwork) {
+        console.log('[patient.tsx] Offline: PCR draft saved locally and queued for sync.');
+        return true;
+      }
       const errorMsg = e.response?.data?.message || e.message || 'Failed to save progress.';
       Alert.alert('Error', errorMsg);
       return false;
@@ -820,21 +1097,47 @@ export default function PatientCareRecordScreen() {
     }
   };
 
-  const handleNext = async () => {
+  const validateStep = (stepNum: number) => {
     let newErrors: Record<string, string> = {};
 
-    // Step Validation
-    if (step === 1) {
+    if (stepNum === 1) {
       if (!formData.patient_id) {
         newErrors.patient_id = 'Please select or create a patient first.';
       }
 
-      if (!formData.age) {
+      if (!formData.age || !formData.age.trim()) {
         newErrors.age = 'Age is required.';
+      } else if (formData.is_unidentified) {
+        // Unidentified: Allow age range (e.g. "20-30") or single estimated age
+        const rangeRegex = /^(\d{1,3})-(\d{1,3})$/;
+        const singleRegex = /^\d{1,3}$/;
+        const trimmedAge = formData.age.trim();
+        if (rangeRegex.test(trimmedAge)) {
+          const match = trimmedAge.match(rangeRegex);
+          const min = parseInt(match![1], 10);
+          const max = parseInt(match![2], 10);
+          if (min < 0 || max > 120 || min > max) {
+            newErrors.age = 'Please enter a valid age range (e.g. 20-30).';
+          }
+        } else if (singleRegex.test(trimmedAge)) {
+          const single = parseInt(trimmedAge, 10);
+          if (single < 0 || single > 120) {
+            newErrors.age = 'Please enter a valid age between 0 and 120.';
+          }
+        } else {
+          newErrors.age = 'Please enter a valid age or estimated range (e.g. 20-30).';
+        }
       } else {
-        const ageNum = parseInt(formData.age, 10);
-        if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
-          newErrors.age = 'Please enter a valid age between 0 and 120.';
+        // Identified patient: ONLY exact numeric age allowed (e.g. 25, NOT 20-30)
+        const trimmedAge = formData.age.trim();
+        const singleRegex = /^\d{1,3}$/;
+        if (!singleRegex.test(trimmedAge)) {
+          newErrors.age = 'Identified patients must have an exact age (e.g. 25). Ranges like 20-30 are only for unidentified patients.';
+        } else {
+          const ageNum = parseInt(trimmedAge, 10);
+          if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
+            newErrors.age = 'Please enter a valid age between 0 and 120.';
+          }
         }
       }
 
@@ -855,33 +1158,38 @@ export default function PatientCareRecordScreen() {
           newErrors.contact_number = 'Please enter a valid Philippine mobile number (e.g. 09123456789).';
         }
       }
-    } else if (step === 2) {
+    } else if (stepNum === 2) {
       if (formData.assessment_markers.length === 0) {
         newErrors.assessment = 'Please add at least one injury marker to the diagram.';
       }
-    } else if (step === 3) {
+    } else if (stepNum === 3) {
       const t1 = formData.vital_signs[0];
       if (!t1.time || !t1.bp || !t1.pr || !t1.rr || !t1.spo2) {
         newErrors.vital_signs = 'Please complete Time, BP, PR/HR, RR, and O2 Sat for Take 1.';
       }
-    } else if (step === 4) {
+    } else if (stepNum === 4) {
       if (formData.glasgow_coma_scale.eye === 0 || formData.glasgow_coma_scale.verbal === 0 || formData.glasgow_coma_scale.motor === 0) {
         newErrors.gcs = 'Please select a value for Eye, Verbal, and Motor response.';
       }
-    } else if (step === 5) {
+    } else if (stepNum === 5) {
       if (formData.disposition.length === 0) {
         newErrors.disposition = 'Please select at least one disposition option.';
       }
-    } else if (step === 6) {
+    } else if (stepNum === 6) {
       const isTransported = formData.disposition.some(d => d.includes('Transported'));
       if (isTransported) {
         if (!formData.transported_to) newErrors.transported_to = 'Transported To is required.';
         if (!formData.received_by) newErrors.received_by = 'Received By is required.';
       }
-    } else if (step === 7) {
+    } else if (stepNum === 7) {
       // No required signatures by default since waiver is optional
     }
 
+    return newErrors;
+  };
+
+  const handleNext = async () => {
+    const newErrors = validateStep(step);
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -891,7 +1199,24 @@ export default function PatientCareRecordScreen() {
 
     const saved = await saveCurrentStep();
     if (saved && step < TOTAL_STEPS) {
+      if (step + 1 === TOTAL_STEPS) {
+        setReachedReview(true);
+      }
       setStep(step + 1);
+    }
+  };
+
+  const handleReturnToReview = async () => {
+    const newErrors = validateStep(step);
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setErrors({});
+    const saved = await saveCurrentStep();
+    if (saved) {
+      setStep(TOTAL_STEPS);
     }
   };
 
@@ -901,40 +1226,109 @@ export default function PatientCareRecordScreen() {
 
     setIsSaving(true);
     try {
-      // If an optional scene photo was taken, upload it
-      if (pcrPhoto && activeDispatch?.id) {
-        try {
-          const filename = pcrPhoto.uri.split('/').pop() || 'pcr_photo.jpg';
-          const match = /\.(\w+)$/.exec(filename);
-          const type = match ? `image/${match[1]}` : `image/jpeg`;
+      // If optional scene photos were taken (up to 3), upload or queue them
+      if (pcrPhotos.length > 0 && activeDispatch?.id) {
+        for (let i = 0; i < pcrPhotos.length; i++) {
+          const photo = pcrPhotos[i];
+          try {
+            const filename = photo.uri.split('/').pop() || `pcr_photo_${i + 1}.jpg`;
+            const match = /\.(\w+)$/.exec(filename);
+            const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-          const photoFormData = new FormData();
-          photoFormData.append('photo', {
-            uri: pcrPhoto.uri,
-            name: filename,
-            type,
-          } as any);
+            const photoFormData = new FormData();
+            photoFormData.append('photo', {
+              uri: photo.uri,
+              name: filename,
+              type,
+            } as any);
 
-          if (pcrPhoto.latitude) photoFormData.append('photo_latitude', pcrPhoto.latitude.toString());
-          if (pcrPhoto.longitude) photoFormData.append('photo_longitude', pcrPhoto.longitude.toString());
-          if (pcrPhoto.locationName) photoFormData.append('photo_location_name', pcrPhoto.locationName);
-          if (pcrPhoto.capturedAt) photoFormData.append('photo_captured_at', pcrPhoto.capturedAt);
+            if (photo.latitude) photoFormData.append('photo_latitude', photo.latitude.toString());
+            if (photo.longitude) photoFormData.append('photo_longitude', photo.longitude.toString());
+            if (photo.locationName) photoFormData.append('photo_location_name', photo.locationName);
+            if (photo.capturedAt) photoFormData.append('photo_captured_at', photo.capturedAt);
 
-          await uploadPcrPhoto(activeDispatch.id, photoFormData);
-        } catch (photoErr) {
-          console.warn('PCR Photo upload failed, continuing with PCR submission:', photoErr);
-          // Do not block PCR submission if photo upload fails on poor mobile internet
+            const uploadRes = await uploadPcrPhoto(activeDispatch.id, photoFormData);
+            if (uploadRes?.is_offline_queued) {
+              await offlineSyncService.enqueue({
+                action: 'UPLOAD_PHOTO',
+                dispatchId: activeDispatch.id,
+                payload: {
+                  uri: photo.uri,
+                  filename,
+                  type,
+                  latitude: photo.latitude,
+                  longitude: photo.longitude,
+                  locationName: photo.locationName,
+                  capturedAt: photo.capturedAt,
+                },
+              });
+            }
+          } catch (photoErr) {
+            console.warn(`PCR Photo ${i + 1} upload failed, queueing for offline sync:`, photoErr);
+            await offlineSyncService.enqueue({
+              action: 'UPLOAD_PHOTO',
+              dispatchId: activeDispatch.id,
+              payload: {
+                uri: photo.uri,
+                filename: `pcr_photo_${i + 1}.jpg`,
+                type: 'image/jpeg',
+                latitude: photo.latitude,
+                longitude: photo.longitude,
+                locationName: photo.locationName,
+                capturedAt: photo.capturedAt,
+              },
+            });
+          }
         }
       }
 
-      await submitPcr(activeDispatch.id);
-      Alert.alert('Success', 'PCR submitted successfully!');
-      setPcrPhoto(null);
+      const submitRes = await submitPcr(activeDispatch.id);
+      if (activeDispatch?.id) {
+        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+      }
+
+      if (submitRes?.is_offline_queued) {
+        Alert.alert(
+          'PCR Saved Offline',
+          'Your Patient Care Report and scene photos have been securely preserved on this device. They will automatically synchronize with the MDRRMO server when internet returns.',
+          [{ text: 'OK', onPress: () => router.replace('/(responder)') }]
+        );
+      } else {
+        Alert.alert('Success', 'PCR submitted successfully!', [
+          { text: 'OK', onPress: () => router.replace('/(responder)') }
+        ]);
+      }
+
+      setPcrPhotos([]);
+      setSelectedPhotoIndex(0);
       setActiveDispatch(null);
       setStep(1);
+      setReachedReview(false);
       setFormData(initialFormData);
     } catch (e: any) {
       console.log('PCR Submit Error:', e.response?.data || e.message);
+      const isNetwork = e.isNetworkError || !e.response || e.code === 'ERR_NETWORK';
+      if (isNetwork && activeDispatch?.id) {
+        await offlineMissionService.updateStatusOffline(activeDispatch.id, 'completed');
+        await offlineSyncService.enqueue({
+          action: 'SUBMIT_PCR',
+          dispatchId: activeDispatch.id,
+          payload: {},
+        });
+        Alert.alert(
+          'PCR Saved Offline',
+          'Network connection lost. Your PCR has been saved locally and will synchronize automatically when internet returns.',
+          [{ text: 'OK', onPress: () => router.replace('/(responder)') }]
+        );
+        setPcrPhotos([]);
+        setSelectedPhotoIndex(0);
+        setActiveDispatch(null);
+        setStep(1);
+        setReachedReview(false);
+        setFormData(initialFormData);
+        return;
+      }
       const errorMsg = e.response?.data?.message || e.message || 'Failed to submit PCR.';
       Alert.alert('Error', errorMsg);
     } finally {
@@ -944,9 +1338,34 @@ export default function PatientCareRecordScreen() {
 
   const renderStepIndicator = () => (
     <View style={styles.stepContainer}>
-      {[...Array(TOTAL_STEPS)].map((_, i) => (
-        <View key={i} style={[styles.stepDot, i + 1 <= step ? styles.stepActive : null]} />
-      ))}
+      {[...Array(TOTAL_STEPS)].map((_, i) => {
+        const canJump = reachedReview || i + 1 <= step;
+        return (
+          <TouchableOpacity
+            key={i}
+            disabled={!canJump}
+            onPress={async () => {
+              if (i + 1 === step) return;
+              if (reachedReview || i + 1 < step) {
+                const currentErrors = validateStep(step);
+                if (Object.keys(currentErrors).length === 0) {
+                  setErrors({});
+                  await saveCurrentStep();
+                  setStep(i + 1);
+                } else if (i + 1 < step) {
+                  // Going backward is always safe
+                  setStep(i + 1);
+                } else {
+                  setErrors(currentErrors);
+                }
+              }
+            }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            style={[styles.stepDot, i + 1 <= step ? styles.stepActive : null]}
+          />
+        );
+      })}
     </View>
   );
 
@@ -1003,6 +1422,23 @@ export default function PatientCareRecordScreen() {
   const renderStep1 = () => (
     <View style={styles.content}>
       <Text style={styles.title}>Step 1: Patient Info</Text>
+
+      {/* Floating In-App Success Feedback Toast */}
+      {successToast && (
+        <View style={styles.toastBanner}>
+          <Check size={18} color="#15803d" />
+          <Text style={styles.toastText}>{successToast}</Text>
+        </View>
+      )}
+
+      {/* Quick Unidentified Patient Option for Emergency Cases */}
+      {!formData.patient_id && (
+        <TouchableOpacity style={styles.unidentifiedQuickBtn} onPress={handlePromptUnidentifiedPatient}>
+          <AlertCircle size={16} color="#d97706" />
+          <Text style={styles.unidentifiedQuickBtnText}>+ Unidentified Patient</Text>
+        </TouchableOpacity>
+      )}
+
       <Text style={[styles.label, { marginTop: 0 }]}>Search Patient</Text>
       <TextInput
         style={[styles.input, errors.patient_id ? styles.inputError : null]}
@@ -1030,32 +1466,180 @@ export default function PatientCareRecordScreen() {
           <Text style={styles.createBtnText}>+ Create New Patient: {formData.searchQuery}</Text>
         </TouchableOpacity>
       )}
+
+      {/* Selected Patient Banner */}
       {formData.patient_id && (
-        <View style={styles.selectedPatient}>
-          <Text style={styles.resultName}>Selected: {formData.first_name} {formData.last_name}</Text>
-        </View>
+        formData.is_unidentified ? (
+          <View style={styles.unidentifiedBanner}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#fef3c7', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserX size={16} color="#d97706" />
+                </View>
+                <Text style={styles.unidentifiedBannerTitle}>
+                  {formData.first_name} {formData.last_name}
+                </Text>
+                <View style={{ backgroundColor: '#fed7aa', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#9a3412', textTransform: 'uppercase' }}>Unidentified</Text>
+                </View>
+              </View>
+              <Text style={styles.unidentifiedBannerSubtitle}>
+                Temporary record. Once family arrives, tap to verify legal name & details.
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.identifyActionBtn}
+                onPress={() => {
+                  setIdentifyForm({
+                    first_name: '',
+                    middle_name: '',
+                    last_name: '',
+                    age: formData.age && !formData.age.includes('-') ? formData.age : '',
+                    gender: formData.gender || 'male',
+                    street: formData.incident_address && !formData.incident_address.includes('Pending Identification') ? formData.incident_address : '',
+                    contact_number: formData.contact_number || '',
+                  });
+                  setShowIdentifyModal(true);
+                }}
+              >
+                <UserCheck size={14} color="#fff" />
+                <Text style={styles.identifyActionBtnText}>Edit Patient</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    patient_id: null,
+                    searchQuery: '',
+                    first_name: '',
+                    last_name: '',
+                    is_unidentified: false,
+                  }));
+                  triggerToast('Cleared patient selection');
+                }}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: '#fee2e2',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Trash2 size={16} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.selectedPatient}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View>
+                <Text style={styles.resultName}>Selected: {formData.first_name} {formData.last_name}</Text>
+                {formData.contact_number ? <Text style={styles.resultSub}>{formData.contact_number}</Text> : null}
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    patient_id: null,
+                    searchQuery: '',
+                    first_name: '',
+                    last_name: '',
+                    is_unidentified: false,
+                  }));
+                  triggerToast('Cleared patient selection');
+                }}
+                style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#dcfce7' }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#15803d' }}>Change</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )
       )}
 
-      <View style={{ marginTop: 10 }}>
+      <View style={{ marginTop: 14 }}>
         <Text style={styles.label}>Gender</Text>
-        <View style={styles.checkboxContainer}>
-          {['male', 'female'].map(g => (
-            <TouchableOpacity key={g} style={[styles.checkbox, formData.gender === g && styles.checkboxActive]} onPress={() => setFormData({ ...formData, gender: g })}>
-              <Text style={[styles.checkboxText, formData.gender === g && styles.checkboxTextActive]}>{g.charAt(0).toUpperCase() + g.slice(1)}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 15 }}>
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => handleSelectGender('male')}
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              paddingVertical: 14,
+              borderRadius: 14,
+              borderWidth: 1.5,
+              borderColor: formData.gender === 'male' ? '#3b82f6' : '#e2e8f0',
+              backgroundColor: formData.gender === 'male' ? '#eff6ff' : '#f8fafc',
+            }}
+          >
+            <User size={18} color={formData.gender === 'male' ? '#2563eb' : '#64748b'} />
+            <Text style={{
+              fontSize: 15,
+              fontWeight: formData.gender === 'male' ? '800' : '600',
+              color: formData.gender === 'male' ? '#1d4ed8' : '#64748b',
+            }}>
+              Male
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => handleSelectGender('female')}
+            style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              paddingVertical: 14,
+              borderRadius: 14,
+              borderWidth: 1.5,
+              borderColor: formData.gender === 'female' ? '#ec4899' : '#e2e8f0',
+              backgroundColor: formData.gender === 'female' ? '#fdf2f8' : '#f8fafc',
+            }}
+          >
+            <User size={18} color={formData.gender === 'female' ? '#db2777' : '#64748b'} />
+            <Text style={{
+              fontSize: 15,
+              fontWeight: formData.gender === 'female' ? '800' : '600',
+              color: formData.gender === 'female' ? '#be185d' : '#64748b',
+            }}>
+              Female
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Age</Text>
+        <Text style={styles.label}>
+          Age {formData.is_unidentified ? '(Estimated Range e.g. 20-30)' : '(Exact)'}
+        </Text>
         <TextInput
           style={[styles.input, errors.age ? styles.inputError : null]}
-          placeholder="e.g. 34"
-          keyboardType="numeric"
-          maxLength={3}
+          placeholder={formData.is_unidentified ? "e.g. 20-30" : "e.g. 34"}
+          keyboardType={formData.is_unidentified ? (Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default') : "numeric"}
+          maxLength={formData.is_unidentified ? 7 : 3}
           value={formData.age}
           onChangeText={(v) => {
-            const numericValue = v.replace(/[^0-9]/g, '');
-            setFormData({ ...formData, age: numericValue });
+            let cleanVal = '';
+            if (formData.is_unidentified) {
+              // Allow numbers and at most one hyphen for estimated range e.g. 20-30
+              cleanVal = v.replace(/[^0-9-]/g, '');
+              const parts = cleanVal.split('-');
+              if (parts.length > 2) {
+                cleanVal = `${parts[0]}-${parts.slice(1).join('')}`;
+              }
+            } else {
+              // Exact age only: numbers only, hyphen strictly rejected
+              cleanVal = v.replace(/[^0-9]/g, '');
+            }
+            setFormData({ ...formData, age: cleanVal });
             setErrors({ ...errors, age: '' });
           }}
         />
@@ -1556,15 +2140,62 @@ export default function PatientCareRecordScreen() {
 
   const renderStep8 = () => {
     const uniqueAssessments = Array.from(new Set(formData.assessment_markers.map(m => m.label).filter(Boolean)));
+    const firstVital = formData.vital_signs?.[0];
+    const isTransported = formData.disposition.some(d => d.includes('Transported'));
 
-    const SummaryRow = ({ icon: Icon, title, value }: any) => (
+    const SummaryRow = ({
+      icon: Icon,
+      title,
+      value,
+      subtitle,
+      onEdit,
+    }: {
+      icon: any;
+      title: string;
+      value: string;
+      subtitle?: string;
+      onEdit?: () => void;
+    }) => (
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 }}>
-        <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 16 }}>
+        <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 14, marginTop: 2 }}>
           <Icon size={20} color="#0f172a" />
         </View>
         <View style={{ flex: 1, justifyContent: 'center' }}>
-          <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '700', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>{title}</Text>
-          <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '700' }}>{value || 'None'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {title}
+            </Text>
+            {onEdit && (
+              <TouchableOpacity
+                onPress={onEdit}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#eff6ff',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#bfdbfe',
+                }}
+              >
+                <Edit3 size={12} color="#2563eb" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563eb', marginLeft: 4 }}>
+                  Edit
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '700', lineHeight: 22 }}>
+            {value || 'None'}
+          </Text>
+          {subtitle ? (
+            <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: '500' }}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       </View>
     );
@@ -1577,22 +2208,94 @@ export default function PatientCareRecordScreen() {
           </View>
           <Text style={{ fontSize: 26, fontWeight: '900', color: '#0f172a' }}>Review & Submit</Text>
           <Text style={{ fontSize: 15, color: '#64748b', textAlign: 'center', marginTop: 8, lineHeight: 22, paddingHorizontal: 16 }}>
-            Please review the summary of the Patient Care Record before final submission.
+            Please review the summary of the Patient Care Record before final submission. Tap "Edit" on any section to make changes.
           </Text>
         </View>
 
         <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 24, marginBottom: 32, borderWidth: 1, borderColor: '#e2e8f0' }}>
-          <SummaryRow icon={User} title="Patient Information" value={`${formData.first_name} ${formData.last_name}`.trim() || 'Unknown'} />
-          <SummaryRow icon={Activity} title="Assessment Findings" value={uniqueAssessments.length > 0 ? uniqueAssessments.join(', ') : 'No injuries marked'} />
-          <SummaryRow icon={Stethoscope} title="Glasgow Coma Scale" value={`Total: ${formData.glasgow_coma_scale.total} / 15`} />
-          <SummaryRow icon={Truck} title="Disposition" value={formData.disposition.length > 0 ? formData.disposition.join(', ') : 'None selected'} />
+          <SummaryRow
+            icon={User}
+            title="Patient Information"
+            value={`${formData.first_name} ${formData.last_name}`.trim() || (formData.is_unidentified ? 'Unidentified Patient' : 'Unknown')}
+            subtitle={`${formData.gender ? (formData.gender.charAt(0).toUpperCase() + formData.gender.slice(1)) : 'Gender N/A'} • Age: ${formData.age || 'N/A'}${formData.nature_of_call ? ` • ${formData.nature_of_call}` : ''}`}
+            onEdit={() => setStep(1)}
+          />
+
+          <SummaryRow
+            icon={Activity}
+            title="Assessment Findings"
+            value={uniqueAssessments.length > 0 ? uniqueAssessments.join(', ') : 'No injuries marked'}
+            subtitle={formData.assessment_markers.length > 0 ? `${formData.assessment_markers.length} injury marker(s) on diagram` : undefined}
+            onEdit={() => setStep(2)}
+          />
+
+          <SummaryRow
+            icon={HeartPulse}
+            title="Vital Signs"
+            value={
+              firstVital && (firstVital.bp || firstVital.pr || firstVital.spo2)
+                ? `BP: ${firstVital.bp || '--'} • PR: ${firstVital.pr || '--'} • SpO2: ${firstVital.spo2 ? firstVital.spo2 + '%' : '--'}`
+                : 'Take 1 not recorded'
+            }
+            subtitle={firstVital?.time ? `Take 1 at ${firstVital.time} | RR: ${firstVital.rr || '--'}` : undefined}
+            onEdit={() => setStep(3)}
+          />
+
+          <SummaryRow
+            icon={Stethoscope}
+            title="Glasgow Coma Scale"
+            value={`Total: ${formData.glasgow_coma_scale.total} / 15`}
+            subtitle={`Eye: ${formData.glasgow_coma_scale.eye} | Verbal: ${formData.glasgow_coma_scale.verbal} | Motor: ${formData.glasgow_coma_scale.motor}`}
+            onEdit={() => setStep(4)}
+          />
+
+          <SummaryRow
+            icon={Truck}
+            title="Disposition"
+            value={formData.disposition.length > 0 ? formData.disposition.join(', ') : 'None selected'}
+            onEdit={() => setStep(5)}
+          />
+
+          {isTransported && (
+            <SummaryRow
+              icon={Truck}
+              title="Transport Details"
+              value={formData.transported_to || 'Transport facility not set'}
+              subtitle={formData.received_by ? `Received by: ${formData.received_by}` : undefined}
+              onEdit={() => setStep(6)}
+            />
+          )}
 
           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-            <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 16 }}>
+            <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 14, marginTop: 2 }}>
               <FileText size={20} color="#0f172a" />
             </View>
             <View style={{ flex: 1, justifyContent: 'center' }}>
-              <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '700', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Signatures Attached</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Signatures Attached
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setStep(7)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#eff6ff',
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: '#bfdbfe',
+                  }}
+                >
+                  <Edit3 size={12} color="#2563eb" />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563eb', marginLeft: 4 }}>
+                    Edit
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
                 {formData.waiver_signature ? (
                   <View style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef3c7' : '#ecfdf5', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fde68a' : '#a7f3d0' }}>
@@ -1616,8 +2319,8 @@ export default function PatientCareRecordScreen() {
           </View>
         </View>
 
-        {/* Optional Incident Scene Photo */}
-        <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' }}>
+        {/* Optional Incident Scene Photos (Max 3) */}
+        <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <View style={{ backgroundColor: '#e0e7ff', padding: 8, borderRadius: 10 }}>
@@ -1625,79 +2328,231 @@ export default function PatientCareRecordScreen() {
               </View>
               <View>
                 <Text style={{ fontSize: 14, fontWeight: '800', color: '#0f172a' }}>
-                  Incident Scene Photo
+                  Incident Scene Photos
                 </Text>
                 <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500' }}>
-                  Optional documentation
+                  Optional documentation • {pcrPhotos.length} of 3 photos
                 </Text>
               </View>
             </View>
-            <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b' }}>OPTIONAL</Text>
+            <View style={{
+              backgroundColor: pcrPhotos.length === 3 ? '#ecfdf5' : pcrPhotos.length > 0 ? '#eff6ff' : '#f1f5f9',
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: pcrPhotos.length === 3 ? '#a7f3d0' : pcrPhotos.length > 0 ? '#bfdbfe' : '#e2e8f0',
+            }}>
+              <Text style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: pcrPhotos.length === 3 ? '#059669' : pcrPhotos.length > 0 ? '#2563eb' : '#64748b',
+              }}>
+                {pcrPhotos.length === 3 ? '3/3 ATTACHED' : pcrPhotos.length > 0 ? `${pcrPhotos.length}/3 PHOTOS` : 'OPTIONAL (MAX 3)'}
+              </Text>
             </View>
           </View>
 
-          {pcrPhoto ? (
+          {pcrPhotos.length > 0 ? (
             <View>
-              <View style={{ position: 'relative', height: 180, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#cbd5e1' }}>
-                <Image source={{ uri: pcrPhoto.uri }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
-                <TouchableOpacity
-                  onPress={handleRemovePcrPhoto}
-                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: '#dc2626', borderRadius: 20, padding: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 }}
-                >
-                  <Trash2 size={16} color="#ffffff" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Photo Metadata Details */}
-              <View style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-                  <MapPin size={14} color="#3b82f6" style={{ marginTop: 2, marginRight: 8 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Location</Text>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }} numberOfLines={2}>
-                      {pcrPhoto.locationName}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
-
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-                  <Navigation size={14} color="#10b981" style={{ marginTop: 2, marginRight: 8 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>GPS Coordinates</Text>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f766e', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
-                      {pcrPhoto.latitude ? `${pcrPhoto.latitude.toFixed(6)}, ${pcrPhoto.longitude.toFixed(6)}` : 'Recorded from scene'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
-
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                  <Clock size={14} color="#f59e0b" style={{ marginTop: 2, marginRight: 8 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Date & Time Taken</Text>
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>
-                      {pcrPhoto.formattedDateTime}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Retake Button */}
-              <TouchableOpacity
-                onPress={handleTakePcrPhoto}
-                disabled={isTakingPhoto}
-                style={{ marginTop: 10, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', alignItems: 'center', backgroundColor: '#ffffff' }}
+              {/* Thumbnail Selector & Add Button Strip */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingBottom: 12 }}
               >
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>Retake Photo</Text>
-              </TouchableOpacity>
+                {pcrPhotos.map((photoItem, idx) => {
+                  const isSelected = idx === selectedPhotoIndex;
+                  return (
+                    <TouchableOpacity
+                      key={photoItem.id || idx}
+                      onPress={() => setSelectedPhotoIndex(idx)}
+                      activeOpacity={0.75}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+                        borderWidth: 1.5,
+                        borderColor: isSelected ? '#3b82f6' : '#cbd5e1',
+                        borderRadius: 12,
+                        padding: 6,
+                        paddingRight: 10,
+                        gap: 8,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: isSelected ? 0.08 : 0.02,
+                        shadowRadius: 2,
+                        elevation: isSelected ? 2 : 1,
+                      }}
+                    >
+                      <Image source={{ uri: photoItem.uri }} style={{ width: 34, height: 34, borderRadius: 8 }} />
+                      <View>
+                        <Text style={{ fontSize: 12, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
+                          Photo {idx + 1}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: isSelected ? '#2563eb' : '#64748b', fontWeight: isSelected ? '700' : '500' }}>
+                          {isSelected ? 'Viewing' : 'Tap to view'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {pcrPhotos.length < 3 && (
+                  <TouchableOpacity
+                    onPress={() => handleTakePcrPhoto()}
+                    disabled={isTakingPhoto}
+                    activeOpacity={0.75}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#ffffff',
+                      borderWidth: 1.5,
+                      borderColor: '#93c5fd',
+                      borderStyle: 'dashed',
+                      borderRadius: 12,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      gap: 6,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Plus size={16} color="#2563eb" />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563eb' }}>
+                      Add Photo ({pcrPhotos.length}/3)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+
+              {/* Active Selected Photo Preview */}
+              {pcrPhotos[selectedPhotoIndex] && (
+                <View>
+                  <View style={{ position: 'relative', height: 185, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#cbd5e1' }}>
+                    <Image
+                      source={{ uri: pcrPhotos[selectedPhotoIndex].uri }}
+                      style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                    />
+
+                    {/* Photo Number Badge */}
+                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(15, 23, 42, 0.75)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+                      <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>
+                        Photo {selectedPhotoIndex + 1} of {pcrPhotos.length}
+                      </Text>
+                    </View>
+
+                    {/* Delete Photo Button */}
+                    <TouchableOpacity
+                      onPress={() => handleRemovePcrPhoto(selectedPhotoIndex)}
+                      style={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 10,
+                        backgroundColor: '#dc2626',
+                        borderRadius: 20,
+                        padding: 7,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.25,
+                        shadowRadius: 4,
+                        elevation: 4,
+                      }}
+                    >
+                      <Trash2 size={16} color="#ffffff" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Photo Metadata Details */}
+                  <View style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <MapPin size={14} color="#3b82f6" style={{ marginTop: 2, marginRight: 8 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Location</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }} numberOfLines={2}>
+                          {pcrPhotos[selectedPhotoIndex].locationName}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
+
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+                      <Navigation size={14} color="#10b981" style={{ marginTop: 2, marginRight: 8 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>GPS Coordinates</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f766e', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                          {pcrPhotos[selectedPhotoIndex].latitude ? `${pcrPhotos[selectedPhotoIndex].latitude.toFixed(6)}, ${pcrPhotos[selectedPhotoIndex].longitude.toFixed(6)}` : 'Recorded from scene'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
+
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                      <Clock size={14} color="#f59e0b" style={{ marginTop: 2, marginRight: 8 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Date & Time Taken</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>
+                          {pcrPhotos[selectedPhotoIndex].formattedDateTime}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Action Buttons: Retake current photo or Add another photo */}
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                    <TouchableOpacity
+                      onPress={() => handleTakePcrPhoto(selectedPhotoIndex)}
+                      disabled={isTakingPhoto}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: '#cbd5e1',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#ffffff',
+                      }}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>
+                        Retake Photo {selectedPhotoIndex + 1}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {pcrPhotos.length < 3 && (
+                      <TouchableOpacity
+                        onPress={() => handleTakePcrPhoto()}
+                        disabled={isTakingPhoto}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 10,
+                          borderRadius: 10,
+                          backgroundColor: '#2563eb',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'row',
+                          gap: 6,
+                          shadowColor: '#2563eb',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.2,
+                          shadowRadius: 3,
+                          elevation: 2,
+                        }}
+                      >
+                        <Plus size={15} color="#ffffff" />
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff' }}>
+                          Add Photo ({pcrPhotos.length}/3)
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
             </View>
           ) : (
             <TouchableOpacity
-              onPress={handleTakePcrPhoto}
+              onPress={() => handleTakePcrPhoto()}
               disabled={isTakingPhoto}
               activeOpacity={0.8}
               style={{
@@ -1706,7 +2561,7 @@ export default function PatientCareRecordScreen() {
                 borderColor: '#cbd5e1',
                 borderStyle: 'dashed',
                 borderRadius: 16,
-                paddingVertical: 20,
+                paddingVertical: 22,
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 8,
@@ -1716,14 +2571,14 @@ export default function PatientCareRecordScreen() {
                 <ActivityIndicator color="#4f46e5" size="small" />
               ) : (
                 <>
-                  <View style={{ backgroundColor: '#eef2ff', width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' }}>
+                  <View style={{ backgroundColor: '#eef2ff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}>
                     <Camera size={24} color="#4f46e5" />
                   </View>
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#334155' }}>
-                    📷 Take Incident Photo
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#334155' }}>
+                    📷 Take Incident Scene Photo
                   </Text>
                   <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '500' }}>
-                    Tap to open camera and capture scene photo
+                    Tap to open camera (You can take 2 or 3 photos)
                   </Text>
                 </>
               )}
@@ -1956,12 +2811,274 @@ export default function PatientCareRecordScreen() {
           <TouchableOpacity style={[styles.navBtn, step === 1 && styles.navBtnDisabled]} disabled={step === 1} onPress={() => setStep(step - 1)}>
             <Text style={styles.navText}>Back</Text>
           </TouchableOpacity>
+          {reachedReview && step < TOTAL_STEPS && (
+            <TouchableOpacity
+              onPress={handleReturnToReview}
+              activeOpacity={0.8}
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                borderRadius: 8,
+                backgroundColor: '#eff6ff',
+                borderWidth: 1.5,
+                borderColor: '#93c5fd',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              <Check size={16} color="#1d4ed8" />
+              <Text style={{ color: '#1d4ed8', fontWeight: '800', fontSize: 13 }}>Done Editing</Text>
+            </TouchableOpacity>
+          )}
           {step < TOTAL_STEPS && (
             <TouchableOpacity style={styles.navBtnPrimary} onPress={handleNext}>
               <Text style={styles.navTextPrimary}>Next</Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Modal to select Unidentified Patient Gender */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showUnidentifiedModal}
+          onRequestClose={() => !isCreatingUnidentified && setShowUnidentifiedModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 }}>
+              
+              <View style={{ alignItems: 'center', marginBottom: 18 }}>
+                <View style={{ width: 56, height: 56, backgroundColor: '#FEF3C7', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                  <UserX size={28} color="#D97706" />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
+                  Unidentified Patient
+                </Text>
+                <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
+                  Select gender if observable from the patient:
+                </Text>
+              </View>
+
+              {/* Selection cards */}
+              <View style={{ gap: 10, marginBottom: 16 }}>
+                <TouchableOpacity
+                  disabled={isCreatingUnidentified}
+                  onPress={() => createUnidentifiedPatient('male')}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 14,
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: '#BFDBFE',
+                    backgroundColor: '#EFF6FF',
+                  }}
+                >
+                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <User size={22} color="#2563EB" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#1E40AF' }}>Unknown Male</Text>
+                    <Text style={{ fontSize: 12, color: '#3B82F6', marginTop: 1 }}>Observed as male patient</Text>
+                  </View>
+                  <ChevronRight size={18} color="#2563EB" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isCreatingUnidentified}
+                  onPress={() => createUnidentifiedPatient('female')}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 14,
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: '#FBCFE8',
+                    backgroundColor: '#FDF2F8',
+                  }}
+                >
+                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#FCE7F3', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <User size={22} color="#DB2777" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#9D174D' }}>Unknown Female</Text>
+                    <Text style={{ fontSize: 12, color: '#EC4899', marginTop: 1 }}>Observed as female patient</Text>
+                  </View>
+                  <ChevronRight size={18} color="#DB2777" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isCreatingUnidentified}
+                  onPress={() => createUnidentifiedPatient(null)}
+                  activeOpacity={0.7}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 14,
+                    borderRadius: 16,
+                    borderWidth: 1.5,
+                    borderColor: '#E2E8F0',
+                    backgroundColor: '#F8FAFC',
+                  }}
+                >
+                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <HelpCircle size={22} color="#64748B" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#334155' }}>Unknown</Text>
+                    <Text style={{ fontSize: 12, color: '#64748B', marginTop: 1 }}>Unspecified / Not observable on scene</Text>
+                  </View>
+                  <ChevronRight size={18} color="#64748B" />
+                </TouchableOpacity>
+              </View>
+
+              {isCreatingUnidentified ? (
+                <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#D97706" />
+                  <Text style={{ fontSize: 12, color: '#D97706', fontWeight: '600', marginTop: 6 }}>Setting up profile...</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowUnidentifiedModal(false)}
+                  style={{ paddingVertical: 12, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center' }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#475569' }}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+
+            </View>
+          </View>
+        </Modal>
+
+        {/* Modal to complete identification for Unidentified Patient */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showIdentifyModal}
+          onRequestClose={() => !isIdentifying && setShowIdentifyModal(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' }}
+          >
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, maxHeight: '88%' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#0f172a' }}>Complete Patient Details</Text>
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Enter legal name & details provided by family</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowIdentifyModal(false)}
+                  disabled={isIdentifying}
+                  style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Text style={{ fontSize: 16, color: '#64748b', fontWeight: 'bold' }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={{ backgroundColor: '#fffbeb', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#fde68a', marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <AlertCircle size={18} color="#d97706" />
+                  <Text style={{ color: '#92400e', fontSize: 12, flex: 1, fontWeight: '600', lineHeight: 16 }}>
+                    Once saved, this patient will be permanently verified and locked. Further edits will be disabled for both responders and dispatchers.
+                  </Text>
+                </View>
+
+                <Text style={styles.label}>First Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Juan"
+                  value={identifyForm.first_name}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, first_name: v })}
+                />
+
+                <Text style={styles.label}>Middle Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Optional"
+                  value={identifyForm.middle_name}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, middle_name: v })}
+                />
+
+                <Text style={styles.label}>Last Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. Dela Cruz"
+                  value={identifyForm.last_name}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, last_name: v })}
+                />
+
+                <Text style={styles.label}>Gender</Text>
+                <View style={styles.checkboxContainer}>
+                  {['male', 'female'].map(g => (
+                    <TouchableOpacity
+                      key={g}
+                      style={[styles.checkbox, identifyForm.gender === g && styles.checkboxActive]}
+                      onPress={() => setIdentifyForm({ ...identifyForm, gender: g })}
+                    >
+                      <Text style={[styles.checkboxText, identifyForm.gender === g && styles.checkboxTextActive]}>
+                        {g.charAt(0).toUpperCase() + g.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.label}>Age</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 35"
+                  keyboardType="numeric"
+                  value={identifyForm.age}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, age: v.replace(/[^0-9]/g, '') })}
+                />
+
+                <Text style={styles.label}>Resident Home Address</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Zone, Barangay, Municipality"
+                  value={identifyForm.street}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, street: v })}
+                />
+
+                <Text style={styles.label}>Contact Number</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 09123456789"
+                  keyboardType="phone-pad"
+                  value={identifyForm.contact_number}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, contact_number: v })}
+                />
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 24 }}>
+                  <TouchableOpacity
+                    onPress={() => setShowIdentifyModal(false)}
+                    disabled={isIdentifying}
+                    style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#475569', fontWeight: '700', fontSize: 15 }}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSaveIdentification}
+                    disabled={isIdentifying}
+                    style={{ flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: '#d97706', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
+                  >
+                    {isIdentifying ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <UserCheck size={18} color="#fff" />
+                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Verify Identity</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         {/* Modal to report Negative on Scene / False Alarm / Prank */}
         <Modal
@@ -2373,5 +3490,30 @@ const styles = StyleSheet.create({
   radioTextActive: { color: '#b91c1c', fontWeight: '600' },
   summaryText: { fontSize: 15, marginBottom: 8, color: '#334155' },
   createBtn: { padding: 15, backgroundColor: '#e0f2fe', borderRadius: 8, borderWidth: 1, borderColor: '#bae6fd', marginTop: 10, alignItems: 'center' },
-  createBtnText: { color: '#0369a1', fontWeight: 'bold' }
+  createBtnText: { color: '#0369a1', fontWeight: 'bold' },
+  unidentifiedQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fffbeb', borderWidth: 1.5, borderColor: '#fcd34d', paddingVertical: 12, borderRadius: 12, marginBottom: 16 },
+  unidentifiedQuickBtnText: { color: '#b45309', fontWeight: '800', fontSize: 14 },
+  unidentifiedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fffbeb', borderWidth: 1.5, borderColor: '#fcd34d', padding: 14, borderRadius: 14, marginBottom: 16, gap: 12 },
+  unidentifiedBannerTitle: { fontSize: 15, fontWeight: '800', color: '#92400e' },
+  unidentifiedBannerSubtitle: { fontSize: 12, color: '#b45309', marginTop: 2, lineHeight: 16 },
+  identifyActionBtn: { backgroundColor: '#d97706', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  identifyActionBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  toastBanner: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderColor: '#86efac',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  toastText: {
+    color: '#15803d',
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
 });

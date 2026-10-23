@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MDRRMO Mobile App - Download</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 28px;
+      padding: 48px 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 32px 64px rgba(0,0,0,0.4);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+
+    .badge::before {
+      content: '';
+      width: 8px; height: 8px;
+      background: #ef4444;
+      border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.2;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 32px;
+    }
+
+    .qr-wrapper {
+      background: #ffffff;
+      border-radius: 20px;
+      padding: 24px;
+      display: inline-block;
+      margin-bottom: 28px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .instruction {
+      font-size: 15px;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .instruction strong {
+      color: #60a5fa;
+    }
+
+    .steps {
+      text-align: left;
+      background: rgba(255,255,255,0.04);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+
+    .steps p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .steps p:last-child { margin-bottom: 0; }
+
+    .step-num {
+      background: #3b82f6;
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .link-btn {
+      display: block;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 14px 24px;
+      border-radius: 12px;
+      letter-spacing: 0.02em;
+      transition: opacity 0.2s;
+    }
+
+    .link-btn:hover { opacity: 0.85; }
+
+    .footer {
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+      margin-top: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">MDRRMO Opol</div>
+    <h1>MDRRMO Responder App</h1>
+    <p class="subtitle">Misamis Oriental — Mobile Application</p>
+
+    <div class="qr-wrapper">
+      <canvas id="qrCanvas"></canvas>
+    </div>
+
+    <p class="instruction">
+      Scan the QR code with your phone to <strong>download and install</strong> the MDRRMO Responder App.
+    </p>
+
+    <div class="steps">
+      <p><span class="step-num">1</span> Open your phone camera or QR scanner app</p>
+      <p><span class="step-num">2</span> Point it at the QR code above</p>
+      <p><span class="step-num">3</span> Tap the notification to open the download page</p>
+      <p><span class="step-num">4</span> Download &amp; install the APK from the Expo build page</p>
+    </div>
+
+    <a
+      class="link-btn"
+      href="https://expo.dev/accounts/wedemboysz13/projects/mdrrmo_mobile/builds/4b6b5c53-6ce6-42d1-88ea-8e216ef9e49d"
+      target="_blank"
+    >
+      🔗 Open Download Page Manually
+    </a>
+
+    <p class="footer">MDRRMO Opol Disaster Risk Reduction &amp; Management System &copy; 2026</p>
+  </div>
+
+  <script>
+    const url = "https://expo.dev/accounts/wedemboysz13/projects/mdrrmo_mobile/builds/4b6b5c53-6ce6-42d1-88ea-8e216ef9e49d";
+    QRCode.toCanvas(document.getElementById('qrCanvas'), url, {
+      width: 240,
+      margin: 1,
+      color: {
+        dark: '#0f172a',
+        light: '#ffffff'
+      },
+      errorCorrectionLevel: 'H'
+    }, function (err) {
+      if (err) console.error(err);
+    });
+  </script>
+</body>
+</html>

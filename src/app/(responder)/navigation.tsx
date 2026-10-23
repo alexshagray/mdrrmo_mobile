@@ -5,8 +5,8 @@ import { useRouter as useExpoRouter, useLocalSearchParams as useExpoSearchParams
 import * as Location from 'expo-location';
 import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
-import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react-native';
-import { useLiveDispatchTracking } from '@/shared/hooks';
+import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle, RefreshCw, ShieldAlert } from 'lucide-react-native';
+import { useLiveDispatchTracking, useNetworkStatus } from '@/shared/hooks';
 import { updateDispatchStatus, reportUnfoundedDispatch } from '@/shared/api/dispatches';
 import {
   getDistance,
@@ -31,6 +31,7 @@ export default function NavigationScreen() {
   const router = useExpoRouter();
   const params = useExpoSearchParams();
   const mapRef = useRef<MapboxGL.Camera>(null);
+  const { isOffline } = useNetworkStatus();
 
   const destination: LatLng = {
     latitude: parseFloat(Array.isArray(params.lat) ? params.lat[0] : (params.lat as string)) || 8.5138,
@@ -80,19 +81,17 @@ export default function NavigationScreen() {
     : Infinity;
   const isWithinRange = distanceToScene <= ARRIVAL_RADIUS_METERS;
 
-  const handleArrived = async () => {
-    if (isArriving) return;
-    if (!isWithinRange) {
-      Alert.alert(
-        'Proximity Requirement',
-        `You must be within ${ARRIVAL_RADIUS_METERS} meters of the incident location pin to mark arrival. You are currently ${Math.round(distanceToScene)}m away.`
-      );
-      return;
-    }
+  const executeArrival = async () => {
     setIsArriving(true);
     try {
       if (dispatchId) {
-        await updateDispatchStatus(dispatchId, 'arrived_on_scene');
+        const res = await updateDispatchStatus(dispatchId, 'arrived_on_scene', displayedLocation || null);
+        if (res?.is_offline_queued) {
+          Alert.alert(
+            'Scene Arrival Recorded (Offline)',
+            'You are offline. Scene arrival was recorded locally with GPS coordinates and will sync automatically when connection returns.'
+          );
+        }
       }
       setTrackingStatus('arrived_on_scene');
       setRouteCoords([]);
@@ -104,6 +103,30 @@ export default function NavigationScreen() {
     } finally {
       setIsArriving(false);
     }
+  };
+
+  const confirmManualArrival = () => {
+    Alert.alert(
+      'Manual Arrival Override',
+      `GPS reports your unit is ${Math.round(distanceToScene)}m away from the incident pin (limit: ${ARRIVAL_RADIUS_METERS}m).\n\nIf you have physically reached the scene or satellite reception has drifted, confirm your arrival below:`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm Arrived',
+          style: 'default',
+          onPress: () => executeArrival(),
+        },
+      ]
+    );
+  };
+
+  const handleArrived = async () => {
+    if (isArriving) return;
+    if (!isWithinRange) {
+      confirmManualArrival();
+      return;
+    }
+    await executeArrival();
   };
 
   // Report No Incident Found / False Alarm on Scene
@@ -551,22 +574,51 @@ export default function NavigationScreen() {
                 </View>
               </View>
             ) : (
-              <View className="flex-row items-center justify-center py-6 mb-2">
-                <ActivityIndicator color="#34d399" size="large" />
-                <Text className="ml-4 text-slate-300 font-bold text-lg">
-                  {!displayedLocation ? 'Acquiring GPS...' : 'Calculating road route...'}
-                </Text>
+              <View className="py-2 mb-2">
+                <View className="flex-row justify-between items-end mb-2">
+                  <View>
+                    <Text className="text-4xl font-black text-amber-400 tracking-tighter">
+                      {displayedLocation
+                        ? Math.round(distanceToScene) < 1000
+                          ? `${Math.round(distanceToScene)} m`
+                          : `${(distanceToScene / 1000).toFixed(1)} km`
+                        : '--'}
+                    </Text>
+                    <Text className="text-slate-400 font-bold text-xs tracking-widest uppercase mt-0.5">
+                      Direct Distance to Incident Pin
+                    </Text>
+                  </View>
+                  <View className="bg-amber-500/20 px-3 py-1.5 rounded-full border border-amber-500/30">
+                    <Text className="text-amber-400 font-bold text-[10px] tracking-wider uppercase">
+                      {isOffline ? 'OFFLINE COMPASS' : (isCalculating ? 'ROUTING' : 'DIRECT PATH')}
+                    </Text>
+                  </View>
+                </View>
+                {isOffline && (
+                  <Text className="text-slate-400 text-xs">
+                    Offline mode: Turn-by-turn road calculation requires internet. Follow direct compass bearing.
+                  </Text>
+                )}
               </View>
             )}
 
             {!isWithinRange ? (
-              <View className="flex-row items-center justify-center mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <AlertTriangle size={15} color="#f59e0b" style={{ marginRight: 6 }} />
-                <Text className="text-amber-400 text-xs font-semibold text-center">
-                  {displayedLocation
-                    ? `Must be within ${ARRIVAL_RADIUS_METERS}m to mark arrival (${Math.round(distanceToScene)}m away)`
-                    : 'Acquiring GPS to verify arrival proximity...'}
-                </Text>
+              <View className="flex-row items-center justify-between mb-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
+                <View className="flex-row items-center flex-1 mr-2">
+                  <AlertTriangle size={15} color="#f59e0b" style={{ marginRight: 6 }} />
+                  <Text className="text-amber-400 text-xs font-semibold">
+                    {displayedLocation
+                      ? `${Math.round(distanceToScene)}m away (Limit: ${ARRIVAL_RADIUS_METERS}m)`
+                      : 'Acquiring GPS to verify arrival proximity...'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={confirmManualArrival}
+                  disabled={isArriving}
+                  className="bg-amber-500/25 px-2.5 py-1 rounded-lg border border-amber-500/40"
+                >
+                  <Text className="text-amber-300 font-bold text-[11px]">Override GPS</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <View className="flex-row items-center justify-center mb-3 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
@@ -579,17 +631,24 @@ export default function NavigationScreen() {
 
             <TouchableOpacity
               onPress={handleArrived}
-              disabled={isArriving || !isWithinRange}
+              disabled={isArriving}
               activeOpacity={0.85}
-              style={[styles.btnArrived, (!isWithinRange || isArriving) && styles.btnArrivedDisabled]}
+              style={[
+                styles.btnArrived,
+                !isWithinRange && styles.btnArrivedOverride,
+              ]}
             >
               {isArriving ? (
                 <ActivityIndicator color="#ffffff" size="small" />
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ambulance size={22} color={isWithinRange ? '#ffffff' : '#64748b'} style={{ marginRight: 10 }} />
-                  <Text style={[styles.btnArrivedText, !isWithinRange && styles.btnArrivedTextDisabled]}>
-                    {isWithinRange ? 'ARRIVED ON SCENE' : 'ARRIVED ON SCENE (LOCKED)'}
+                  {isWithinRange ? (
+                    <Ambulance size={22} color="#ffffff" style={{ marginRight: 10 }} />
+                  ) : (
+                    <ShieldAlert size={20} color="#fef3c7" style={{ marginRight: 8 }} />
+                  )}
+                  <Text style={styles.btnArrivedText}>
+                    {isWithinRange ? 'ARRIVED ON SCENE' : 'ARRIVED (MANUAL OVERRIDE)'}
                   </Text>
                 </View>
               )}
@@ -715,6 +774,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
+  },
+  btnArrivedOverride: {
+    backgroundColor: '#b45309',
+    borderColor: '#f59e0b',
+    borderWidth: 1,
+    shadowColor: '#d97706',
   },
   btnArrivedDisabled: {
     backgroundColor: '#1e293b',
