@@ -16,7 +16,7 @@ export function LogoHeader({ appName, subtitle, children }: LogoHeaderProps) {
     >
       <View className="w-24 h-24 bg-white/10 rounded-3xl items-center justify-center mb-4 border border-white/20 shadow-md">
         <Image
-          source={require('../../../../assets/images/opol-resq-logo.png')}
+          source={require('../../../assets/images/opol-resq-logo.png')}
           style={{ width: 72, height: 72 }}
           resizeMode="contain"
         />
