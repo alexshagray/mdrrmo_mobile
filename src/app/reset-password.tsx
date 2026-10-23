@@ -137,8 +137,8 @@ export default function ResetPasswordScreen() {
           /* Reset Form State */
           <View className="py-1">
             <View className="items-center mb-6">
-              <View className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 items-center justify-center mb-3.5 shadow-sm">
-                <Lock size={28} color="#2563EB" />
+              <View className="w-14 h-14 rounded-2xl bg-sky-50 border border-sky-100 items-center justify-center mb-3.5 shadow-sm">
+                <Lock size={28} color="#208AEF" />
               </View>
               <Text className="text-2xl font-bold text-slate-900 text-center tracking-tight">
                 Reset Password
@@ -150,7 +150,7 @@ export default function ResetPasswordScreen() {
 
             {errors.general && (
               <View className="flex-row items-center bg-red-50 border border-red-200 rounded-2xl p-3 mb-4">
-                <AlertCircle size={18} color="#EF4444" />
+                <AlertCircle size={18} color="#FF3B30" />
                 <Text className="text-red-700 text-xs font-medium ml-2 flex-1">
                   {errors.general}
                 </Text>

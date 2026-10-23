@@ -22,7 +22,7 @@ export interface RingPulseProps {
 
   /**
    * Accent color for the spinning arc and ripple.
-   * @default '#7F77DD'
+   * @default '#208AEF'
    */
   color?: string;
 
@@ -65,13 +65,13 @@ export interface RingPulseProps {
  *
  * Features:
  * - 4px circular track ring in neutral adaptive gray.
- * - Single accent arc with rounded caps (#7F77DD) spinning at 1.1s linear.
+ * - Single accent arc with rounded caps (#208AEF) spinning at 1.1s linear.
  * - Dynamic arc stretch/shrink from 17% to 63% at 1.4s ease-in-out.
  * - Soft expanding 2px ripple expanding to 2x at 1.6s ease-out with fading opacity.
  */
 export const RingPulse: React.FC<RingPulseProps> = ({
   size = 56,
-  color = '#7F77DD',
+  color = '#208AEF',
   strokeWidth = 4,
   trackColor = 'rgba(148, 163, 184, 0.28)',
   rippleColor,

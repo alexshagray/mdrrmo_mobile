@@ -7,7 +7,7 @@ export function Loading({
   fullScreen = false,
   className = '',
   size = 56,
-  color = '#7F77DD',
+  color = '#208AEF',
   strokeWidth = 4,
   trackColor = 'rgba(148, 163, 184, 0.28)',
 }) {

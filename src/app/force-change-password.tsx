@@ -104,7 +104,7 @@ export default function ForceChangePasswordScreen() {
 
           {errors.general && (
             <View className="flex-row items-center bg-red-50 border border-red-200 rounded-2xl p-3 mb-4">
-              <AlertCircle size={18} color="#EF4444" />
+              <AlertCircle size={18} color="#FF3B30" />
               <Text className="text-red-700 text-xs font-medium ml-2 flex-1">
                 {errors.general}
               </Text>

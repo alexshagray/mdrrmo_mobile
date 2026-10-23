@@ -24,7 +24,7 @@ export function OfflineBanner() {
   return (
     <Animated.View 
       style={{ transform: [{ translateY }], opacity }}
-      className="bg-red-500 py-3 px-4 flex-row items-center justify-center w-full z-50 absolute top-0 pt-12"
+      className="bg-[#FF3B30] py-3 px-4 flex-row items-center justify-center w-full z-50 absolute top-0 pt-12"
     >
       <WifiOff size={16} color="#FFFFFF" className="mr-2" />
       <Text className="text-white font-medium text-sm ml-2">

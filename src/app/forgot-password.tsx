@@ -129,8 +129,8 @@ export default function ForgotPasswordScreen() {
           /* Input Form State */
           <View className="py-1">
             <View className="items-center mb-6">
-              <View className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 items-center justify-center mb-3.5 shadow-sm">
-                <KeyRound size={28} color="#2563EB" />
+              <View className="w-14 h-14 rounded-2xl bg-sky-50 border border-sky-100 items-center justify-center mb-3.5 shadow-sm">
+                <KeyRound size={28} color="#208AEF" />
               </View>
               <Text className="text-2xl font-bold text-slate-900 text-center tracking-tight">
                 Forgot Password?

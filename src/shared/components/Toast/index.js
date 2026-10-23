@@ -19,11 +19,11 @@ export function Toast({ visible, message, type = 'info', onHide, duration = 3000
 
   if (!visible) return null;
 
-  let config = { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-800', icon: <Info size={20} color="#1D4ED8" /> };
+  let config = { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-800', icon: <Info size={20} color="#208AEF" /> };
   if (type === 'success') {
     config = { bg: 'bg-green-50 border-green-200', text: 'text-green-800', icon: <CheckCircle size={20} color="#15803D" /> };
   } else if (type === 'error') {
-    config = { bg: 'bg-red-50 border-red-200', text: 'text-red-800', icon: <AlertCircle size={20} color="#B91C1C" /> };
+    config = { bg: 'bg-red-50 border-red-200', text: 'text-red-800', icon: <AlertCircle size={20} color="#FF3B30" /> };
   }
 
   return (

@@ -134,16 +134,16 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: 'rgba(59, 130, 246, 0.15)', // Blue tinted glow
+    backgroundColor: 'rgba(32, 138, 239, 0.15)', // Blue tinted glow
   },
   iconContainer: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#3B82F6', // Solid blue
+    backgroundColor: '#208AEF', // OPOL RESQ brand blue
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#3B82F6',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -171,11 +171,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   primaryButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#208AEF',
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: 'center',
-    shadowColor: '#3B82F6',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,

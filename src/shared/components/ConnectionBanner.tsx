@@ -96,7 +96,7 @@ export default function ConnectionBanner() {
       return (
         <View style={[styles.bannerCard, styles.cardSyncing]}>
           <View style={styles.leftContent}>
-            <ActivityIndicator size="small" color="#3B82F6" style={{ marginRight: 10 }} />
+            <ActivityIndicator size="small" color="#208AEF" style={{ marginRight: 10 }} />
             <View>
               <Text style={styles.titleSyncing}>Synchronizing Pending Records</Text>
               <Text style={styles.subtextSyncing}>
@@ -127,7 +127,7 @@ export default function ConnectionBanner() {
         <View style={[styles.bannerCard, styles.cardOffline]}>
           <View style={styles.leftContent}>
             <View style={styles.iconCircleOffline}>
-              <WifiOff size={16} color="#EF4444" />
+              <WifiOff size={16} color="#FF3B30" />
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -151,7 +151,7 @@ export default function ConnectionBanner() {
       return (
         <View style={[styles.bannerCard, styles.cardSyncing]}>
           <View style={styles.leftContent}>
-            <CloudUpload size={16} color="#3B82F6" style={{ marginRight: 10 }} />
+            <CloudUpload size={16} color="#208AEF" style={{ marginRight: 10 }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.titleSyncing}>Pending Offline Records ({pendingCount})</Text>
               <Text style={styles.subtextSyncing}>Connection available to upload pending mission data.</Text>
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   pendingBadge: {
-    backgroundColor: '#EF4444',
+    backgroundColor: '#FF3B30',
     paddingHorizontal: 6,
     paddingVertical: 1.5,
     borderRadius: 8,
@@ -264,11 +264,11 @@ const styles = StyleSheet.create({
   },
   subtextSyncing: {
     fontSize: 11,
-    color: '#3B82F6',
+    color: '#208AEF',
     marginTop: 1,
   },
   syncBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#208AEF',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,

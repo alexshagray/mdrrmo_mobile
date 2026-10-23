@@ -221,7 +221,7 @@ export default function RegisterScreen() {
       <LoginCard>
         {/* Section 1: Personal Details */}
         <View className="mb-4">
-          <Text className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">
+          <Text className="text-xs font-bold text-[#208AEF] uppercase tracking-wider mb-3">
             Personal Details
           </Text>
 
@@ -288,7 +288,7 @@ export default function RegisterScreen() {
 
         {/* Section 2: Account & Security */}
         <View className="mb-4 pt-2 border-t border-slate-100">
-          <Text className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3">
+          <Text className="text-xs font-bold text-[#208AEF] uppercase tracking-wider mb-3">
             Account & Security
           </Text>
 
@@ -355,7 +355,7 @@ export default function RegisterScreen() {
           activeOpacity={0.8}
           className={`w-full rounded-2xl overflow-hidden shadow-lg shadow-blue-500/30 mt-3 ${isSubmitting ? 'opacity-80' : ''}`}
         >
-          <View className="bg-blue-600 py-4 flex-row justify-center items-center">
+          <View className="bg-[#208AEF] py-4 flex-row justify-center items-center">
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" className="mr-2" />
             ) : (
@@ -378,7 +378,7 @@ export default function RegisterScreen() {
         <View className="mt-6 pt-4 border-t border-slate-100 flex-row justify-center items-center">
           <Text className="text-slate-500 text-xs">Already have an account? </Text>
           <TouchableOpacity onPress={() => router.push('/login')} activeOpacity={0.7}>
-            <Text className="text-blue-600 font-bold text-xs">Sign In</Text>
+            <Text className="text-[#208AEF] font-bold text-xs">Sign In</Text>
           </TouchableOpacity>
         </View>
       </LoginCard>
