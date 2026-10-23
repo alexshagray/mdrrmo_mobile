@@ -88,10 +88,10 @@ const SERVICES: HotlineService[] = [
     number: '0881234567',
     icon: Siren,
     cardBg: '#FFFFFF',
-    accent: '#6D28D9',
-    iconBg: '#F5F3FF',
-    iconColor: '#6D28D9',
-    shadowColor: '#6D28D9',
+    accent: '#208AEF',
+    iconBg: '#F0F7FF',
+    iconColor: '#208AEF',
+    shadowColor: '#208AEF',
   },
 ];
 

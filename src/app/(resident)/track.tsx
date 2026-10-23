@@ -144,18 +144,18 @@ const AllClearState = () => {
     <View className="flex-1 bg-slate-50 justify-center items-center px-8">
       <Animated.View className="w-40 h-40 justify-center items-center mb-6">
         <Animated.View
-          className="absolute inset-0 bg-indigo-50/70 rounded-full"
+          className="absolute inset-0 bg-blue-50/70 rounded-full"
           style={{ transform: [{ scale: pulseAnim }] }}
         />
         <Animated.View
-          className="absolute inset-4 bg-indigo-100/60 rounded-full"
+          className="absolute inset-4 bg-blue-100/60 rounded-full"
           style={{ transform: [{ scale: pulseAnim }] }}
         />
         <Animated.View
-          className="w-20 h-20 bg-white rounded-full justify-center items-center shadow-lg shadow-indigo-200/50 border border-slate-100"
+          className="w-20 h-20 bg-white rounded-full justify-center items-center shadow-lg shadow-blue-200/50 border border-slate-100"
           style={{ transform: [{ translateY: floatAnim }] }}
         >
-          <ShieldCheck size={38} color="#4F46E5" strokeWidth={2.25} />
+          <ShieldCheck size={38} color="#208AEF" strokeWidth={2.25} />
         </Animated.View>
       </Animated.View>
 
@@ -206,15 +206,15 @@ const TrackingLockedState = ({
           }`}
         >
           {isRejected ? (
-            <XCircle size={36} color="#DC2626" strokeWidth={2.2} />
+            <XCircle size={36} color="#FF3B30" strokeWidth={2.2} />
           ) : isArrived ? (
             <CheckCircle2 size={36} color="#059669" strokeWidth={2.2} />
           ) : isPending ? (
             <Clock size={36} color="#D97706" strokeWidth={2.2} />
           ) : isVerified ? (
-            <ShieldCheck size={36} color="#2563EB" strokeWidth={2.2} />
+            <ShieldCheck size={36} color="#208AEF" strokeWidth={2.2} />
           ) : (
-            <Navigation size={36} color="#4F46E5" strokeWidth={2.2} />
+            <Navigation size={36} color="#208AEF" strokeWidth={2.2} />
           )}
         </View>
 
@@ -301,7 +301,8 @@ const TrackingLockedState = ({
 
         <View className="w-full">
           <TouchableOpacity
-            className="w-full bg-indigo-600 py-4 rounded-2xl flex-row items-center justify-center shadow-md shadow-indigo-500/20"
+            style={{ backgroundColor: '#208AEF' }}
+            className="w-full py-4 rounded-2xl flex-row items-center justify-center shadow-md shadow-blue-500/20"
             onPress={onNavigateToReport}
             activeOpacity={0.85}
           >
@@ -811,7 +812,7 @@ export default function TrackScreen() {
             <MapboxGL.LineLayer
               id="routeGlow"
               style={{
-                lineColor: isArrived ? '#10B981' : '#3B82F6',
+                lineColor: isArrived ? '#10B981' : '#208AEF',
                 lineWidth: 11,
                 lineCap: 'round',
                 lineJoin: 'round',
@@ -911,7 +912,7 @@ export default function TrackScreen() {
             {isArrived ? (
               <CheckCircle2 size={12} color="#047857" strokeWidth={2.5} />
             ) : (
-              <Navigation size={12} color="#1D4ED8" strokeWidth={2.5} />
+              <Navigation size={12} color="#208AEF" strokeWidth={2.5} />
             )}
             <Text style={[styles.compactEtaText, isArrived ? styles.etaTextArrived : styles.etaTextEnRoute]}>
               {isArrived ? 'ON SCENE' : 'EN ROUTE'}
@@ -942,7 +943,7 @@ export default function TrackScreen() {
           onPress={handleRecenterOnResponder}
           activeOpacity={0.85}
         >
-          <Crosshair size={19} color="#2563EB" strokeWidth={2.4} />
+          <Crosshair size={19} color="#208AEF" strokeWidth={2.4} />
         </TouchableOpacity>
       </View>
 
@@ -970,7 +971,7 @@ export default function TrackScreen() {
           <View style={styles.collapsedHeaderRow}>
             <View style={styles.collapsedUnitInfo}>
               <View style={styles.collapsedIconBox}>
-                <Ambulance size={22} color="#2563EB" strokeWidth={2.2} />
+                <Ambulance size={22} color="#208AEF" strokeWidth={2.2} />
               </View>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={styles.collapsedUnitTitle} numberOfLines={1}>
@@ -1069,7 +1070,7 @@ export default function TrackScreen() {
                 <Text
                   style={[
                     styles.metaValue,
-                    { color: isArrived ? '#059669' : '#2563EB' },
+                    { color: isArrived ? '#059669' : '#208AEF' },
                   ]}
                   numberOfLines={2}
                 >
@@ -1146,7 +1147,7 @@ export default function TrackScreen() {
                         >
                           <IconComp
                             size={14}
-                            color={isDone ? '#FFFFFF' : isCurrent ? '#2563EB' : '#94A3B8'}
+                            color={isDone ? '#FFFFFF' : isCurrent ? '#208AEF' : '#94A3B8'}
                             strokeWidth={2.4}
                           />
                         </View>
@@ -1332,7 +1333,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   responderPuckEnRoute: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#208AEF',
   },
   responderPuckArrived: {
     backgroundColor: '#059669',
@@ -1398,7 +1399,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   dotEnRoute: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#208AEF',
   },
   dotArrived: {
     backgroundColor: '#059669',
@@ -1575,7 +1576,7 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
   },
   badgeDotEnRoute: {
-    backgroundColor: '#2563EB',
+    backgroundColor: '#208AEF',
   },
   badgeDotArrived: {
     backgroundColor: '#059669',
@@ -1673,18 +1674,18 @@ const styles = StyleSheet.create({
   driverPhoneText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#2563EB',
+    color: '#208AEF',
     marginTop: 2,
   },
   callResponderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2563EB',
+    backgroundColor: '#208AEF',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 13,
     gap: 6,
-    shadowColor: '#2563EB',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -1752,7 +1753,7 @@ const styles = StyleSheet.create({
   milestonesSectionSub: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#2563EB',
+    color: '#208AEF',
   },
   milestonesList: {
     gap: 0,
@@ -1778,7 +1779,7 @@ const styles = StyleSheet.create({
   milestoneBoxCurrent: {
     backgroundColor: '#EFF6FF',
     borderWidth: 1.5,
-    borderColor: '#2563EB',
+    borderColor: '#208AEF',
   },
   milestoneBoxPending: {
     backgroundColor: '#F1F5F9',
@@ -1841,7 +1842,7 @@ const styles = StyleSheet.create({
     color: '#059669',
   },
   milestoneTagTextCurrent: {
-    color: '#2563EB',
+    color: '#208AEF',
   },
   milestoneTagTextPending: {
     color: '#94A3B8',

@@ -208,25 +208,25 @@ export default function HomeScreen() {
     if (dispatchStatus === 'en_route') {
       return {
         label: 'AMBULANCE EN ROUTE',
-        bg: 'bg-rose-50 border-rose-200/70',
-        text: 'text-rose-700',
-        dot: 'bg-rose-500',
+        bg: 'bg-red-50 border-red-200/80',
+        text: 'text-[#FF3B30]',
+        dot: 'bg-[#FF3B30]',
       };
     }
     if (status === 'assigned') {
       return {
         label: 'CREW DISPATCHED',
-        bg: 'bg-indigo-50 border-indigo-200/70',
-        text: 'text-indigo-700',
-        dot: 'bg-indigo-500',
+        bg: 'bg-blue-50 border-blue-200/80',
+        text: 'text-[#208AEF]',
+        dot: 'bg-[#208AEF]',
       };
     }
     if (status === 'verified') {
       return {
         label: 'DISPATCH VERIFIED',
-        bg: 'bg-blue-50 border-blue-200/70',
-        text: 'text-blue-700',
-        dot: 'bg-blue-500',
+        bg: 'bg-blue-50 border-blue-200/80',
+        text: 'text-[#208AEF]',
+        dot: 'bg-[#208AEF]',
       };
     }
     if (status === 'resolved' || status === 'completed') {
@@ -261,7 +261,7 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#64748B"
+            tintColor="#208AEF"
           />
         }
       >
@@ -285,8 +285,8 @@ export default function HomeScreen() {
             activeOpacity={0.75}
             className="items-center flex-1"
           >
-            <View className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200/60 items-center justify-center mb-1.5 shadow-sm">
-              <ShieldAlert size={22} color="#E11D48" strokeWidth={2.25} />
+            <View className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200/80 items-center justify-center mb-1.5 shadow-sm">
+              <ShieldAlert size={22} color="#FF3B30" strokeWidth={2.25} />
             </View>
             <Text className="text-slate-800 text-[11px] font-bold text-center">New Report</Text>
             <Text className="text-slate-400 text-[9px] font-medium text-center">Emergency</Text>
@@ -298,8 +298,8 @@ export default function HomeScreen() {
             activeOpacity={0.75}
             className="items-center flex-1"
           >
-            <View className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200/60 items-center justify-center mb-1.5 shadow-sm">
-              <FileText size={22} color="#4F46E5" strokeWidth={2.25} />
+            <View className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200/80 items-center justify-center mb-1.5 shadow-sm">
+              <FileText size={22} color="#208AEF" strokeWidth={2.25} />
             </View>
             <Text className="text-slate-800 text-[11px] font-bold text-center">My Reports</Text>
             <Text className="text-slate-400 text-[9px] font-medium text-center">History</Text>
@@ -336,7 +336,7 @@ export default function HomeScreen() {
         <View className="mb-2">
           {loadingReports ? (
             <View className="py-8 items-center justify-center bg-white rounded-3xl border border-slate-200/80 mb-6 shadow-sm">
-              <ActivityIndicator size="small" color="#E11D48" />
+              <ActivityIndicator size="small" color="#208AEF" />
               <Text className="text-slate-400 text-xs mt-2 font-medium">Checking active status...</Text>
             </View>
           ) : recentReport && recentReport.isActive ? (
@@ -345,9 +345,9 @@ export default function HomeScreen() {
                 <Text className="text-base font-bold text-slate-900 tracking-tight">
                   Active Emergency Status
                 </Text>
-                <View className="flex-row items-center bg-rose-50 border border-rose-200/60 px-2 py-0.5 rounded-full">
-                  <View className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5" />
-                  <Text className="text-rose-600 text-[10px] font-bold uppercase tracking-wider">
+                <View className="flex-row items-center bg-red-50 border border-red-200/70 px-2 py-0.5 rounded-full">
+                  <View className="w-1.5 h-1.5 rounded-full bg-[#FF3B30] mr-1.5" />
+                  <Text className="text-[#FF3B30] text-[10px] font-bold uppercase tracking-wider">
                     LIVE
                   </Text>
                 </View>
@@ -373,8 +373,8 @@ export default function HomeScreen() {
                     <View className="flex-row justify-between items-start mb-3">
                       <View className="flex-1 mr-2">
                         <View className="flex-row items-center gap-2 mb-1.5">
-                          <View className="bg-rose-50 border border-rose-200/70 px-2.5 py-0.5 rounded-full">
-                            <Text className="text-rose-700 text-[10px] font-black uppercase tracking-wider">
+                          <View className="bg-red-50 border border-red-200/70 px-2.5 py-0.5 rounded-full">
+                            <Text className="text-[#FF3B30] text-[10px] font-black uppercase tracking-wider">
                               {recentReport.type}
                             </Text>
                           </View>
@@ -416,13 +416,14 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       onPress={() => router.push('/(resident)/track')}
                       activeOpacity={0.85}
-                      className="w-full py-3 bg-slate-900 active:bg-slate-800 rounded-2xl flex-row items-center justify-center shadow-sm"
+                      style={{ backgroundColor: '#208AEF' }}
+                      className="w-full py-3 rounded-2xl flex-row items-center justify-center shadow-sm"
                     >
                       <MapPin size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
                       <Text className="text-white font-bold text-xs tracking-wider uppercase">
                         TRACK RESPONDERS LIVE
                       </Text>
-                      <ChevronRight size={15} color="#94A3B8" style={{ marginLeft: 4 }} />
+                      <ChevronRight size={15} color="#BFDBFE" style={{ marginLeft: 4 }} />
                     </TouchableOpacity>
                   </View>
                 );
@@ -450,7 +451,7 @@ export default function HomeScreen() {
               Emergency Hotlines
             </Text>
             <TouchableOpacity onPress={() => router.push('/(resident)/help-support')}>
-              <Text className="text-indigo-600 text-xs font-bold">Directory</Text>
+              <Text className="text-[#208AEF] text-xs font-bold">Directory</Text>
             </TouchableOpacity>
           </View>
           <EmergencyHotlineGrid />
@@ -565,7 +566,7 @@ export default function HomeScreen() {
                     key={sIdx}
                     className="bg-slate-50 border border-slate-200/70 rounded-2xl p-3.5 flex-row items-start mb-2"
                   >
-                    <View className="w-5 h-5 rounded-full bg-slate-900 items-center justify-center mr-3 mt-0.5">
+                    <View className="w-5 h-5 rounded-full bg-[#208AEF] items-center justify-center mr-3 mt-0.5">
                       <Text className="text-white text-[10px] font-black">{sIdx + 1}</Text>
                     </View>
                     <Text className="text-slate-700 text-xs font-medium flex-1 leading-5">
@@ -580,7 +581,8 @@ export default function HomeScreen() {
             <TouchableOpacity
               onPress={() => setActiveGuide(null)}
               activeOpacity={0.85}
-              className="w-full py-3.5 bg-slate-900 active:bg-slate-800 rounded-2xl items-center"
+              style={{ backgroundColor: '#208AEF' }}
+              className="w-full py-3.5 rounded-2xl items-center"
             >
               <Text className="text-white font-bold text-xs tracking-wider uppercase">
                 Understood & Close

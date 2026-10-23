@@ -30,7 +30,7 @@ export function AnimatedTabIcon({ focused, IconComponent }: AnimatedTabIconProps
     <View className="items-center justify-center py-1">
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
         <IconComponent
-          color={focused ? '#0F172A' : '#94A3B8'}
+          color={focused ? '#208AEF' : '#94A3B8'}
           size={23}
           strokeWidth={focused ? 2.5 : 2}
         />
@@ -38,7 +38,7 @@ export function AnimatedTabIcon({ focused, IconComponent }: AnimatedTabIconProps
       {/* Subtle active indicator dot below icon instead of heavy circle */}
       <Animated.View
         style={{ opacity: dotOpacity }}
-        className="w-1.5 h-1.5 rounded-full bg-slate-900 mt-1"
+        className="w-1.5 h-1.5 rounded-full bg-[#208AEF] mt-1"
       />
     </View>
   );

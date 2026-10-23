@@ -229,12 +229,12 @@ export default function NotificationsScreen() {
   const getNotifIcon = (type: NotificationItem['type']) => {
     switch (type) {
       case 'rejected':
-        return { icon: XCircle, color: '#E11D48', bg: 'bg-rose-50 border-rose-200/70' };
+        return { icon: XCircle, color: '#FF3B30', bg: 'bg-red-50 border-red-200/70' };
       case 'verified':
-        return { icon: ShieldCheck, color: '#2563EB', bg: 'bg-blue-50 border-blue-200/70' };
+        return { icon: ShieldCheck, color: '#208AEF', bg: 'bg-blue-50 border-blue-200/70' };
       case 'assigned':
       case 'en_route':
-        return { icon: Ambulance, color: '#4F46E5', bg: 'bg-indigo-50 border-indigo-200/70' };
+        return { icon: Ambulance, color: '#208AEF', bg: 'bg-blue-50 border-blue-200/70' };
       case 'arrived':
       case 'completed':
         return { icon: CheckCircle2, color: '#059669', bg: 'bg-emerald-50 border-emerald-200/70' };
@@ -280,8 +280,8 @@ export default function NotificationsScreen() {
       {/* Top App Bar */}
       <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
         <View className="flex-row items-center">
-          <View className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200/60 items-center justify-center mr-3">
-            <Bell size={20} color="#4F46E5" />
+          <View className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
+            <Bell size={20} color="#208AEF" />
           </View>
           <View>
             <Text className="text-slate-900 text-base font-bold tracking-tight">Notifications</Text>
@@ -295,8 +295,8 @@ export default function NotificationsScreen() {
             className="flex-row items-center bg-slate-100 active:bg-slate-200 px-3 py-1.5 rounded-xl border border-slate-200/80"
             activeOpacity={0.7}
           >
-            <CheckCheck size={14} color="#4F46E5" />
-            <Text className="text-indigo-600 text-xs font-bold ml-1.5">Mark All Read</Text>
+            <CheckCheck size={14} color="#208AEF" />
+            <Text className="text-[#208AEF] text-xs font-bold ml-1.5">Mark All Read</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -326,7 +326,7 @@ export default function NotificationsScreen() {
           onPress={() => setFilterTab('all')}
           className={`px-4 py-2 rounded-2xl border ${
             filterTab === 'all'
-              ? 'bg-slate-900 border-slate-900'
+              ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
               : 'bg-white border-slate-200/80'
           }`}
           activeOpacity={0.75}
@@ -340,7 +340,7 @@ export default function NotificationsScreen() {
           onPress={() => setFilterTab('unread')}
           className={`px-4 py-2 rounded-2xl border ${
             filterTab === 'unread'
-              ? 'bg-slate-900 border-slate-900'
+              ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
               : 'bg-white border-slate-200/80'
           }`}
           activeOpacity={0.75}
@@ -354,7 +354,7 @@ export default function NotificationsScreen() {
           onPress={() => setFilterTab('updates')}
           className={`px-4 py-2 rounded-2xl border ${
             filterTab === 'updates'
-              ? 'bg-slate-900 border-slate-900'
+              ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
               : 'bg-white border-slate-200/80'
           }`}
           activeOpacity={0.75}
@@ -368,7 +368,7 @@ export default function NotificationsScreen() {
       {/* Notification List */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#4F46E5" />
+          <ActivityIndicator size="large" color="#208AEF" />
           <Text className="text-slate-400 text-sm mt-3 font-medium">Loading notifications...</Text>
         </View>
       ) : (
@@ -380,8 +380,8 @@ export default function NotificationsScreen() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={onRefresh}
-              tintColor="#64748B"
-              colors={['#4F46E5']}
+              tintColor="#208AEF"
+              colors={['#208AEF']}
             />
           }
         >
@@ -407,7 +407,7 @@ export default function NotificationsScreen() {
                   className={`border rounded-3xl p-4 mb-3 shadow-sm active:bg-slate-50 ${
                     item.read
                       ? 'bg-white border-slate-200/80'
-                      : 'bg-white border-indigo-300 ring-1 ring-indigo-200'
+                      : 'bg-white border-blue-300 ring-1 ring-blue-200'
                   }`}
                   style={{
                     shadowColor: '#0F172A',
@@ -437,7 +437,7 @@ export default function NotificationsScreen() {
                         </Text>
                         <View className="flex-row items-center">
                           {!item.read ? (
-                            <View className="w-2 h-2 rounded-full bg-indigo-600 mr-1.5" />
+                            <View className="w-2 h-2 rounded-full bg-[#208AEF] mr-1.5" />
                           ) : null}
                           <Text className="text-slate-400 text-[10px] font-semibold">
                             {formatTime(item.timestamp)}
@@ -455,10 +455,10 @@ export default function NotificationsScreen() {
 
                       {item.reportId ? (
                         <View className="flex-row items-center mt-2.5 pt-2 border-t border-slate-100">
-                          <Text className="text-indigo-600 text-[11px] font-bold">
+                          <Text className="text-[#208AEF] text-[11px] font-bold">
                             View Report Details
                           </Text>
-                          <ChevronRight size={13} color="#4F46E5" style={{ marginLeft: 2 }} />
+                          <ChevronRight size={13} color="#208AEF" style={{ marginLeft: 2 }} />
                         </View>
                       ) : null}
                     </View>

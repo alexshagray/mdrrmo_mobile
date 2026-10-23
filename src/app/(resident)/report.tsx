@@ -908,7 +908,7 @@ export default function ReportScreen() {
         <SectionLabel label="Location" />
         <View style={styles.locationStaticCard}>
           <View style={styles.locationIconContainerStatic}>
-            <MapPin size={24} color="#3B82F6" strokeWidth={2.25} />
+            <MapPin size={24} color="#208AEF" strokeWidth={2.25} />
           </View>
           <View style={styles.locationTextStatic}>
             <Text style={styles.locationTitleStatic}>📍 Your Current Location</Text>
@@ -1298,11 +1298,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669',
+    backgroundColor: '#208AEF',
     paddingVertical: 16,
     borderRadius: 16,
     gap: 10,
-    shadowColor: '#059669',
+    shadowColor: '#208AEF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1440,17 +1440,17 @@ const styles = StyleSheet.create({
   locationStaticCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#F0F7FF',
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: '#BAE6FD',
   },
   locationIconContainerStatic: {
     width: 46,
     height: 46,
     borderRadius: 12,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#E0F2FE',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -1459,13 +1459,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   locationTitleStatic: {
-    color: '#1E3A8A',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 4,
   },
   locationSubStatic: {
-    color: '#3B82F6',
+    color: '#208AEF',
     fontSize: 12,
     fontWeight: '500',
     lineHeight: 16,
@@ -1514,7 +1514,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   textareaWrapperFocused: {
-    borderColor: '#6366F1',
+    borderColor: '#208AEF',
   },
   textarea: {
     color: '#1E293B',
@@ -1528,11 +1528,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F43F5E',
+    backgroundColor: '#FF3B30',
     borderRadius: 16,
     paddingVertical: 17,
     marginTop: 24,
     gap: 10,
+    shadowColor: '#FF3B30',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   submitBtnDisabled: {
     opacity: 0.5,

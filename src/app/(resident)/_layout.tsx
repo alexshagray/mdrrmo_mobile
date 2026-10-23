@@ -34,7 +34,7 @@ export default function ResidentLayout() {
           justifyContent: 'space-around',
         },
         tabBarShowLabel: false,
-        tabBarActiveTintColor: '#0F172A',
+        tabBarActiveTintColor: '#208AEF',
         tabBarInactiveTintColor: '#94A3B8',
         sceneStyle: { backgroundColor: '#F8FAFC' },
       }}

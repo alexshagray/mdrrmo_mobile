@@ -41,10 +41,10 @@ const TYPE_CONFIG: Record<string, TypeConfig> = {
   },
   info: {
     Icon: Bell,
-    iconColor: '#4F46E5',
-    iconBg: '#EEF2FF',
-    dotColor: '#6366F1',
-    borderColor: '#E0E7FF',
+    iconColor: '#208AEF',
+    iconBg: '#F0F7FF',
+    dotColor: '#208AEF',
+    borderColor: '#BAE6FD',
   },
 };
 

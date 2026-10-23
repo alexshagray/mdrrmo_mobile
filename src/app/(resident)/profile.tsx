@@ -262,7 +262,7 @@ export default function ResidentProfileScreen() {
                 <Avatar
                   name={fullName}
                   size="xl"
-                  className="bg-indigo-600 text-white font-bold"
+                  className="bg-[#208AEF] text-white font-bold"
                 />
               )}
 
@@ -289,9 +289,9 @@ export default function ResidentProfileScreen() {
           </Text>
 
           {/* Verified Resident Badge */}
-          <View className="flex-row items-center bg-indigo-50 border border-indigo-200/70 px-3 py-1 rounded-full mb-3.5">
-            <ShieldCheck size={12} color="#4F46E5" style={{ marginRight: 5 }} />
-            <Text className="text-indigo-700 font-bold text-[11px] tracking-wider uppercase">
+          <View className="flex-row items-center bg-blue-50 border border-blue-200/70 px-3 py-1 rounded-full mb-3.5">
+            <ShieldCheck size={12} color="#208AEF" style={{ marginRight: 5 }} />
+            <Text className="text-[#208AEF] font-bold text-[11px] tracking-wider uppercase">
               VERIFIED RESIDENT
             </Text>
           </View>
@@ -343,7 +343,7 @@ export default function ResidentProfileScreen() {
           >
             <View className="flex-row items-center flex-1 mr-3">
               <View className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
-                <User size={18} color="#2563EB" />
+                <User size={18} color="#208AEF" />
               </View>
               <View className="flex-1">
                 <Text className="text-slate-900 font-bold text-sm">Personal Information</Text>
@@ -362,8 +362,8 @@ export default function ResidentProfileScreen() {
             activeOpacity={0.7}
           >
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-rose-50 border border-rose-200/60 items-center justify-center mr-3">
-                <HeartPulse size={18} color="#E11D48" />
+              <View className="w-9 h-9 rounded-xl bg-red-50 border border-red-200/60 items-center justify-center mr-3">
+                <HeartPulse size={18} color="#FF3B30" />
               </View>
               <View className="flex-1">
                 <Text className="text-slate-900 font-bold text-sm">Emergency Medical Data</Text>
@@ -427,8 +427,8 @@ export default function ResidentProfileScreen() {
             activeOpacity={0.7}
           >
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-200/60 items-center justify-center mr-3">
-                <Bell size={18} color="#4F46E5" />
+              <View className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
+                <Bell size={18} color="#208AEF" />
               </View>
               <View className="flex-1">
                 <Text className="text-slate-900 font-bold text-sm">Notifications & Alerts</Text>
@@ -520,11 +520,11 @@ export default function ResidentProfileScreen() {
         {/* Sign Out Button */}
         <TouchableOpacity
           onPress={handleLogout}
-          className="bg-white border border-rose-200 py-3.5 px-5 rounded-2xl flex-row items-center justify-center active:bg-rose-50 mb-4"
+          className="bg-white border border-red-200/80 py-3.5 px-5 rounded-2xl flex-row items-center justify-center active:bg-red-50 mb-4"
           activeOpacity={0.8}
         >
-          <LogOut size={17} color="#E11D48" />
-          <Text className="text-rose-600 font-bold text-xs ml-2 tracking-wider">
+          <LogOut size={17} color="#FF3B30" />
+          <Text className="text-[#FF3B30] font-bold text-xs ml-2 tracking-wider">
             SIGN OUT
           </Text>
         </TouchableOpacity>
@@ -549,8 +549,8 @@ export default function ResidentProfileScreen() {
             }}
           >
             {/* Soft glowing icon badge */}
-            <View className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 items-center justify-center mb-4 shadow-sm shadow-rose-100">
-              <LogOut size={28} color="#E11D48" strokeWidth={2.25} />
+            <View className="w-16 h-16 rounded-2xl bg-red-50 border border-red-100 items-center justify-center mb-4 shadow-sm">
+              <LogOut size={28} color="#FF3B30" strokeWidth={2.25} />
             </View>
 
             {/* Title & Description */}
@@ -563,8 +563,8 @@ export default function ResidentProfileScreen() {
 
             {/* Account preview chip */}
             <View className="w-full bg-slate-50 rounded-2xl p-3 flex-row items-center border border-slate-200/60 mb-6">
-              <View className="w-10 h-10 rounded-xl bg-indigo-100 items-center justify-center mr-3">
-                <User size={20} color="#4F46E5" />
+              <View className="w-10 h-10 rounded-xl bg-blue-50 items-center justify-center mr-3">
+                <User size={20} color="#208AEF" />
               </View>
               <View className="flex-1">
                 <Text className="text-slate-900 font-bold text-xs" numberOfLines={1}>
@@ -582,7 +582,8 @@ export default function ResidentProfileScreen() {
                 onPress={handleLogoutConfirm}
                 disabled={isLoggingOut}
                 activeOpacity={0.85}
-                className="w-full py-3.5 bg-rose-600 active:bg-rose-700 rounded-2xl items-center flex-row justify-center shadow-md shadow-rose-500/25"
+                style={{ backgroundColor: '#FF3B30' }}
+                className="w-full py-3.5 rounded-2xl items-center flex-row justify-center shadow-md shadow-red-500/25"
               >
                 {isLoggingOut ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />

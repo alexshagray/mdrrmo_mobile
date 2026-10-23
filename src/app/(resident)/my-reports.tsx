@@ -67,9 +67,9 @@ export default function MyReportsScreen() {
     if (status === 'rejected') {
       return {
         label: 'REJECTED',
-        dotColor: 'bg-rose-500',
-        textColor: 'text-rose-700',
-        badgeBg: 'bg-rose-50 border-rose-200',
+        dotColor: 'bg-[#FF3B30]',
+        textColor: 'text-[#FF3B30]',
+        badgeBg: 'bg-red-50 border-red-200/70',
         icon: XCircle,
       };
     }
@@ -87,9 +87,9 @@ export default function MyReportsScreen() {
     if (dispatchStatus === 'en_route') {
       return {
         label: 'RESPONDER EN ROUTE',
-        dotColor: 'bg-rose-500 animate-pulse',
-        textColor: 'text-rose-700',
-        badgeBg: 'bg-rose-50 border-rose-200',
+        dotColor: 'bg-[#FF3B30] animate-pulse',
+        textColor: 'text-[#FF3B30]',
+        badgeBg: 'bg-red-50 border-red-200/70',
         icon: Ambulance,
       };
     }
@@ -107,9 +107,9 @@ export default function MyReportsScreen() {
     if (status === 'assigned' || dispatchStatus === 'assigned') {
       return {
         label: 'RESPONDER ASSIGNED',
-        dotColor: 'bg-indigo-500',
-        textColor: 'text-indigo-700',
-        badgeBg: 'bg-indigo-50 border-indigo-200',
+        dotColor: 'bg-[#208AEF]',
+        textColor: 'text-[#208AEF]',
+        badgeBg: 'bg-blue-50 border-blue-200/70',
         icon: Ambulance,
       };
     }
@@ -117,9 +117,9 @@ export default function MyReportsScreen() {
     if (status === 'verified') {
       return {
         label: 'VERIFIED',
-        dotColor: 'bg-blue-500',
-        textColor: 'text-blue-700',
-        badgeBg: 'bg-blue-50 border-blue-200',
+        dotColor: 'bg-[#208AEF]',
+        textColor: 'text-[#208AEF]',
+        badgeBg: 'bg-blue-50 border-blue-200/70',
         icon: ShieldCheck,
       };
     }
@@ -193,8 +193,8 @@ export default function MyReportsScreen() {
           <Text className="text-slate-400 text-xs">Incident History</Text>
         </View>
         <View className="w-10 items-end">
-          <View className="bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
-            <Text className="text-blue-700 text-xs font-bold">{reports.length}</Text>
+          <View className="bg-blue-50 border border-blue-200/70 px-2.5 py-0.5 rounded-full">
+            <Text className="text-[#208AEF] text-xs font-bold">{reports.length}</Text>
           </View>
         </View>
       </View>
@@ -237,8 +237,8 @@ export default function MyReportsScreen() {
                   onPress={() => setStatusFilter(tab.id as StatusFilter)}
                   className={`px-3.5 py-1.5 rounded-xl border ${
                     active
-                      ? 'bg-slate-900 border-slate-900'
-                      : 'bg-white border-slate-200'
+                      ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
+                      : 'bg-white border-slate-200/80'
                   }`}
                   activeOpacity={0.7}
                 >
@@ -259,7 +259,7 @@ export default function MyReportsScreen() {
       {/* Report List */}
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color="#208AEF" />
           <Text className="text-slate-400 text-sm mt-3">Fetching your incident history...</Text>
         </View>
       ) : (
@@ -271,8 +271,8 @@ export default function MyReportsScreen() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={onRefresh}
-              tintColor="#2563EB"
-              colors={['#2563EB']}
+              tintColor="#208AEF"
+              colors={['#208AEF']}
             />
           }
         >
@@ -359,8 +359,8 @@ export default function MyReportsScreen() {
                       </Text>
                     </View>
                     <View className="flex-row items-center">
-                      <Text className="text-blue-600 text-xs font-bold mr-1">Details</Text>
-                      <ChevronRight size={14} color="#2563EB" />
+                      <Text className="text-[#208AEF] text-xs font-bold mr-1">Details</Text>
+                      <ChevronRight size={14} color="#208AEF" />
                     </View>
                   </View>
                 </TouchableOpacity>

@@ -28,9 +28,9 @@ type CategoryConfig = {
 const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
   typhoon: {
     icon: Wind,
-    iconColor: '#3B82F6',
-    iconBg: '#EFF6FF',
-    accent: '#BFDBFE',
+    iconColor: '#208AEF',
+    iconBg: '#F0F7FF',
+    accent: '#BAE6FD',
   },
   flood: {
     icon: Waves,
@@ -58,9 +58,9 @@ const CATEGORY_CONFIG: Record<string, CategoryConfig> = {
   },
   general: {
     icon: Shield,
-    iconColor: '#6366F1',
-    iconBg: '#EEF2FF',
-    accent: '#C7D2FE',
+    iconColor: '#208AEF',
+    iconBg: '#F0F7FF',
+    accent: '#BAE6FD',
   },
 };
 
@@ -111,9 +111,9 @@ export function SafetyTipCard({
             alignItems: 'center',
             paddingVertical: 14,
             paddingHorizontal: 14,
-            shadowColor: '#6366F1',
+            shadowColor: '#0F172A',
             shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.07,
+            shadowOpacity: 0.05,
             shadowRadius: 8,
             elevation: 2,
             borderWidth: 1,

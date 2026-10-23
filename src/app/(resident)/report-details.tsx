@@ -60,7 +60,7 @@ export default function ReportDetailsScreen() {
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 bg-[#0B1120] items-center justify-center">
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#208AEF" />
         <Text className="text-slate-400 text-sm mt-3">Loading emergency report...</Text>
       </SafeAreaView>
     );
@@ -226,7 +226,7 @@ export default function ReportDetailsScreen() {
         {isRejected ? (
           <View className="bg-rose-950/70 border border-rose-800/80 rounded-3xl p-5 mb-5 shadow-lg">
             <View className="flex-row items-center mb-2">
-              <XCircle size={22} color="#F43F5E" />
+              <XCircle size={22} color="#FF3B30" />
               <Text className="text-rose-400 font-extrabold text-sm uppercase tracking-wider ml-2">
                 REJECTED • NOT APPROVED
               </Text>
@@ -276,7 +276,7 @@ export default function ReportDetailsScreen() {
         ) : (
           <View className="bg-blue-950/60 border border-blue-800/70 rounded-3xl p-5 mb-5 shadow-lg">
             <View className="flex-row items-center mb-1.5">
-              <ShieldCheck size={20} color="#3B82F6" />
+              <ShieldCheck size={20} color="#208AEF" />
               <Text className="text-blue-400 font-extrabold text-xs uppercase tracking-wider ml-2">
                 VERIFIED BY DISPATCHER
               </Text>
@@ -313,7 +313,8 @@ export default function ReportDetailsScreen() {
 
             <TouchableOpacity
               onPress={() => router.push('/(resident)/track')}
-              className="bg-blue-600 py-3.5 px-4 rounded-2xl flex-row items-center justify-center shadow-lg shadow-blue-600/40 active:bg-blue-700"
+              style={{ backgroundColor: '#208AEF' }}
+              className="py-3.5 px-4 rounded-2xl flex-row items-center justify-center shadow-lg active:opacity-90"
               activeOpacity={0.8}
             >
               <Navigation size={18} color="#FFFFFF" />
@@ -356,7 +357,7 @@ export default function ReportDetailsScreen() {
           <View className="mb-4">
             <Text className="text-slate-400 text-xs mb-1">Location of Emergency</Text>
             <View className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex-row items-start">
-              <MapPin size={16} color="#3B82F6" className="mt-0.5 mr-2.5" />
+              <MapPin size={16} color="#208AEF" className="mt-0.5 mr-2.5" />
               <View className="flex-1">
                 <Text className="text-white font-semibold text-xs leading-snug">
                   {report.place_of_incident || report.incident_address || report.address || 'Opol, Misamis Oriental'}
@@ -414,7 +415,7 @@ export default function ReportDetailsScreen() {
                           isDone
                             ? 'bg-emerald-600 border-emerald-500'
                             : isCurrent
-                            ? 'bg-blue-600 border-blue-400'
+                            ? 'bg-[#208AEF] border-blue-400'
                             : 'bg-slate-900 border-slate-800'
                         }`}
                       >
@@ -442,7 +443,7 @@ export default function ReportDetailsScreen() {
                           isDone
                             ? 'text-white'
                             : isCurrent
-                            ? 'text-blue-400'
+                            ? 'text-[#208AEF]'
                             : 'text-slate-500'
                         }`}
                       >

@@ -21,16 +21,18 @@ function getStatusAccent(status: string): string {
   switch (status?.toLowerCase()) {
     case 'en_route':
     case 'en route':
-      return '#F59E0B';
+      return '#FF3B30';
     case 'arrived':
     case 'on scene':
       return '#10B981';
     case 'assigned':
-      return '#6366F1';
+    case 'verified':
+      return '#208AEF';
     case 'completed':
+    case 'resolved':
       return '#94A3B8';
     default:
-      return '#6366F1';
+      return '#208AEF';
   }
 }
 
@@ -101,13 +103,13 @@ export function ReportCard({ report, onPress }: ReportCardProps) {
                 {/* Icon badge */}
                 <View
                   style={{
-                    backgroundColor: '#EEF2FF',
+                    backgroundColor: '#F0F7FF',
                     borderRadius: 10,
                     padding: 8,
                     marginRight: 10,
                   }}
                 >
-                  <FileText size={16} color="#6366F1" strokeWidth={2.25} />
+                  <FileText size={16} color="#208AEF" strokeWidth={2.25} />
                 </View>
 
                 <View style={{ flex: 1 }}>
@@ -153,7 +155,7 @@ export function ReportCard({ report, onPress }: ReportCardProps) {
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5 }}>
                   <View style={{ marginTop: 2 }}>
-                    <MapPin size={13} color="#6366F1" strokeWidth={2.25} />
+                    <MapPin size={13} color="#208AEF" strokeWidth={2.25} />
                   </View>
                   <Text
                     style={{
