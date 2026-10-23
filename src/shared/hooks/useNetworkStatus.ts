@@ -13,12 +13,14 @@ export function useNetworkStatus() {
 
   const isReconnectingRef = useRef(false);
   const isOnlineRef = useRef(true);
+  const consecutiveFailuresRef = useRef(0);
+  const isMountedRef = useRef(true);
 
-  // Ping server directly to confirm real internet reachability
-  const checkServerReachability = useCallback(async (): Promise<boolean> => {
+  // Ping server directly to confirm real reachability with a 6-second timeout (accommodates high-latency mobile data)
+  const checkServerReachability = useCallback(async (timeoutMs = 6000): Promise<boolean> => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const pingUrl = `${ENV.API_URL}/ping`;
       const response = await fetch(pingUrl, {
@@ -38,8 +40,10 @@ export function useNetworkStatus() {
   const refreshPendingCount = useCallback(async () => {
     try {
       const count = await offlineSyncService.getPendingCount();
-      setPendingCount(count);
-      setLastSyncTime(offlineSyncService.getLastSyncTime());
+      if (isMountedRef.current) {
+        setPendingCount(count);
+        setLastSyncTime(offlineSyncService.getLastSyncTime());
+      }
     } catch (e) {}
   }, []);
 
@@ -53,16 +57,28 @@ export function useNetworkStatus() {
     } finally {
       await refreshPendingCount();
       const reachable = await checkServerReachability();
-      setConnectionStatus(reachable ? 'online' : 'offline');
+      if (isMountedRef.current) {
+        if (reachable) {
+          consecutiveFailuresRef.current = 0;
+          isOnlineRef.current = true;
+          setConnectionStatus('online');
+        } else {
+          consecutiveFailuresRef.current += 1;
+          if (consecutiveFailuresRef.current >= 2) {
+            isOnlineRef.current = false;
+            setConnectionStatus('offline');
+          }
+        }
+      }
     }
   }, [checkServerReachability, refreshPendingCount]);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
     // Listen to sync lifecycle events
     const unsubscribeSync = offlineSyncService.subscribe((status: SyncStatus, meta?: any) => {
-      if (!isMounted) return;
+      if (!isMountedRef.current) return;
       if (meta?.pendingCount !== undefined) {
         setPendingCount(meta.pendingCount);
       }
@@ -78,34 +94,38 @@ export function useNetworkStatus() {
       }
     });
 
-    // Handle NetInfo state transitions
+    // Handle NetInfo state transitions with anti-flapping hysteresis
     const handleNetworkState = async (state: NetInfoState) => {
-      if (!isMounted) return;
+      if (!isMountedRef.current) return;
 
-      const hasInterface = state.isConnected;
+      const hasInterface = Boolean(state.isConnected);
       const isWeak =
         state.type === 'cellular' &&
         state.details &&
         (state.details.cellularGeneration === '2g' || state.details.cellularGeneration === '3g');
       setIsWeakConnection(Boolean(isWeak));
 
+      // If phone has NO active interface at all (Airplane mode, Cellular & Wi-Fi completely OFF)
       if (!hasInterface) {
+        consecutiveFailuresRef.current = 2;
         isOnlineRef.current = false;
+        isReconnectingRef.current = false;
         setConnectionStatus('offline');
         refreshPendingCount();
         return;
       }
 
-      // If interface is active, verify server reachability
-      if (!isOnlineRef.current) {
+      // If interface is present and we were previously offline, show reconnecting
+      if (!isOnlineRef.current && !isReconnectingRef.current) {
         setConnectionStatus('reconnecting');
         isReconnectingRef.current = true;
       }
 
-      const reachable = await checkServerReachability();
-      if (!isMounted) return;
+      const reachable = await checkServerReachability(6000);
+      if (!isMountedRef.current) return;
 
       if (reachable) {
+        consecutiveFailuresRef.current = 0;
         const wasOffline = !isOnlineRef.current;
         isOnlineRef.current = true;
         isReconnectingRef.current = false;
@@ -113,16 +133,40 @@ export function useNetworkStatus() {
         refreshPendingCount();
 
         if (wasOffline) {
-          console.log('[useNetworkStatus] Network restored! Triggering automatic synchronization...');
+          console.log('[useNetworkStatus] Connection stabilized and restored. Triggering sync...');
           triggerSync();
         } else {
           setConnectionStatus('online');
         }
       } else {
-        isOnlineRef.current = false;
-        isReconnectingRef.current = false;
-        setConnectionStatus('offline');
-        refreshPendingCount();
+        consecutiveFailuresRef.current += 1;
+        // Require 2 consecutive failures before declaring offline to prevent banner flapping
+        if (consecutiveFailuresRef.current >= 2) {
+          isOnlineRef.current = false;
+          isReconnectingRef.current = false;
+          setConnectionStatus('offline');
+          refreshPendingCount();
+        } else {
+          // If only 1 failure occurred, perform a quick verification check after 2.5s
+          setTimeout(async () => {
+            if (!isMountedRef.current || isOnlineRef.current === false) return;
+            const retryReachable = await checkServerReachability(5000);
+            if (!isMountedRef.current) return;
+
+            if (retryReachable) {
+              consecutiveFailuresRef.current = 0;
+              isOnlineRef.current = true;
+              isReconnectingRef.current = false;
+              setConnectionStatus('online');
+            } else {
+              consecutiveFailuresRef.current = 2;
+              isOnlineRef.current = false;
+              isReconnectingRef.current = false;
+              setConnectionStatus('offline');
+              refreshPendingCount();
+            }
+          }, 2500);
+        }
       }
     };
 
@@ -132,26 +176,51 @@ export function useNetworkStatus() {
     // Network change listener
     const unsubscribeNetInfo = NetInfo.addEventListener(handleNetworkState);
 
-    // Periodic heartbeat every 15s to catch silent link drops without NetInfo firing
+    // Periodic heartbeat every 20s with fast confirmation retry before flapping
     const interval = setInterval(async () => {
-      if (!isMounted) return;
-      const reachable = await checkServerReachability();
-      if (!isMounted) return;
+      if (!isMountedRef.current) return;
+      const reachable = await checkServerReachability(6000);
+      if (!isMountedRef.current) return;
 
-      if (!reachable && isOnlineRef.current) {
-        console.warn('[useNetworkStatus] Server unreachable via periodic heartbeat. Switching to offline mode.');
-        isOnlineRef.current = false;
-        setConnectionStatus('offline');
-        refreshPendingCount();
-      } else if (reachable && !isOnlineRef.current) {
-        console.log('[useNetworkStatus] Server reachable via periodic heartbeat. Reconnecting...');
-        isOnlineRef.current = true;
-        triggerSync();
+      if (!reachable) {
+        consecutiveFailuresRef.current += 1;
+        // If we were previously online, don't flap immediately on 1 failure: run quick confirmation check in 3 seconds
+        if (isOnlineRef.current) {
+          if (consecutiveFailuresRef.current >= 2) {
+            console.warn('[useNetworkStatus] Server confirmed unreachable after repeated checks. Switching to offline mode.');
+            isOnlineRef.current = false;
+            setConnectionStatus('offline');
+            refreshPendingCount();
+          } else {
+            setTimeout(async () => {
+              if (!isMountedRef.current || !isOnlineRef.current) return;
+              const retryReachable = await checkServerReachability(5000);
+              if (!isMountedRef.current) return;
+
+              if (!retryReachable) {
+                consecutiveFailuresRef.current = 2;
+                console.warn('[useNetworkStatus] Server confirmed unreachable on verification retry. Switching to offline mode.');
+                isOnlineRef.current = false;
+                setConnectionStatus('offline');
+                refreshPendingCount();
+              } else {
+                consecutiveFailuresRef.current = 0;
+              }
+            }, 3000);
+          }
+        }
+      } else {
+        consecutiveFailuresRef.current = 0;
+        if (!isOnlineRef.current) {
+          console.log('[useNetworkStatus] Server reachable via heartbeat. Reconnecting...');
+          isOnlineRef.current = true;
+          triggerSync();
+        }
       }
-    }, 15000);
+    }, 20000);
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       unsubscribeNetInfo();
       unsubscribeSync();
       clearInterval(interval);
