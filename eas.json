@@ -14,11 +14,27 @@
       "channel": "preview",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://opol-mdrrmo.tech/api",
+        "EXPO_PUBLIC_REVERB_APP_KEY": "reverbkey123",
+        "EXPO_PUBLIC_REVERB_HOST": "opol-mdrrmo.tech",
+        "EXPO_PUBLIC_REVERB_PORT": "443",
+        "EXPO_PUBLIC_REVERB_SCHEME": "https",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiaGFlbGVlaGVhdGhlciIsImEiOiJjbXA1N2QzbnEwaTFyMnJxejl3djg0a2EyIn0.7Iq9WgZBjNShbkMvsr3NJA"
       }
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://opol-mdrrmo.tech/api",
+        "EXPO_PUBLIC_REVERB_APP_KEY": "reverbkey123",
+        "EXPO_PUBLIC_REVERB_HOST": "opol-mdrrmo.tech",
+        "EXPO_PUBLIC_REVERB_PORT": "443",
+        "EXPO_PUBLIC_REVERB_SCHEME": "https",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiaGFlbGVlaGVhdGhlciIsImEiOiJjbXA1N2QzbnEwaTFyMnJxejl3djg0a2EyIn0.7Iq9WgZBjNShbkMvsr3NJA"
+      }
     }
   },
   "submit": {
