@@ -24,7 +24,7 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
 
   return (
     <View
-      className="bg-white rounded-3xl p-6 border border-slate-200/80 mb-6"
+      className="bg-white rounded-xl p-5 border border-slate-200/80 mb-6 shadow-sm"
       style={{
         shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 4 },
@@ -35,7 +35,7 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
     >
       {/* Top Header Badge & Status */}
       <View className="flex-row justify-between items-center mb-3.5">
-        <View className="flex-row items-center bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200/60">
+        <View className="flex-row items-center bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60">
           <AlertTriangle size={12} color="#FF3B30" />
           <Text className="text-slate-600 font-bold tracking-wider text-[11px] uppercase ml-1.5">
             {typeof data.id === 'number' ? `DSP-00${data.id}` : data.id}
@@ -74,7 +74,7 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
       <TouchableOpacity
         onPress={onDetails || (() => {})}
         activeOpacity={0.85}
-        className={`py-3.5 px-5 rounded-2xl flex-row items-center justify-center ${
+        className={`py-3.5 px-5 rounded-lg flex-row items-center justify-center ${
           isUrgent
             ? 'bg-[#FF3B30] active:opacity-90'
             : isEnRoute

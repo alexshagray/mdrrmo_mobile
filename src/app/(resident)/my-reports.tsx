@@ -24,7 +24,8 @@ import {
   Filter,
   AlertTriangle,
 } from 'lucide-react-native';
-import { getMyReports } from '@/shared/api/incidents';
+import { getMyReports, markReportsHistoryViewed } from '@/shared/api/incidents';
+import { BrandBackground } from '@/shared/components';
 
 type StatusFilter = 'all' | 'pending' | 'verified' | 'active' | 'resolved' | 'rejected';
 
@@ -42,6 +43,7 @@ export default function MyReportsScreen() {
       const res = await getMyReports();
       const list = res.data || res.incidents || (Array.isArray(res) ? res : []);
       setReports(list);
+      markReportsHistoryViewed().catch(() => {});
     } catch (err) {
       console.error('Failed to load resident reports:', err);
     } finally {
@@ -60,6 +62,16 @@ export default function MyReportsScreen() {
   };
 
   const getStatusDetails = (item: any) => {
+    if (!item) {
+      return {
+        label: 'PENDING VERIFICATION',
+        dotColor: 'bg-amber-500',
+        textColor: 'text-amber-800',
+        badgeBg: 'bg-amber-50 border-amber-200',
+        icon: Clock,
+      };
+    }
+
     const status = item.incident_status || 'pending';
     const activeDispatch = item.active_dispatch;
     const dispatchStatus = activeDispatch?.dispatch_status;
@@ -67,9 +79,9 @@ export default function MyReportsScreen() {
     if (status === 'rejected') {
       return {
         label: 'REJECTED',
-        dotColor: 'bg-[#FF3B30]',
-        textColor: 'text-[#FF3B30]',
-        badgeBg: 'bg-red-50 border-red-200/70',
+        dotColor: 'bg-red-500',
+        textColor: 'text-red-600',
+        badgeBg: 'bg-red-50 border-red-200',
         icon: XCircle,
       };
     }
@@ -87,9 +99,9 @@ export default function MyReportsScreen() {
     if (dispatchStatus === 'en_route') {
       return {
         label: 'RESPONDER EN ROUTE',
-        dotColor: 'bg-[#FF3B30] animate-pulse',
-        textColor: 'text-[#FF3B30]',
-        badgeBg: 'bg-red-50 border-red-200/70',
+        dotColor: 'bg-red-500 animate-pulse',
+        textColor: 'text-red-600',
+        badgeBg: 'bg-red-50 border-red-200',
         icon: Ambulance,
       };
     }
@@ -107,9 +119,9 @@ export default function MyReportsScreen() {
     if (status === 'assigned' || dispatchStatus === 'assigned') {
       return {
         label: 'RESPONDER ASSIGNED',
-        dotColor: 'bg-[#208AEF]',
-        textColor: 'text-[#208AEF]',
-        badgeBg: 'bg-blue-50 border-blue-200/70',
+        dotColor: 'bg-blue-500',
+        textColor: 'text-blue-600',
+        badgeBg: 'bg-blue-50 border-blue-200',
         icon: Ambulance,
       };
     }
@@ -117,9 +129,9 @@ export default function MyReportsScreen() {
     if (status === 'verified') {
       return {
         label: 'VERIFIED',
-        dotColor: 'bg-[#208AEF]',
-        textColor: 'text-[#208AEF]',
-        badgeBg: 'bg-blue-50 border-blue-200/70',
+        dotColor: 'bg-blue-500',
+        textColor: 'text-blue-600',
+        badgeBg: 'bg-blue-50 border-blue-200',
         icon: ShieldCheck,
       };
     }
@@ -169,7 +181,7 @@ export default function MyReportsScreen() {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       const code = `INC-2026-${item.id?.toString().padStart(5, '0')}`.toLowerCase();
-      const type = (item.incident_type?.name || item.incident_type || '').toLowerCase();
+      const type = (item.incident_type?.incident_type_name || item.incident_type?.name || item.incident_type || '').toLowerCase();
       const desc = (item.description || '').toLowerCase();
       const loc = (item.place_of_incident || item.incident_address || item.address || '').toLowerCase();
 
@@ -177,27 +189,38 @@ export default function MyReportsScreen() {
     });
   }, [reports, statusFilter, searchQuery]);
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.navigate('/(resident)');
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-200/80 active:bg-slate-200"
-          activeOpacity={0.7}
-        >
-          <ArrowLeft size={18} color="#0F172A" />
-        </TouchableOpacity>
-        <View className="items-center">
-          <Text className="text-slate-900 text-base font-bold tracking-tight">My Emergency Reports</Text>
-          <Text className="text-slate-400 text-xs">Incident History</Text>
-        </View>
-        <View className="w-10 items-end">
-          <View className="bg-blue-50 border border-blue-200/70 px-2.5 py-0.5 rounded-full">
-            <Text className="text-[#208AEF] text-xs font-bold">{reports.length}</Text>
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="subpage" />
+
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Top App Bar */}
+        <View className="flex-row items-center justify-between px-5 pt-2 pb-3.5 mb-1">
+          <TouchableOpacity
+            onPress={handleBack}
+            className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center border border-white/30 active:bg-white/30"
+            activeOpacity={0.7}
+          >
+            <ArrowLeft size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View className="items-center">
+            <Text className="text-white text-base font-bold tracking-tight">Emergency Request History</Text>
+            <Text className="text-blue-100 text-xs font-medium">Submitted Reports & Dispatches</Text>
+          </View>
+          <View className="w-10 items-end">
+            <View className="bg-white/20 border border-white/30 px-2.5 py-0.5 rounded-full">
+              <Text className="text-white text-xs font-bold">{reports.length}</Text>
+            </View>
           </View>
         </View>
-      </View>
 
       {/* Search Input Bar */}
       <View className="px-5 pt-4 pb-2">
@@ -235,17 +258,16 @@ export default function MyReportsScreen() {
                 <TouchableOpacity
                   key={tab.id}
                   onPress={() => setStatusFilter(tab.id as StatusFilter)}
-                  className={`px-3.5 py-1.5 rounded-xl border ${
-                    active
-                      ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
-                      : 'bg-white border-slate-200/80'
-                  }`}
+                  style={{
+                    backgroundColor: active ? '#208AEF' : '#FFFFFF',
+                    borderColor: active ? '#208AEF' : '#E2E8F0',
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl border mr-2 items-center justify-center flex-row"
                   activeOpacity={0.7}
                 >
                   <Text
-                    className={`text-xs font-bold ${
-                      active ? 'text-white' : 'text-slate-600'
-                    }`}
+                    style={{ color: active ? '#FFFFFF' : '#475569' }}
+                    className="text-xs font-bold"
                   >
                     {tab.label}
                   </Text>
@@ -291,10 +313,14 @@ export default function MyReportsScreen() {
               </Text>
             </View>
           ) : (
-            filteredReports.map((item) => {
+            filteredReports.map((item, index) => {
               const statusInfo = getStatusDetails(item);
-              const incidentIdCode = `INC-2026-${item.id?.toString().padStart(5, '0')}`;
-              const typeName = item.incident_type?.name || item.incident_type || 'Medical Emergency';
+              const incidentIdCode = `INC-2026-${(item.id ?? index + 1).toString().padStart(5, '0')}`;
+              const typeName =
+                item.incident_type?.incident_type_name ||
+                item.incident_type?.name ||
+                item.incident_type ||
+                'Medical Emergency';
               const locationStr =
                 item.place_of_incident ||
                 item.incident_address ||
@@ -303,9 +329,9 @@ export default function MyReportsScreen() {
 
               return (
                 <TouchableOpacity
-                  key={item.id}
+                  key={`report-${item.id ?? index}`}
                   onPress={() =>
-                    router.push({
+                    router.navigate({
                       pathname: '/(resident)/report-details',
                       params: { id: item.id },
                     })
@@ -370,5 +396,6 @@ export default function MyReportsScreen() {
         </ScrollView>
       )}
     </SafeAreaView>
-  );
+  </View>
+);
 }

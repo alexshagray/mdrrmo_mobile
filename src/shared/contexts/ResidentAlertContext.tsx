@@ -253,12 +253,12 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
 
   const handleTrackLive = () => {
     clearAlert();
-    router.push('/(resident)/track');
+    router.navigate('/(resident)/track');
   };
 
   const handleViewStatus = () => {
     clearAlert();
-    router.push('/(resident)/report');
+    router.navigate('/(resident)/report');
   };
 
   const handleCallHotline = () => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,12 +21,13 @@ import {
   Activity,
   History,
   Lock,
-  PhoneCall,
+  Settings,
   Mail,
   Smartphone,
   Award,
   User,
   Camera,
+  Radio,
 } from 'lucide-react-native';
 import { useAuth } from '@/shared/hooks';
 import { Avatar } from '@/shared/components';
@@ -38,9 +39,23 @@ export default function ResponderProfileScreen() {
   const { user, logout, refreshUser } = useAuth();
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
-  const fullName = user
+  useEffect(() => {
+    refreshUser?.();
+  }, []);
+
+  const formatName = (str: string | undefined | null) => {
+    if (!str) return 'Emergency Responder';
+    return str
+      .trim()
+      .split(/\s+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  const rawName = user
     ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Emergency Responder'
     : 'Emergency Responder';
+  const fullName = formatName(rawName);
   const roleName = user?.responder_profile?.position || 'Emergency Responder';
   const teamName = user?.responder_profile?.team || 'ALPHA';
   const badge = user?.badge_number || `MDRRMO-${user?.id?.toString().padStart(4, '0') || '0000'}`;
@@ -179,42 +194,46 @@ export default function ResponderProfileScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
-      {/* Top Header Label */}
-      <View className="px-5 py-3.5 flex-row items-center justify-between border-b border-slate-200/60 bg-white">
-        <View className="flex-row items-center">
-          <View className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200/60 items-center justify-center mr-2.5">
-            <Shield size={16} color="#0F172A" />
-          </View>
-          <Text className="text-slate-900 font-bold text-base tracking-tight">
-            Responder Profile
-          </Text>
-        </View>
-        <View className="bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-full">
-          <Text className="text-slate-600 font-bold text-[10px] tracking-widest uppercase">
-            TEAM {teamName}
-          </Text>
-        </View>
+    <View className="flex-1 bg-slate-50">
+      {/* Background Elements (Same as Log in form) */}
+      <View className="absolute top-0 left-0 right-0 h-[60%] bg-[#208AEF] rounded-b-[60px] overflow-hidden" pointerEvents="none">
+        <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
+        <View className="absolute top-[20%] right-[-80px] w-80 h-80 bg-[#1570C7] rounded-full opacity-40" />
+        <View className="absolute bottom-[-30px] left-[10%] w-40 h-40 bg-[#70B9FA] rounded-full opacity-30" />
       </View>
 
-      <ScrollView
-        className="flex-1 px-5"
-        contentContainerStyle={{ paddingVertical: 20, paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile Card */}
-        <View
-          className="bg-white border border-slate-200/80 rounded-3xl p-6 mb-5 items-center"
-          style={{
-            shadowColor: '#0F172A',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.05,
-            shadowRadius: 14,
-            elevation: 3,
-          }}
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Top Header Label */}
+        <View className="px-5 py-3.5 flex-row items-center justify-between mb-1">
+          <View className="flex-row items-center">
+            <View className="w-8 h-8 rounded-xl bg-white/20 border border-white/30 items-center justify-center mr-2.5">
+              <Shield size={16} color="#FFFFFF" />
+            </View>
+            <Text className="text-white font-bold text-base tracking-tight">
+              Responder Profile
+            </Text>
+          </View>
+          <View className="bg-white/20 border border-white/30 px-2.5 py-1 rounded-full">
+            <Text className="text-white font-bold text-[10px] tracking-widest uppercase">
+              TEAM {teamName}
+            </Text>
+          </View>
+        </View>
+
+        <ScrollView
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingVertical: 14, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
         >
-          {/* Profile Photo with Click-to-Change */}
-          <View className="relative mb-3.5">
+          {/* Profile Card */}
+          <View
+            className="bg-white border border-white/80 rounded-3xl p-6 mb-5 items-center shadow-xl shadow-blue-900/10"
+            style={{
+              elevation: 4,
+            }}
+          >
+            {/* Profile Photo with Click-to-Change */}
+            <View className="relative mb-3.5">
             <TouchableOpacity
               onPress={handlePhotoAction}
               activeOpacity={0.85}
@@ -288,44 +307,6 @@ export default function ResponderProfileScreen() {
           </View>
         </View>
 
-        {/* Qualifications Section */}
-        <Text className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2.5 ml-1">
-          Responder Certifications
-        </Text>
-
-        <View
-          className="bg-white border border-slate-200/80 rounded-3xl p-5 mb-5"
-          style={{
-            shadowColor: '#0F172A',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.04,
-            shadowRadius: 10,
-            elevation: 2,
-          }}
-        >
-          <View className="flex-row items-center mb-3">
-            <View className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 items-center justify-center mr-3">
-              <Shield size={18} color="#208AEF" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-bold text-slate-900 text-sm">Emergency Medical Technician</Text>
-              <Text className="text-slate-400 text-xs mt-0.5">EMT-Basic Certified • DOH Accredited</Text>
-            </View>
-          </View>
-
-          <View className="h-[1px] bg-slate-100 w-full mb-3" />
-
-          <View className="flex-row items-center">
-            <View className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-100 items-center justify-center mr-3">
-              <Award size={18} color="#208AEF" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-bold text-slate-900 text-sm">Basic Life Support (BLS)</Text>
-              <Text className="text-slate-400 text-xs mt-0.5">CPR & Automated External Defibrillator (AED)</Text>
-            </View>
-          </View>
-        </View>
-
         {/* Operations & Settings */}
         <Text className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2.5 ml-1">
           Operations & System
@@ -343,7 +324,7 @@ export default function ResponderProfileScreen() {
         >
           {/* Dispatch History */}
           <TouchableOpacity
-            onPress={() => router.push('/(responder)/history')}
+            onPress={() => router.navigate('/(responder)/history')}
             className="flex-row items-center justify-between p-4 border-b border-slate-100 active:bg-slate-50"
             activeOpacity={0.7}
           >
@@ -361,40 +342,20 @@ export default function ResponderProfileScreen() {
             <ChevronRight size={18} color="#94A3B8" />
           </TouchableOpacity>
 
-          {/* Account & Security */}
+          {/* Settings */}
           <TouchableOpacity
-            onPress={() => router.push('/(responder)/account-security')}
-            className="flex-row items-center justify-between p-4 border-b border-slate-100 active:bg-slate-50"
-            activeOpacity={0.7}
-          >
-            <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 items-center justify-center mr-3">
-                <Lock size={18} color="#64748B" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-slate-900 font-bold text-sm">Account & Security</Text>
-                <Text className="text-slate-400 text-[11px] mt-0.5">
-                  Update terminal access password
-                </Text>
-              </View>
-            </View>
-            <ChevronRight size={18} color="#94A3B8" />
-          </TouchableOpacity>
-
-          {/* Command Hotlines & SOP */}
-          <TouchableOpacity
-            onPress={() => router.push('/(responder)/help-support')}
+            onPress={() => router.navigate('/(responder)/account-security')}
             className="flex-row items-center justify-between p-4 active:bg-slate-50"
             activeOpacity={0.7}
           >
             <View className="flex-row items-center flex-1 mr-3">
-              <View className="w-9 h-9 rounded-xl bg-cyan-50 border border-cyan-200/60 items-center justify-center mr-3">
-                <PhoneCall size={18} color="#0891B2" />
+              <View className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
+                <Settings size={18} color="#208AEF" />
               </View>
               <View className="flex-1">
-                <Text className="text-slate-900 font-bold text-sm">Command Hotlines & SOP</Text>
+                <Text className="text-slate-900 font-bold text-sm">Settings</Text>
                 <Text className="text-slate-400 text-[11px] mt-0.5">
-                  Emergency coordination directory & protocols
+                  Privacy, personal info & security
                 </Text>
               </View>
             </View>
@@ -415,73 +376,62 @@ export default function ResponderProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Enhanced Sign Out Confirmation Modal */}
+      {/* Log Out Confirmation Modal */}
       <Modal
         animationType="fade"
         transparent={true}
         visible={showLogoutModal}
         onRequestClose={() => !isLoggingOut && setShowLogoutModal(false)}
       >
-        <View className="flex-1 justify-center items-center bg-slate-900/60 px-5">
-          <View
-            className="w-full max-w-sm bg-white rounded-[32px] p-6 items-center shadow-2xl border border-slate-100"
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => !isLoggingOut && setShowLogoutModal(false)}
+          className="flex-1 justify-center items-center bg-slate-900/60 px-5"
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            className="w-full max-w-[340px] bg-white rounded-[28px] p-6 items-center shadow-2xl border border-slate-100"
             style={{
               shadowColor: '#0F172A',
-              shadowOffset: { width: 0, height: 10 },
+              shadowOffset: { width: 0, height: 12 },
               shadowOpacity: 0.15,
-              shadowRadius: 20,
+              shadowRadius: 24,
               elevation: 8,
             }}
           >
-            {/* Soft glowing icon badge */}
-            <View className="w-16 h-16 rounded-2xl bg-red-50 border border-red-100 items-center justify-center mb-4 shadow-sm shadow-red-100">
-              <LogOut size={28} color="#FF3B30" strokeWidth={2.25} />
-            </View>
-
-            {/* Title & Description */}
-            <Text className="text-xl font-black text-slate-900 text-center tracking-tight mb-2">
-              Go Off-Duty & Sign Out?
-            </Text>
-            <Text className="text-slate-500 text-sm text-center font-medium leading-5 mb-5 px-2">
-              Signing out will take your terminal offline. You will stop receiving live mission alarms and dispatch telemetry.
-            </Text>
-
-            {/* Responder preview chip */}
-            <View className="w-full bg-slate-50 rounded-2xl p-3 flex-row items-center border border-slate-200/60 mb-6">
-              <View className="w-10 h-10 rounded-xl bg-slate-200/80 items-center justify-center mr-3">
-                <Shield size={20} color="#0F172A" />
-              </View>
-              <View className="flex-1">
-                <View className="flex-row items-center">
-                  <Text className="text-slate-900 font-bold text-xs mr-2" numberOfLines={1}>
-                    {fullName}
-                  </Text>
-                  <View className="bg-slate-200 px-1.5 py-0.5 rounded">
-                    <Text className="text-slate-600 text-[9px] font-black uppercase">TEAM {teamName}</Text>
-                  </View>
-                </View>
-                <Text className="text-slate-400 text-[11px] mt-0.5" numberOfLines={1}>
-                  Badge: {badge} • {email}
-                </Text>
+            {/* Logout Icon Badge */}
+            <View className="w-16 h-16 rounded-full bg-red-50 border border-red-100/80 items-center justify-center mb-3.5 shadow-sm shadow-red-100">
+              <View className="w-12 h-12 rounded-full bg-red-500/10 items-center justify-center">
+                <LogOut size={24} color="#DC2626" strokeWidth={2.4} />
               </View>
             </View>
 
-            {/* Buttons */}
-            <View className="w-full space-y-2.5">
+            {/* Title */}
+            <Text className="text-xl font-bold text-slate-900 text-center tracking-tight mb-2">
+              Log Out
+            </Text>
+
+            {/* Message */}
+            <Text className="text-slate-500 text-sm text-center font-normal leading-5 mb-6 px-2">
+              Are you sure you want to log out?
+            </Text>
+
+            {/* Action Buttons */}
+            <View className="w-full">
               <TouchableOpacity
                 onPress={handleLogoutConfirm}
                 disabled={isLoggingOut}
                 activeOpacity={0.85}
-                className="w-full py-3.5 rounded-2xl items-center flex-row justify-center shadow-md shadow-red-500/25"
-                style={{ backgroundColor: '#FF3B30' }}
+                className="w-full h-12 bg-red-600 active:bg-red-700 rounded-2xl items-center flex-row justify-center shadow-md shadow-red-600/25"
               >
                 {isLoggingOut ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <LogOut size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text className="text-white font-extrabold text-sm tracking-wider uppercase">
-                      Confirm Sign Out
+                    <LogOut size={16} color="#FFFFFF" strokeWidth={2.2} style={{ marginRight: 8 }} />
+                    <Text className="text-white font-bold text-sm tracking-wide">
+                      Yes, Log Out
                     </Text>
                   </>
                 )}
@@ -491,16 +441,17 @@ export default function ResponderProfileScreen() {
                 onPress={() => setShowLogoutModal(false)}
                 disabled={isLoggingOut}
                 activeOpacity={0.7}
-                className="w-full py-3 bg-slate-100 active:bg-slate-200 rounded-2xl items-center mt-2 border border-slate-200/60"
+                className="w-full h-12 bg-slate-100 active:bg-slate-200 rounded-2xl items-center justify-center mt-2.5 border border-slate-200/70"
               >
-                <Text className="text-slate-700 font-bold text-sm">
-                  Stay on Duty
+                <Text className="text-slate-700 font-semibold text-sm">
+                  Cancel
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }

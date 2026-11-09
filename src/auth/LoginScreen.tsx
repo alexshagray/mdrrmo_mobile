@@ -7,7 +7,6 @@ import { LoginScreenConfig } from './types/auth';
 import {
   AuthBackground,
   LogoHeader,
-  RoleBadge,
   WelcomeSection,
   LoginCard,
   LoginForm,
@@ -95,9 +94,7 @@ export function LoginScreen({ config }: LoginScreenProps) {
   return (
     <AuthBackground>
       {/* Header Section */}
-      <LogoHeader appName={config.appName} subtitle={config.subtitle}>
-        {config.badgeText && <RoleBadge text={config.badgeText} />}
-      </LogoHeader>
+      <LogoHeader appName={config.appName} subtitle={config.subtitle} />
 
       {/* Login Card */}
       <LoginCard>
@@ -115,7 +112,7 @@ export function LoginScreen({ config }: LoginScreenProps) {
         />
 
         {/* Options Row */}
-        <View className="flex-row justify-between items-center mb-8">
+        <View className="flex-row justify-between items-center mb-6">
           <RememberMe value={rememberMe} onValueChange={setRememberMe} />
           <ForgotPasswordLink onPress={() => router.push('/forgot-password')} />
         </View>
@@ -123,18 +120,9 @@ export function LoginScreen({ config }: LoginScreenProps) {
         {/* Login Button */}
         <LoginButton isLoading={isSubmitting || isOffline} onPress={handleLogin} />
 
-        
-        {/* Demo Credentials (Optional/Debug) */}
-        {config.demoEmail && (
-          <View className="items-center mt-6 flex-row justify-center bg-slate-50 py-2 px-3 rounded-lg border border-slate-100">
-            <Text className="text-slate-400 text-xs mr-1">Demo:</Text>
-            <Text className="text-xs text-slate-500 font-medium">{config.demoEmail}</Text>
-          </View>
-        )}
-
         {/* Registration Link */}
         {config.allowRegistration && (
-          <View className="mt-8 flex-row justify-center items-center">
+          <View className="mt-6 flex-row justify-center items-center">
             <Text className="text-slate-500">Don't have an account? </Text>
             <Text 
               className="text-[#208AEF] font-bold" 

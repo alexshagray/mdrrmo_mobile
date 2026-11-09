@@ -24,6 +24,7 @@ import {
   Info,
 } from 'lucide-react-native';
 import { getResidentProfileApi, updateResidentEmergencyApi } from '@/shared/api/residents';
+import { BrandBackground } from '@/shared/components';
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'];
 const RELATIONSHIPS = ['Spouse', 'Parent', 'Child', 'Sibling', 'Relative', 'Friend', 'Guardian'];
@@ -100,27 +101,38 @@ export default function EmergencyInfoScreen() {
     }
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(resident)/profile');
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
-      >
-        {/* Top App Bar */}
-        <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-200/80 active:bg-slate-200"
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={18} color="#0F172A" />
-          </TouchableOpacity>
-          <View className="items-center">
-            <Text className="text-slate-900 text-base font-bold tracking-tight">Emergency Information</Text>
-            <Text className="text-slate-400 text-xs">Medical & Contacts</Text>
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="subpage" />
+
+      <SafeAreaView className="flex-1" edges={['top']}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1"
+        >
+          {/* Top App Bar */}
+          <View className="flex-row items-center justify-between px-5 pt-2 pb-3.5 mb-1">
+            <TouchableOpacity
+              onPress={handleBack}
+              className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center border border-white/30 active:bg-white/30"
+              activeOpacity={0.7}
+            >
+              <ArrowLeft size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View className="items-center">
+              <Text className="text-white text-base font-bold tracking-tight">Emergency Information</Text>
+              <Text className="text-blue-100 text-xs">Medical & Contacts</Text>
+            </View>
+            <View className="w-10" />
           </View>
-          <View className="w-10" />
-        </View>
 
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
@@ -353,7 +365,7 @@ export default function EmergencyInfoScreen() {
             {/* Action Buttons */}
             <View className="flex-row gap-3">
               <TouchableOpacity
-                onPress={() => router.back()}
+                onPress={handleBack}
                 className="flex-1 bg-white border border-slate-200 py-3.5 rounded-2xl items-center justify-center active:bg-slate-100"
                 activeOpacity={0.7}
               >
@@ -380,5 +392,6 @@ export default function EmergencyInfoScreen() {
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
+  </View>
+);
 }

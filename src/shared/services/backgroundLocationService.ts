@@ -137,13 +137,15 @@ export async function stopBackgroundLocation(): Promise<void> {
 
   try {
     await AsyncStorage.removeItem(STORAGE_KEY);
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-    if (isRegistered) {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK).catch(() => false);
+    if (hasStarted) {
       await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
       console.log('[BackgroundLocation] Stopped background location tracking.');
     }
-  } catch (error) {
-    console.warn('[BackgroundLocation] Error stopping background task:', error);
+  } catch (error: any) {
+    if (!error?.message?.includes('not found') && !error?.message?.includes('TaskNotFoundException')) {
+      console.warn('[BackgroundLocation] Error stopping background task:', error);
+    }
   }
 }
 
@@ -153,7 +155,7 @@ export async function stopBackgroundLocation(): Promise<void> {
 export async function isBackgroundLocationRunning(): Promise<boolean> {
   if (Platform.OS === 'web' || !TaskManager) return false;
   try {
-    return await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+    return await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
   } catch {
     return false;
   }

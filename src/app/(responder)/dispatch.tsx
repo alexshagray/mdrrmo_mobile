@@ -9,7 +9,7 @@ import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { StatusChip } from '@/shared/components';
-import { ArrowLeft, Navigation, AlertTriangle, MapPin, Clock, User, Phone, PhoneCall, Ambulance, FileText, Crosshair, CheckCircle } from 'lucide-react-native';
+import { ArrowLeft, Navigation, AlertTriangle, MapPin, Clock, User, Phone, PhoneCall, Ambulance, FileText, Crosshair, CheckCircle, Settings } from 'lucide-react-native';
 import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
 
 import { getActiveDispatches, acceptDispatch, updateDispatchStatus } from '@/shared/api/dispatches';
@@ -377,11 +377,24 @@ export default function DispatchScreen() {
   const handleAccept = async () => {
     if (!dispatch || isAccepting) return;
     setIsAccepting(true);
+
+    const previousStatus = dispatch.dispatch_status;
+    const acceptedTimestamp = new Date().toISOString();
+
+    // 1. Instant Optimistic UI Update: immediately mark as accepted
+    // so the responder experiences 0-second lag and immediate feedback
+    setDispatch((prev: any) => ({
+      ...prev,
+      dispatch_status: 'accepted',
+      accepted_at: prev?.accepted_at || acceptedTimestamp,
+    }));
+
     try {
       const res = await acceptDispatch(dispatch.id);
       setDispatch((prev: any) => ({
         ...prev,
         dispatch_status: 'accepted',
+        accepted_at: res?.data?.accepted_at || prev?.accepted_at || acceptedTimestamp,
         _has_pending_sync: res?.is_offline_queued ? true : prev?._has_pending_sync,
       }));
       if (res?.is_offline_queued) {
@@ -392,6 +405,11 @@ export default function DispatchScreen() {
       }
     } catch (e: any) {
       console.error(e);
+      // Revert status on failure
+      setDispatch((prev: any) => ({
+        ...prev,
+        dispatch_status: previousStatus,
+      }));
       Alert.alert('Error', e?.message || 'Failed to accept dispatch.');
     } finally {
       setIsAccepting(false);
@@ -403,11 +421,10 @@ export default function DispatchScreen() {
     setIsStartingNav(true);
     try {
       if (dispatch.dispatch_status === 'accepted' || dispatch.dispatch_status === 'assigned') {
-        try {
-          await updateDispatchStatus(dispatch.id, 'en_route');
-        } catch (e) {
-          // Continue to navigation screen
-        }
+        // Fire status update to server asynchronously so navigation opens without blocking
+        updateDispatchStatus(dispatch.id, 'en_route').catch((err) => {
+          console.warn('[DispatchScreen] en_route update synced in background:', err);
+        });
         setDispatch((prev: any) => ({ ...prev, dispatch_status: 'en_route' }));
       }
       
@@ -447,28 +464,103 @@ export default function DispatchScreen() {
 
   if (!dispatch) {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 justify-center items-center px-8" edges={['top']}>
-        <View className="w-64 h-64 items-center justify-center">
-          <Animated.View 
-            className="absolute w-64 h-64 bg-blue-200/40 rounded-full border border-blue-300/50"
-            style={{ transform: [{ scale: pulseAnim }], opacity: opacityAnim }}
-          />
-          <View className="absolute w-48 h-48 bg-white rounded-full items-center justify-center shadow-sm border border-slate-100" />
-          <View className="absolute w-32 h-32 bg-blue-50 rounded-full items-center justify-center shadow-xl shadow-blue-200/40" />
-          <View className="absolute w-20 h-20 bg-[#208AEF] rounded-full items-center justify-center shadow-md shadow-blue-500/50">
-            <Navigation size={36} color="#ffffff" />
-          </View>
+      <View className="flex-1 bg-slate-50">
+        {/* Background Elements (Same as Log in form) */}
+        <View className="absolute top-0 left-0 right-0 h-[60%] bg-[#208AEF] rounded-b-[60px] overflow-hidden" pointerEvents="none">
+          <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
+          <View className="absolute top-[20%] right-[-80px] w-80 h-80 bg-[#1570C7] rounded-full opacity-40" />
+          <View className="absolute bottom-[-30px] left-[10%] w-40 h-40 bg-[#70B9FA] rounded-full opacity-30" />
         </View>
-        <View className="mt-12 items-center">
-          <View className="bg-blue-100 px-4 py-1.5 rounded-full mb-4">
-            <Text className="text-[#208AEF] font-black text-xs tracking-widest uppercase">Monitoring</Text>
+
+        <SafeAreaView className="flex-1 justify-center items-center px-6" edges={['top', 'left', 'right']} style={{ paddingBottom: 95 }}>
+          <View style={{ width: 230, height: 230, alignItems: 'center', justifyContent: 'center' }}>
+            {/* Animated Pulsing Wave */}
+            <Animated.View 
+              style={{
+                position: 'absolute',
+                width: 230,
+                height: 230,
+                borderRadius: 115,
+                backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.40)',
+                transform: [{ scale: pulseAnim }],
+                opacity: opacityAnim,
+              }}
+            />
+            {/* Frosted Outer Ring */}
+            <View 
+              style={{
+                position: 'absolute',
+                width: 180,
+                height: 180,
+                borderRadius: 90,
+                backgroundColor: 'rgba(255, 255, 255, 0.28)',
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.50)',
+              }}
+            />
+            {/* White Elevated Disc */}
+            <View 
+              style={{
+                position: 'absolute',
+                width: 140,
+                height: 140,
+                borderRadius: 70,
+                backgroundColor: '#FFFFFF',
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.15,
+                shadowRadius: 16,
+                elevation: 6,
+              }}
+            />
+            {/* Soft Ice Blue Accent Ring */}
+            <View 
+              style={{
+                position: 'absolute',
+                width: 108,
+                height: 108,
+                borderRadius: 54,
+                backgroundColor: '#EFF6FF',
+                borderWidth: 1.5,
+                borderColor: '#DBEAFE',
+              }}
+            />
+            {/* Center Core Badge with Prominent Navigation Arrow */}
+            <View 
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: 38,
+                backgroundColor: '#FFFFFF',
+                borderWidth: 1.5,
+                borderColor: '#E2E8F0',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#208AEF',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.18,
+                shadowRadius: 8,
+                elevation: 4,
+              }}
+            >
+              <Navigation size={42} color="#208AEF" strokeWidth={2.6} />
+            </View>
           </View>
-          <Text className="text-3xl font-black text-slate-800 mb-3 text-center tracking-tight">Standby Mode</Text>
-          <Text className="text-slate-500 text-center font-medium leading-relaxed px-4">
-            No active emergencies assigned to your unit. Keep your radio on and stay alert for incoming dispatches.
-          </Text>
-        </View>
-      </SafeAreaView>
+
+          <View className="mt-7 items-center bg-white border border-white/80 rounded-[32px] p-7 shadow-xl shadow-blue-900/10 w-full max-w-sm">
+            <View className="flex-row items-center bg-blue-50 border border-blue-200/80 px-4 py-1.5 rounded-full mb-3 shadow-xs">
+              <View className="w-2.5 h-2.5 rounded-full bg-[#208AEF] mr-2" />
+              <Text className="text-[#208AEF] font-black text-xs tracking-wider uppercase">Active Monitoring</Text>
+            </View>
+            <Text className="text-2xl font-black text-slate-900 mb-2 text-center tracking-tight">Standby Mode</Text>
+            <Text className="text-slate-600 text-center text-sm font-semibold leading-relaxed px-2">
+              No active emergencies assigned to your unit. Keep your radio on and stay alert for incoming dispatches.
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -554,7 +646,7 @@ export default function DispatchScreen() {
         <TouchableOpacity onPress={handleBack} className="bg-white/90 p-3 rounded-full shadow-lg border border-slate-200/50 pointer-events-auto">
           <ArrowLeft size={20} color="#1E293B" />
         </TouchableOpacity>
-        <View className="flex-row items-center">
+        <View className="flex-row items-center pointer-events-auto">
           {dispatch._is_offline_cached && (
             <View className="bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300 mr-2 shadow-sm">
               <Text className="text-amber-800 text-[10px] font-bold uppercase tracking-wider">Offline Cached</Text>
@@ -566,6 +658,13 @@ export default function DispatchScreen() {
             </View>
           )}
           <StatusChip status={dispatch.dispatch_status} type="dispatch" />
+          <TouchableOpacity
+            onPress={() => router.navigate('/(responder)/profile')}
+            className="bg-white/90 p-2.5 rounded-full shadow-lg border border-slate-200/50 ml-2 pointer-events-auto"
+            accessibilityLabel="Responder Settings"
+          >
+            <Settings size={18} color="#475569" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -753,7 +852,7 @@ export default function DispatchScreen() {
       <View style={styles.actionFooter}>
          {dispatch.dispatch_status === 'arrived_on_scene' ? (
            <TouchableOpacity 
-             onPress={() => router.push('/(responder)/patient')}
+             onPress={() => router.navigate('/(responder)/patient')}
              activeOpacity={0.85}
              style={styles.btnCreatePcr}
            >

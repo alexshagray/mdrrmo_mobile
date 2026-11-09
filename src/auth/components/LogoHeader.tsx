@@ -12,9 +12,9 @@ export function LogoHeader({ appName, subtitle, children }: LogoHeaderProps) {
   return (
     <Animated.View 
       entering={FadeInDown.delay(100).duration(600).springify()} 
-      className="items-center mb-8 mt-6"
+      className="items-center mb-6 mt-3"
     >
-      <View className="w-24 h-24 bg-white/10 rounded-3xl items-center justify-center mb-4 border border-white/20 shadow-md">
+      <View className="w-24 h-24 bg-white/10 rounded-3xl items-center justify-center mb-3.5 border border-white/20 shadow-md">
         <Image
           source={require('../../../assets/images/opol-resq-logo.png')}
           style={{ width: 72, height: 72 }}

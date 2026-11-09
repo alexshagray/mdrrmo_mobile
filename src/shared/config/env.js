@@ -24,11 +24,11 @@ const sanitizeUrl = (url) => {
 export const ENV = {
   // API Configuration
   // If using an Android Emulator and encountering Network Errors, try changing the IP below to 10.0.2.2
-  API_URL: sanitizeUrl(process.env.EXPO_PUBLIC_API_URL || 'http://192.168.254.102:8000/api'),
+  API_URL: sanitizeUrl(process.env.EXPO_PUBLIC_API_URL || 'http://192.168.254.108:8000/api'),
 
   // Reverb/Pusher Configuration
   REVERB_APP_KEY: String(process.env.EXPO_PUBLIC_REVERB_APP_KEY || 'reverbkey123').trim(),
-  REVERB_HOST: sanitizeHost(process.env.EXPO_PUBLIC_REVERB_HOST || '192.168.254.102'),
+  REVERB_HOST: sanitizeHost(process.env.EXPO_PUBLIC_REVERB_HOST || '192.168.254.108'),
   REVERB_PORT: Number(process.env.EXPO_PUBLIC_REVERB_PORT || 8080),
   REVERB_SCHEME: String(process.env.EXPO_PUBLIC_REVERB_SCHEME || 'http').trim(),
 

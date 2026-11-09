@@ -10,6 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import { BrandBackground } from '@/shared/components';
 import {
   ArrowLeft,
   MapPin,
@@ -59,23 +60,34 @@ export default function LocationPrivacyScreen() {
 
   const isGranted = permissionStatus === Location.PermissionStatus.GRANTED;
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(resident)/profile');
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-200/80 active:bg-slate-200"
-          activeOpacity={0.7}
-        >
-          <ArrowLeft size={18} color="#0F172A" />
-        </TouchableOpacity>
-        <View className="items-center">
-          <Text className="text-slate-900 text-base font-bold tracking-tight">Location & Privacy</Text>
-          <Text className="text-slate-400 text-xs">Security & GPS Settings</Text>
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="subpage" />
+
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Top App Bar */}
+        <View className="flex-row items-center justify-between px-5 pt-2 pb-3.5 mb-1">
+          <TouchableOpacity
+            onPress={handleBack}
+            className="w-10 h-10 rounded-xl bg-white/20 items-center justify-center border border-white/30 active:bg-white/30"
+            activeOpacity={0.7}
+          >
+            <ArrowLeft size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View className="items-center">
+            <Text className="text-white text-base font-bold tracking-tight">Location & Privacy</Text>
+            <Text className="text-blue-100 text-xs">Security & GPS Settings</Text>
+          </View>
+          <View className="w-10" />
         </View>
-        <View className="w-10" />
-      </View>
 
       <ScrollView
         className="flex-1 px-5"
@@ -270,5 +282,6 @@ export default function LocationPrivacyScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
+  </View>
+);
 }

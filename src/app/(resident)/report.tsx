@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Header } from '@/shared/components';
+import { Header, BrandBackground } from '@/shared/components';
 import * as Location from 'expo-location';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
 import * as ImagePicker from 'expo-image-picker';
@@ -36,16 +36,38 @@ import {
   RotateCcw,
   Ambulance,
   Lock,
+  PhoneCall,
+  AlertTriangle,
+  Timer,
+  Settings,
+  Check,
+  LifeBuoy,
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { submitEmergencyReport, getMyReports, updateReporterLocation } from '@/shared/api/incidents';
+import {
+  submitEmergencyReport,
+  getMyReports,
+  updateReporterLocation,
+  getIncidentTypesApi,
+} from '@/shared/api/incidents';
 import { locationService } from '@/shared/services/locationService';
 import { useAuth } from '@/shared/auth/authContext';
 import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
 import { useRealtime } from '@/shared/hooks';
 
 // ─── Emergency type config ────────────────────────────────────────────────────
-const TYPES = [
+export interface EmergencyTypeItem {
+  id: number;
+  label: string;
+  icon: any;
+  color: string;
+  bg: string;
+  activeBg: string;
+  description?: string;
+}
+
+const DEFAULT_TYPES: EmergencyTypeItem[] = [
   {
     id: 1,
     label: 'Medical',
@@ -78,7 +100,35 @@ const TYPES = [
     bg: '#F5F3FF',
     activeBg: '#7C3AED',
   },
+  {
+    id: 5,
+    label: 'Search & Rescue',
+    icon: LifeBuoy,
+    color: '#2563EB',
+    bg: '#EFF6FF',
+    activeBg: '#2563EB',
+  },
 ];
+
+const resolveTypeVisual = (name: string) => {
+  const lower = (name || '').toLowerCase();
+  if (lower.includes('medic') || lower.includes('health') || lower.includes('trauma')) {
+    return { icon: Stethoscope, color: '#059669', bg: '#ECFDF5', activeBg: '#059669', defaultLabel: 'Medical' };
+  }
+  if (lower.includes('fire')) {
+    return { icon: Flame, color: '#EA580C', bg: '#FFF7ED', activeBg: '#EA580C', defaultLabel: 'Fire' };
+  }
+  if (lower.includes('accident') || lower.includes('vehic') || lower.includes('crash') || lower.includes('traffic')) {
+    return { icon: Car, color: '#D97706', bg: '#FFFBEB', activeBg: '#D97706', defaultLabel: 'Accident' };
+  }
+  if (lower.includes('crime') || lower.includes('violen') || lower.includes('assault')) {
+    return { icon: ShieldAlert, color: '#7C3AED', bg: '#F5F3FF', activeBg: '#7C3AED', defaultLabel: 'Crime' };
+  }
+  if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
+    return { icon: LifeBuoy, color: '#2563EB', bg: '#EFF6FF', activeBg: '#2563EB', defaultLabel: 'Search & Rescue' };
+  }
+  return { icon: AlertTriangle, color: '#0284C7', bg: '#F0F9FF', activeBg: '#0284C7', defaultLabel: name };
+};
 
 // ─── Section label ────────────────────────────────────────────────────────────
 function SectionLabel({ label, required }: { label: string; required?: boolean }) {
@@ -90,13 +140,13 @@ function SectionLabel({ label, required }: { label: string; required?: boolean }
   );
 }
 
-// ─── Type chip ────────────────────────────────────────────────────────────────
-function TypeChip({
+// ─── Type Card (Responsive 2-column Grid) ─────────────────────────────────────
+function TypeCard({
   type,
   selected,
   onPress,
 }: {
-  type: (typeof TYPES)[0];
+  type: EmergencyTypeItem;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -104,54 +154,77 @@ function TypeChip({
   const IconComponent = type.icon;
 
   const handlePressIn = () =>
-    Animated.spring(scale, { toValue: 0.93, useNativeDriver: true, speed: 30 }).start();
+    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 35 }).start();
   const handlePressOut = () =>
-    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 25 }).start();
 
   return (
-    <Animated.View style={{ transform: [{ scale }], marginRight: 10 }}>
+    <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
       <TouchableOpacity
         activeOpacity={1}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={[
-          styles.typeChip,
-          {
-            backgroundColor: selected ? type.activeBg : '#FFFFFF',
-            borderColor: selected ? type.activeBg : '#E2E8F0',
-            shadowColor: selected ? type.activeBg : 'transparent',
-          },
+          styles.typeCard,
+          selected
+            ? {
+                backgroundColor: type.activeBg,
+                borderColor: type.activeBg,
+                shadowColor: type.activeBg,
+                shadowOpacity: 0.25,
+                shadowRadius: 8,
+                elevation: 4,
+              }
+            : {
+                backgroundColor: '#FFFFFF',
+                borderColor: '#E2E8F0',
+                shadowColor: '#0F172A',
+                shadowOpacity: 0.03,
+                shadowRadius: 4,
+                elevation: 1,
+              },
         ]}
       >
         <View
           style={[
-            styles.typeChipIcon,
-            { backgroundColor: selected ? 'rgba(255,255,255,0.2)' : type.bg },
+            styles.typeCardIconContainer,
+            { backgroundColor: selected ? 'rgba(255, 255, 255, 0.22)' : type.bg },
           ]}
         >
           <IconComponent
-            size={18}
+            size={20}
             color={selected ? '#FFFFFF' : type.color}
-            strokeWidth={2.25}
+            strokeWidth={2.4}
           />
         </View>
+
         <Text
+          numberOfLines={1}
           style={[
-            styles.typeChipLabel,
-            { color: selected ? '#FFFFFF' : '#334155' },
+            styles.typeCardLabel,
+            { color: selected ? '#FFFFFF' : '#0F172A' },
           ]}
         >
           {type.label}
         </Text>
+
+        {selected && (
+          <View style={styles.typeCardCheck}>
+            <Check size={12} color="#FFFFFF" strokeWidth={3} />
+          </View>
+        )}
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
+const TypeChip = TypeCard;
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ReportScreen() {
   const [selectedType, setSelectedType] = useState(1);
+  const [emergencyTypes, setEmergencyTypes] = useState<EmergencyTypeItem[]>(DEFAULT_TYPES);
   const [description, setDescription] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoMetadata, setPhotoMetadata] = useState<{
@@ -171,7 +244,128 @@ export default function ReportScreen() {
   const { residentRefreshTrigger } = useResidentAlert();
   const { echo } = useRealtime() as { echo: any };
 
-  const [dismissedRejectedId, setDismissedRejectedId] = useState<number | null>(null);
+  const [dismissedRejectedIds, setDismissedRejectedIds] = useState<number[]>([]);
+  const [isDismissedLoaded, setIsDismissedLoaded] = useState(false);
+  const [suspension, setSuspension] = useState<{
+    is_suspended: boolean;
+    suspended_until: string | null;
+    prank_count: number;
+    total_rejected_count?: number;
+  } | null>(null);
+  const [verification, setVerification] = useState<{
+    verification_status: string;
+    is_verified: boolean;
+    missing_fields: string[];
+  } | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
+
+  const isUnverified = verification
+    ? !verification.is_verified
+    : user?.verification_status === 'Pending';
+
+  const allIncidentsRef = useRef<any[]>([]);
+  const dismissedRejectedIdsRef = useRef<number[]>([]);
+  const userDismissedRejectionInSessionRef = useRef<boolean>(false);
+
+  const DISMISSED_KEY = `@mdrrmo_dismissed_rejected_${user?.id || 'guest'}`;
+
+  // Load persisted dismissed rejection IDs on mount / user change
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(DISMISSED_KEY);
+        if (stored && isMounted) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            const numericList = parsed.map(Number);
+            dismissedRejectedIdsRef.current = numericList;
+            setDismissedRejectedIds(numericList);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load dismissed rejected incidents:', err);
+      } finally {
+        if (isMounted) setIsDismissedLoaded(true);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, DISMISSED_KEY]);
+
+  // Fetch incident types dynamically from server
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const types = await getIncidentTypesApi();
+        if (isMounted && Array.isArray(types) && types.length > 0) {
+          const mapped: EmergencyTypeItem[] = types.map((t: any) => {
+            const visual = resolveTypeVisual(t.incident_type_name);
+            return {
+              id: t.id,
+              label: t.incident_type_name?.length > 18 ? visual.defaultLabel : t.incident_type_name,
+              icon: visual.icon,
+              color: visual.color,
+              bg: visual.bg,
+              activeBg: visual.activeBg,
+              description: t.type_description,
+            };
+          });
+          setEmergencyTypes(mapped);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch emergency types, using defaults:', err);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleDismissRejection = async () => {
+    // 1. Immediately dismiss from view so the emergency report form renders instantly
+    userDismissedRejectionInSessionRef.current = true;
+    setActiveIncident(null);
+
+    // 2. Collect ALL rejected incidents currently in the resident's history and persist them
+    try {
+      const historyRejectedIds = allIncidentsRef.current
+        .filter((inc: any) => inc.incident_status === 'rejected')
+        .map((inc: any) => Number(inc.id));
+
+      if (activeIncident?.id) {
+        historyRejectedIds.push(Number(activeIncident.id));
+      }
+
+      const updated = Array.from(new Set([
+        ...dismissedRejectedIdsRef.current,
+        ...historyRejectedIds,
+      ]));
+
+      dismissedRejectedIdsRef.current = updated;
+      setDismissedRejectedIds(updated);
+      await AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save dismissed rejection:', e);
+    }
+  };
+
+  const handleCallHotline = (number: string, serviceName: string) => {
+    Alert.alert(
+      `Call ${serviceName}`,
+      `Dial ${number} to speak directly with MDRRMO emergency command center?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call Now',
+          style: 'default',
+          onPress: () => Linking.openURL(`tel:${number}`),
+        },
+      ]
+    );
+  };
 
   const fetchIncidents = useCallback(async () => {
     if (!user || user.role !== 'resident') return;
@@ -182,18 +376,27 @@ export default function ReportScreen() {
         : Array.isArray(res)
         ? res
         : [];
-      const active = incidents.find((inc: any) => {
-        // If rejected and not dismissed yet by the resident, show rejection screen
-        if (inc.incident_status === 'rejected') {
-          return inc.id !== dismissedRejectedId;
-        }
 
-        // If incident itself is resolved or cancelled -> not active
-        if (['resolved', 'cancelled'].includes(inc.incident_status)) {
+      allIncidentsRef.current = incidents;
+
+      // Update suspension state from API
+      if (res?.suspension) {
+        setSuspension(res.suspension);
+      } else {
+        setSuspension(null);
+      }
+
+      // Update verification state from API
+      if (res?.verification) {
+        setVerification(res.verification);
+      }
+
+      // 1. Look for active ongoing missions (pending, verified, assigned, responding)
+      const ongoingActive = incidents.find((inc: any) => {
+        if (['resolved', 'cancelled', 'rejected'].includes(inc.incident_status)) {
           return false;
         }
 
-        // If the incident has dispatches and the mission was cancelled with no active live dispatches
         if (Array.isArray(inc.dispatches) && inc.dispatches.length > 0) {
           const hasLiveDispatch = inc.dispatches.some((d: any) =>
             ['assigned', 'accepted', 'en_route', 'arrived_on_scene'].includes(d.dispatch_status)
@@ -205,7 +408,6 @@ export default function ReportScreen() {
           }
         }
 
-        // If marked assigned or responding, it must have an active live dispatch
         if (['assigned', 'responding'].includes(inc.incident_status)) {
           if (
             inc.active_dispatch &&
@@ -220,13 +422,67 @@ export default function ReportScreen() {
 
         return ['pending', 'verified'].includes(inc.incident_status);
       });
-      setActiveIncident(active || null);
+
+      if (ongoingActive) {
+        userDismissedRejectionInSessionRef.current = false;
+        setActiveIncident(ongoingActive);
+        return;
+      }
+
+      // 2. If the resident explicitly dismissed rejection in this session, keep report form visible
+      if (userDismissedRejectionInSessionRef.current) {
+        setActiveIncident(null);
+        return;
+      }
+
+      // 3. Only check if the latest report (incidents[0]) was rejected AND was not yet dismissed
+      // Older rejected reports in history are logs and MUST NEVER block the report form
+      const latestIncident = incidents[0];
+      const isLatestRejected = latestIncident?.incident_status === 'rejected';
+      const isAlreadyDismissed = latestIncident && dismissedRejectedIdsRef.current.includes(Number(latestIncident.id));
+
+      if (isLatestRejected && !isAlreadyDismissed) {
+        setActiveIncident(latestIncident);
+      } else {
+        setActiveIncident(null);
+      }
     } catch (e) {
       console.error('Failed to fetch reports', e);
     } finally {
       setIsLoading(false);
     }
-  }, [dismissedRejectedId]);
+  }, [user]);
+
+  // Countdown timer for 24-hour suspension
+  useEffect(() => {
+    if (!suspension?.is_suspended || !suspension?.suspended_until) {
+      setTimeRemaining(null);
+      return;
+    }
+
+    const calculateRemaining = () => {
+      const targetTime = new Date(suspension.suspended_until!).getTime();
+      const now = Date.now();
+      const diff = targetTime - now;
+
+      if (diff <= 0) {
+        setTimeRemaining(null);
+        fetchIncidents();
+        return;
+      }
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setTimeRemaining({ hours, minutes, seconds });
+    };
+
+    calculateRemaining();
+    const timer = setInterval(calculateRemaining, 1000);
+
+    return () => clearInterval(timer);
+  }, [suspension?.is_suspended, suspension?.suspended_until, fetchIncidents]);
 
   // Location Tracking for Active Incident
   useEffect(() => {
@@ -430,6 +686,26 @@ export default function ReportScreen() {
   };
 
   const handleSubmit = async () => {
+    if (suspension?.is_suspended && timeRemaining) {
+      Alert.alert(
+        'Reporting Privileges Suspended',
+        'Your reporting privileges are temporarily suspended due to 3 rejected reports. In an immediate life-threatening emergency, call the hotline directly.'
+      );
+      return;
+    }
+
+    if (isUnverified) {
+      Alert.alert(
+        'Profile Verification Required',
+        'Complete your personal information to unlock the accident reporting feature.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Complete Profile', onPress: () => router.push('/(resident)/personal-info') },
+        ]
+      );
+      return;
+    }
+
     if (!photoUri) {
       Alert.alert(
         'Photo Required',
@@ -510,17 +786,28 @@ export default function ReportScreen() {
       setShowSuccessModal(true);
     } catch (e: any) {
       console.error(e);
-      Alert.alert(
-        'Submission Failed',
-        'Make sure you have an active internet connection to submit the photo and report.'
-      );
+      if (e?.response?.status === 403 && (e?.response?.data?.verification_status === 'Pending' || e?.response?.data?.message?.includes('personal information'))) {
+        Alert.alert(
+          'Profile Verification Required',
+          e?.response?.data?.message || 'Complete your personal information to unlock the accident reporting feature.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Complete Profile', onPress: () => router.push('/(resident)/personal-info') },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Submission Failed',
+          e?.response?.data?.message || 'Make sure you have an active internet connection to submit the photo and report.'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
 
   // ── Loading state
-  if (isLoading) {
+  if (isLoading || !isDismissedLoaded) {
     return (
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6366F1" />
@@ -549,8 +836,27 @@ export default function ReportScreen() {
       : (activeDispatch?.driver ? `${activeDispatch.driver.first_name} ${activeDispatch.driver.last_name}` : null);
 
     return (
-      <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
-        <Header title="Incident Status" className="bg-transparent" />
+      <View className="flex-1 bg-slate-50">
+        <BrandBackground variant="subpage" />
+        <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
+          <Header
+            title="Incident Status"
+            subtitle="OPOL RESQ • LIVE MISSION MONITOR"
+            className="bg-transparent"
+            titleClassName="text-white font-black"
+            subtitleClassName="text-blue-100 font-bold"
+            rightElement={
+              <TouchableOpacity
+                onPress={() => router.push('/(resident)/account-security')}
+                activeOpacity={0.7}
+                className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 items-center justify-center active:bg-white/30 shadow-sm"
+                accessibilityRole="button"
+                accessibilityLabel="Account Settings & Security"
+              >
+                <Settings size={18} color="#FFFFFF" strokeWidth={2.2} />
+              </TouchableOpacity>
+            }
+          />
         <ScrollView contentContainerStyle={styles.standbyScrollContent} showsVerticalScrollIndicator={false}>
           {/* Main Status Header Card */}
           <View style={[
@@ -832,10 +1138,7 @@ export default function ReportScreen() {
             {isRejected && (
               <TouchableOpacity
                 style={styles.returnFormBtn}
-                onPress={() => {
-                  setDismissedRejectedId(activeIncident.id);
-                  setActiveIncident(null);
-                }}
+                onPress={handleDismissRejection}
                 activeOpacity={0.85}
               >
                 <RotateCcw size={16} color="#FFFFFF" strokeWidth={2.2} />
@@ -864,69 +1167,311 @@ export default function ReportScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    );
-  }
+    </View>
+  );
+}
+
+  // ── Suspended / Cooldown state (3 strikes rule)
+  if (suspension?.is_suspended && timeRemaining) {
+    return (
+      <View className="flex-1 bg-slate-50">
+        <BrandBackground variant="subpage" />
+        <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
+          <Header
+            title="Report Emergency"
+            subtitle="OPOL RESQ • EMERGENCY PORTAL"
+            className="bg-transparent"
+            titleClassName="text-white font-black"
+            subtitleClassName="text-blue-100 font-bold"
+            rightElement={
+              <TouchableOpacity
+                onPress={() => router.push('/(resident)/account-security')}
+                activeOpacity={0.7}
+                className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 items-center justify-center active:bg-white/30 shadow-sm"
+                accessibilityRole="button"
+                accessibilityLabel="Account Settings & Security"
+              >
+                <Settings size={18} color="#FFFFFF" strokeWidth={2.2} />
+              </TouchableOpacity>
+            }
+          />
+        <ScrollView contentContainerStyle={styles.standbyScrollContent} showsVerticalScrollIndicator={false}>
+          {/* Suspension Hero Alert Card */}
+          <View style={[styles.statusHeroCard, styles.statusHeroCardRejected]}>
+            <View style={[styles.statusHeroIconRing, styles.iconRingRejected]}>
+              <ShieldAlert size={40} color="#DC2626" strokeWidth={2.25} />
+            </View>
+
+            <View style={styles.statusBadgeRow}>
+              <View style={[styles.pillBadge, styles.pillBadgeRed]}>
+                <Text style={[styles.pillBadgeText, styles.pillTextRed]}>
+                  24-HOUR COOLDOWN ACTIVE
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.statusHeroTitle, { color: '#B91C1C' }]}>
+              Reporting Temporarily Suspended
+            </Text>
+
+            <Text style={styles.statusHeroSubtitle}>
+              Your account has reached 3 rejected emergency reports flagged by the Dispatcher. Emergency form submissions are locked for 24 hours to prevent command center disruption.
+            </Text>
+          </View>
+
+          {/* Countdown Clock Card */}
+          <View style={styles.countdownCard}>
+            <View style={styles.countdownHeaderRow}>
+              <Timer size={18} color="#B91C1C" />
+              <Text style={styles.countdownHeaderTitle}>UNLOCK COUNTDOWN</Text>
+            </View>
+
+            <View style={styles.countdownGrid}>
+              <View style={styles.countdownBox}>
+                <Text style={styles.countdownDigit}>
+                  {String(timeRemaining.hours).padStart(2, '0')}
+                </Text>
+                <Text style={styles.countdownUnit}>HOURS</Text>
+              </View>
+
+              <Text style={styles.countdownColon}>:</Text>
+
+              <View style={styles.countdownBox}>
+                <Text style={styles.countdownDigit}>
+                  {String(timeRemaining.minutes).padStart(2, '0')}
+                </Text>
+                <Text style={styles.countdownUnit}>MINUTES</Text>
+              </View>
+
+              <Text style={styles.countdownColon}>:</Text>
+
+              <View style={styles.countdownBox}>
+                <Text style={styles.countdownDigit}>
+                  {String(timeRemaining.seconds).padStart(2, '0')}
+                </Text>
+                <Text style={styles.countdownUnit}>SECONDS</Text>
+              </View>
+            </View>
+
+            <Text style={styles.countdownFooterText}>
+              Cooldown unlocks automatically on{' '}
+              <Text style={{ fontWeight: '700', color: '#1E293B' }}>
+                {suspension.suspended_until ? new Date(suspension.suspended_until).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true,
+                  month: 'short',
+                  day: 'numeric'
+                }) : 'in 24 hours'}
+              </Text>
+            </Text>
+          </View>
+
+          {/* Life-Saving Emergency Hotline Box */}
+          <View style={styles.hotlineHelpCard}>
+            <View style={styles.hotlineHelpHeader}>
+              <PhoneCall size={20} color="#DC2626" />
+              <Text style={styles.hotlineHelpTitle}>Immediate Life Threatening Emergency?</Text>
+            </View>
+            <Text style={styles.hotlineHelpDesc}>
+              Emergency telephone hotlines are never blocked. If you or someone nearby is experiencing an immediate life-threatening emergency, call the MDRRMO Command Center directly.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.hotlineCallBtnPrimary}
+              onPress={() => handleCallHotline('09177076765', 'MDRRMO Command Center')}
+              activeOpacity={0.85}
+            >
+              <PhoneCall size={18} color="#FFFFFF" strokeWidth={2.5} />
+              <Text style={styles.hotlineCallBtnPrimaryText}>CALL MDRRMO HOTLINE (09177076765)</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.hotlineCallBtnSecondary}
+              onPress={() => handleCallHotline('911', 'National Emergency Hotline (911)')}
+              activeOpacity={0.85}
+            >
+              <ShieldAlert size={16} color="#DC2626" strokeWidth={2.2} />
+              <Text style={styles.hotlineCallBtnSecondaryText}>Dial National Hotline (911)</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}
 
   // ── Main report form
   return (
-    <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
-      <Header title="Report Emergency" className="bg-transparent" />
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="subpage" />
+      <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
+        <Header
+          title="Report Emergency"
+          subtitle="OPOL RESQ • CITIZEN DISPATCH"
+          className="bg-transparent"
+          titleClassName="text-white font-black"
+          subtitleClassName="text-blue-100 font-bold"
+          rightElement={
+            <TouchableOpacity
+              onPress={() => router.push('/(resident)/account-security')}
+              activeOpacity={0.7}
+              className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 items-center justify-center active:bg-white/30 shadow-sm"
+              accessibilityRole="button"
+              accessibilityLabel="Account Settings & Security"
+            >
+              <Settings size={18} color="#FFFFFF" strokeWidth={2.2} />
+            </TouchableOpacity>
+          }
+        />
 
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        {/* ── Life-Threatening Warning Banner ── */}
         <View style={styles.banner}>
           <View style={styles.bannerIconContainer}>
-            <AlertCircle size={20} color="#DC2626" strokeWidth={2.25} />
+            <AlertCircle size={20} color="#DC2626" strokeWidth={2.4} />
           </View>
           <Text style={styles.bannerText}>
             For life-threatening situations, call the emergency hotline immediately.
           </Text>
         </View>
 
-        {/* ── Emergency Type ── */}
+        {/* ── Profile Verification Required Banner ── */}
+        {isUnverified && (
+          <View style={styles.verificationBannerCard}>
+            <View style={styles.verificationBannerHeader}>
+              <View style={styles.verificationIconBox}>
+                <ShieldAlert size={22} color="#D97706" strokeWidth={2.4} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <Text style={styles.verificationBannerTitle}>Profile Verification Required</Text>
+                  <View style={styles.verificationStatusPill}>
+                    <Text style={styles.verificationStatusPillText}>Pending</Text>
+                  </View>
+                </View>
+                <Text style={styles.verificationBannerDesc}>
+                  Complete your personal information to unlock the accident reporting feature.
+                </Text>
+              </View>
+            </View>
+
+            {verification?.missing_fields && verification.missing_fields.length > 0 && (
+              <View style={styles.verificationMissingBox}>
+                <Text style={styles.verificationMissingLabel}>Required fields to complete:</Text>
+                <Text style={styles.verificationMissingText}>
+                  {verification.missing_fields.join(' • ')}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={() => router.push('/(resident)/personal-info')}
+              activeOpacity={0.8}
+              style={styles.completeProfileBtn}
+            >
+              <Text style={styles.completeProfileBtnText}>Complete Profile Now</Text>
+            </TouchableOpacity>
+
+            {/* Alternative Emergency Hotline Notice */}
+            <View style={styles.alternativeHotlineSection}>
+              <Text style={styles.alternativeHotlineTitle}>Need Immediate Assistance?</Text>
+              <Text style={styles.alternativeHotlineDesc}>
+                Emergency hotlines are always accessible without profile verification:
+              </Text>
+              <View style={styles.verificationHotlineRow}>
+                <TouchableOpacity
+                  onPress={() => handleCallHotline('09758429491', 'MDRRMO Rescue Alpha')}
+                  style={styles.verificationHotlineBtn}
+                  activeOpacity={0.75}
+                >
+                  <PhoneCall size={14} color="#1E88E5" style={{ marginRight: 6 }} />
+                  <Text style={styles.verificationHotlineBtnText}>MDRRMO: 09758429491</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleCallHotline('09358056370', 'Police - PNP')}
+                  style={styles.verificationHotlineBtn}
+                  activeOpacity={0.75}
+                >
+                  <PhoneCall size={14} color="#1E88E5" style={{ marginRight: 6 }} />
+                  <Text style={styles.verificationHotlineBtnText}>Police: 09358056370</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── Emergency Type (Responsive Grid) ── */}
         <SectionLabel label="Emergency Type" />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.typeRow}
-          contentContainerStyle={{ paddingRight: 16 }}
-        >
-          {TYPES.map((type) => (
-            <TypeChip
-              key={type.id}
-              type={type}
-              selected={selectedType === type.id}
-              onPress={() => setSelectedType(type.id)}
-            />
-          ))}
-        </ScrollView>
+        <View style={styles.typeGrid}>
+          {(() => {
+            const rows: EmergencyTypeItem[][] = [];
+            for (let i = 0; i < emergencyTypes.length; i += 2) {
+              rows.push(emergencyTypes.slice(i, i + 2));
+            }
+            return rows.map((row, rowIndex) => (
+              <View key={`row-${rowIndex}`} style={styles.typeGridRow}>
+                {row.map((type) => (
+                  <TypeCard
+                    key={type.id}
+                    type={type}
+                    selected={selectedType === type.id}
+                    onPress={() => setSelectedType(type.id)}
+                  />
+                ))}
+                {row.length === 1 && <View style={{ flex: 1 }} />}
+              </View>
+            ));
+          })()}
+        </View>
 
         {/* ── Location ── */}
         <SectionLabel label="Location" />
         <View style={styles.locationStaticCard}>
           <View style={styles.locationIconContainerStatic}>
-            <MapPin size={24} color="#208AEF" strokeWidth={2.25} />
+            <MapPin size={22} color="#208AEF" strokeWidth={2.4} />
           </View>
           <View style={styles.locationTextStatic}>
-            <Text style={styles.locationTitleStatic}>📍 Your Current Location</Text>
+            <View style={styles.locationTitleRow}>
+              <Text style={styles.locationTitleStatic}>Your Current Location</Text>
+              <View style={styles.gpsPill}>
+                <View style={styles.gpsPillDot} />
+                <Text style={styles.gpsPillText}>GPS ACTIVE</Text>
+              </View>
+            </View>
             <Text style={styles.locationSubStatic}>
               Your location has been automatically detected and will be shared with emergency responders.
             </Text>
           </View>
         </View>
 
-        {/* ── Attachments ── */}
+        {/* ── Attachments / Photo Evidence ── */}
         <SectionLabel label="Photo Evidence" required />
         {photoUri ? (
           <View>
             <View style={styles.photoPreviewContainer}>
               <Image source={{ uri: photoUri }} style={styles.photoPreview} />
-              <TouchableOpacity style={styles.removePhotoBtn} onPress={handleRemovePhoto}>
-                <XCircle size={24} color="#FFFFFF" fill="#DC2626" />
-              </TouchableOpacity>
+              <View style={styles.photoPreviewOverlay}>
+                <TouchableOpacity
+                  style={styles.retakePhotoBtn}
+                  onPress={handlePickPhoto}
+                  activeOpacity={0.8}
+                >
+                  <RotateCcw size={14} color="#FFFFFF" strokeWidth={2.4} />
+                  <Text style={styles.retakePhotoText}>Retake</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.removePhotoBtn}
+                  onPress={handleRemovePhoto}
+                  activeOpacity={0.8}
+                >
+                  <XCircle size={22} color="#FFFFFF" fill="#DC2626" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {photoMetadata && (
@@ -939,7 +1484,7 @@ export default function ReportScreen() {
                 </View>
 
                 <View style={styles.photoMetaRow}>
-                  <MapPin size={15} color="#3B82F6" strokeWidth={2.2} />
+                  <MapPin size={15} color="#208AEF" strokeWidth={2.2} />
                   <View style={{ flex: 1, marginLeft: 8 }}>
                     <Text style={styles.photoMetaLabel}>Location</Text>
                     <Text style={styles.photoMetaValue} numberOfLines={2}>
@@ -975,9 +1520,16 @@ export default function ReportScreen() {
             )}
           </View>
         ) : (
-          <TouchableOpacity style={styles.photoUploadBtn} onPress={handlePickPhoto}>
-            <Camera size={32} color="#94A3B8" strokeWidth={2} />
+          <TouchableOpacity
+            style={styles.photoUploadBtn}
+            onPress={handlePickPhoto}
+            activeOpacity={0.75}
+          >
+            <View style={styles.photoUploadIconWrapper}>
+              <Camera size={26} color="#208AEF" strokeWidth={2.2} />
+            </View>
             <Text style={styles.photoUploadText}>Tap to take a photo</Text>
+            <Text style={styles.photoUploadSubtext}>Required for dispatch verification & team safety</Text>
           </TouchableOpacity>
         )}
 
@@ -994,6 +1546,7 @@ export default function ReportScreen() {
             placeholder="Add details such as number of people involved, visible injuries, etc."
             placeholderTextColor="#94A3B8"
             multiline
+            numberOfLines={4}
             textAlignVertical="top"
             value={description}
             onChangeText={setDescription}
@@ -1006,18 +1559,24 @@ export default function ReportScreen() {
         <TouchableOpacity
           style={[
             styles.submitBtn,
-            (!photoUri || isSubmitting) && styles.submitBtnDisabled,
+            (!photoUri || isSubmitting || isUnverified) && styles.submitBtnDisabled,
+            isUnverified && styles.submitBtnUnverified,
           ]}
           onPress={handleSubmit}
           activeOpacity={0.85}
-          disabled={!photoUri || isSubmitting}
+          disabled={isSubmitting}
         >
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : isUnverified ? (
+            <>
+              <ShieldAlert size={18} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 8 }} />
+              <Text style={styles.submitBtnText}>PROFILE VERIFICATION REQUIRED</Text>
+            </>
           ) : (
             <>
               <Send size={18} color="#FFFFFF" strokeWidth={2.5} />
-              <Text style={styles.submitBtnText}>SUBMIT REPORT</Text>
+              <Text style={styles.submitBtnText}>SUBMIT EMERGENCY REPORT</Text>
             </>
           )}
         </TouchableOpacity>
@@ -1053,7 +1612,8 @@ export default function ReportScreen() {
         </View>
       </Modal>
     </SafeAreaView>
-  );
+  </View>
+);
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -1362,23 +1922,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 40,
+    paddingTop: 10,
+    paddingBottom: 130,
   },
   sectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-    marginTop: 20,
+    marginTop: 18,
   },
   sectionLabel: {
-    color: '#1E293B',
-    fontSize: 13,
+    color: '#0F172A',
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
   },
   requiredDot: {
-    color: '#F43F5E',
+    color: '#DC2626',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1386,12 +1946,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEF2F2',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
     borderColor: '#FECACA',
-    marginTop: 4,
+    marginTop: 6,
     marginBottom: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   bannerIconContainer: {
     width: 36,
@@ -1406,9 +1972,188 @@ const styles = StyleSheet.create({
   bannerText: {
     color: '#991B1B',
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     lineHeight: 18,
     flex: 1,
+  },
+  verificationBannerCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    marginTop: 10,
+    marginBottom: 4,
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  verificationBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  verificationIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  verificationBannerTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#92400E',
+    letterSpacing: -0.2,
+  },
+  verificationStatusPill: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 8,
+    paddingVertical: 1.5,
+    borderRadius: 12,
+  },
+  verificationStatusPillText: {
+    color: '#B45309',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  verificationBannerDesc: {
+    color: '#B45309',
+    fontSize: 12.5,
+    fontWeight: '500',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  verificationMissingBox: {
+    marginTop: 10,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  verificationMissingLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#92400E',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  verificationMissingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#78350F',
+    lineHeight: 16,
+  },
+  completeProfileBtn: {
+    marginTop: 12,
+    backgroundColor: '#D97706',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeProfileBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  alternativeHotlineSection: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#FDE68A',
+  },
+  alternativeHotlineTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  alternativeHotlineDesc: {
+    fontSize: 11.5,
+    color: '#B45309',
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  verificationHotlineRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  verificationHotlineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  verificationHotlineBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E88E5',
+  },
+  submitBtnUnverified: {
+    backgroundColor: '#D97706',
+    borderColor: '#B45309',
+  },
+  typeGrid: {
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  typeGridRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  typeCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    minHeight: 56,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  typeCardIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  typeCardLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  typeCardCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 4,
   },
   typeRow: {
     marginBottom: 4,
@@ -1439,72 +2184,164 @@ const styles = StyleSheet.create({
   },
   locationStaticCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F7FF',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 14,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    marginTop: 2,
   },
   locationIconContainerStatic: {
-    width: 46,
-    height: 46,
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 12,
+    marginTop: 2,
+    flexShrink: 0,
   },
   locationTextStatic: {
     flex: 1,
   },
+  locationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
   locationTitleStatic: {
     color: '#0F172A',
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '700',
-    marginBottom: 4,
+  },
+  gpsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  gpsPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginRight: 5,
+  },
+  gpsPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#047857',
+    letterSpacing: 0.5,
   },
   locationSubStatic: {
-    color: '#208AEF',
-    fontSize: 12,
-    fontWeight: '500',
-    lineHeight: 16,
+    color: '#475569',
+    fontSize: 12.5,
+    fontWeight: '400',
+    lineHeight: 18,
   },
   photoUploadBtn: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: '#CBD5E1',
     borderStyle: 'dashed',
-    height: 140,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    marginTop: 2,
+  },
+  photoUploadIconWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   photoUploadText: {
+    color: '#0F172A',
+    fontSize: 14.5,
+    fontWeight: '700',
+  },
+  photoUploadSubtext: {
     color: '#64748B',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '400',
+    marginTop: 3,
   },
   photoPreviewContainer: {
     position: 'relative',
-    height: 200,
+    height: 210,
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
+    backgroundColor: '#0F172A',
+    marginTop: 2,
   },
   photoPreview: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  removePhotoBtn: {
+  photoPreviewOverlay: {
     position: 'absolute',
     top: 10,
+    left: 10,
     right: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  retakePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    gap: 6,
+  },
+  retakePhotoText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  removePhotoBtn: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   textareaWrapper: {
     backgroundColor: '#FFFFFF',
@@ -1512,57 +2349,75 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#E2E8F0',
     padding: 14,
+    minHeight: 110,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    marginTop: 2,
   },
   textareaWrapperFocused: {
     borderColor: '#208AEF',
+    shadowColor: '#208AEF',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
   },
   textarea: {
-    color: '#1E293B',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 21,
-    height: 100,
+    minHeight: 82,
     textAlignVertical: 'top',
   },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FF3B30',
+    backgroundColor: '#DC2626',
     borderRadius: 16,
     paddingVertical: 17,
-    marginTop: 24,
+    marginTop: 22,
     gap: 10,
-    shadowColor: '#FF3B30',
+    shadowColor: '#DC2626',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 4,
   },
   submitBtnDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#94A3B8',
+    opacity: 0.65,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   submitBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
   },
   footerNote: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '400',
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '500',
     textAlign: 'center',
     marginTop: 14,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   photoMetaCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: '#E2E8F0',
-    padding: 12,
+    padding: 14,
     marginTop: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
   },
   photoMetaHeader: {
     flexDirection: 'row',
@@ -1618,5 +2473,147 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 4,
+  },
+  countdownCard: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    marginBottom: 16,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  countdownHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  countdownHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#B91C1C',
+    letterSpacing: 0.8,
+  },
+  countdownGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  countdownBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  countdownDigit: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#DC2626',
+    fontVariant: ['tabular-nums'],
+  },
+  countdownUnit: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#991B1B',
+    marginTop: 2,
+    letterSpacing: 0.6,
+  },
+  countdownColon: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#DC2626',
+    marginHorizontal: 6,
+    marginBottom: 12,
+  },
+  countdownFooterText: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 6,
+  },
+  hotlineHelpCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  hotlineHelpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  hotlineHelpTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1E293B',
+    flex: 1,
+  },
+  hotlineHelpDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  hotlineCallBtnPrimary: {
+    backgroundColor: '#DC2626',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  hotlineCallBtnPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  hotlineCallBtnSecondary: {
+    backgroundColor: '#FEF2F2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  hotlineCallBtnSecondaryText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

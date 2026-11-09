@@ -34,6 +34,9 @@ export const MapView = forwardRef<MapboxGL.Camera, MapViewProps>(({
         styleURL={MapboxGL.StyleURL.Street}
         logoEnabled={false} // Clean UI, no logo spam (Mapbox allows this for paid/internal, but we can disable the large one)
         attributionEnabled={false}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        scaleBarPosition={{ top: -9999, left: -9999 }}
         {...props}
       >
         <MapboxGL.Camera

@@ -1,45 +1,55 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, View } from 'react-native';
+import { Animated, View, Text } from 'react-native';
 
 interface AnimatedTabIconProps {
   focused: boolean;
   IconComponent: React.ComponentType<any>;
+  label?: string;
 }
 
-export function AnimatedTabIcon({ focused, IconComponent }: AnimatedTabIconProps) {
-  const scaleAnim = useRef(new Animated.Value(focused ? 1.12 : 1)).current;
-  const dotOpacity = useRef(new Animated.Value(focused ? 1 : 0)).current;
+export function AnimatedTabIcon({ focused, IconComponent, label }: AnimatedTabIconProps) {
+  const scaleAnim = useRef(new Animated.Value(focused ? 1.06 : 1)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: focused ? 1.12 : 1,
-        useNativeDriver: true,
-        speed: 20,
-        bounciness: 6,
-      }),
-      Animated.timing(dotOpacity, {
-        toValue: focused ? 1 : 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [focused, scaleAnim, dotOpacity]);
+    Animated.spring(scaleAnim, {
+      toValue: focused ? 1.06 : 1,
+      useNativeDriver: true,
+      speed: 24,
+      bounciness: 4,
+    }).start();
+  }, [focused, scaleAnim]);
 
   return (
-    <View className="items-center justify-center py-1">
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <View className="items-center justify-center min-w-[50px]">
+      <Animated.View
+        style={{ transform: [{ scale: scaleAnim }] }}
+        className={`w-9 h-7 items-center justify-center rounded-xl ${
+          focused ? 'bg-blue-50/90' : 'bg-transparent'
+        }`}
+      >
         <IconComponent
-          color={focused ? '#208AEF' : '#94A3B8'}
-          size={23}
-          strokeWidth={focused ? 2.5 : 2}
+          color={focused ? '#208AEF' : '#64748B'}
+          size={19}
+          strokeWidth={focused ? 2.5 : 2.0}
         />
       </Animated.View>
-      {/* Subtle active indicator dot below icon instead of heavy circle */}
-      <Animated.View
-        style={{ opacity: dotOpacity }}
-        className="w-1.5 h-1.5 rounded-full bg-[#208AEF] mt-1"
-      />
+
+      {label ? (
+        <Text
+          className={`text-[10px] tracking-tight mt-0.5 leading-tight ${
+            focused ? 'text-[#208AEF] font-black' : 'text-slate-500 font-bold'
+          }`}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+      ) : (
+        <View
+          className={`w-1 h-1 rounded-full mt-0.5 ${
+            focused ? 'bg-[#208AEF]' : 'bg-transparent'
+          }`}
+        />
+      )}
     </View>
   );
 }

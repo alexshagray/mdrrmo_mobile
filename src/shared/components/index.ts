@@ -17,3 +17,5 @@ export * from './Input';
 export * from './SignaturePad';
 export * from './BodyDiagram';
 export * from './RingPulse';
+export * from './BrandBackground';
+export * from './CallConfirmationModal';

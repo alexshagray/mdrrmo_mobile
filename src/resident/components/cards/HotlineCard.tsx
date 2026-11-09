@@ -18,7 +18,7 @@ import {
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { callHotlineApi } from '@/shared/api/incidents';
-import { LocationPermissionModal } from '@/shared/components';
+import { LocationPermissionModal, CallConfirmationModal } from '@/shared/components';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface HotlineService {
@@ -99,6 +99,7 @@ const SERVICES: HotlineService[] = [
 function ServiceCard({ service }: { service: HotlineService }) {
   const scale = useRef(new Animated.Value(1)).current;
   const [isLocationModalVisible, setIsLocationModalVisible] = React.useState(false);
+  const [isCallModalVisible, setIsCallModalVisible] = React.useState(false);
   const IconComponent = service.icon;
 
   const handlePressIn = () => {
@@ -162,30 +163,23 @@ function ServiceCard({ service }: { service: HotlineService }) {
     Linking.openURL(`tel:${service.number}`);
   };
 
-  const handleCall = async () => {
-    const url = `tel:${service.number}`;
-    
+  const handleCall = () => {
     // If it's the MDRRMO hotline, grab location and notify dispatcher first
     if (service.id === 'mdrrmo') {
       setIsLocationModalVisible(true);
       return;
     }
 
-    // Standard behavior for other hotlines (Police, Fire, Health)
-    Alert.alert(
-      `Call ${service.name}?`,
-      `This will dial ${service.number} (${service.name} – ${service.shortLabel}).`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: `Call ${service.number}`,
-          style: 'destructive',
-          onPress: () => Linking.openURL(url).catch(() =>
-            Alert.alert('Error', 'Unable to place call. Please dial manually.')
-          ),
-        },
-      ]
-    );
+    // Open custom professional confirmation modal
+    setIsCallModalVisible(true);
+  };
+
+  const handleConfirmCall = () => {
+    setIsCallModalVisible(false);
+    const url = `tel:${service.number}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Unable to Place Call', `Please dial ${service.number} manually on your device.`);
+    });
   };
 
   return (
@@ -214,9 +208,9 @@ function ServiceCard({ service }: { service: HotlineService }) {
           {/* Icon */}
           <View style={[styles.iconContainer, { backgroundColor: service.iconBg }]}>
             <IconComponent
-              size={28}
+              size={22}
               color={service.iconColor}
-              strokeWidth={2.25}
+              strokeWidth={2.3}
             />
           </View>
 
@@ -249,6 +243,20 @@ function ServiceCard({ service }: { service: HotlineService }) {
         onAllow={onAllowLocation} 
         onDeny={onDenyLocation} 
       />
+
+      <CallConfirmationModal
+        visible={isCallModalVisible}
+        serviceName={service.name}
+        shortLabel={service.shortLabel}
+        phoneNumber={service.number}
+        description={service.description}
+        accentColor={service.accent}
+        iconBg={service.iconBg}
+        iconColor={service.iconColor}
+        IconComponent={IconComponent}
+        onConfirm={handleConfirmCall}
+        onCancel={() => setIsCallModalVisible(false)}
+      />
     </Animated.View>
   );
 }
@@ -276,9 +284,6 @@ export function EmergencyHotlineGrid() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const GAP = 10;
-const H_PAD = 16;
-const screenWidth = Dimensions.get('window').width;
-const cardWidth = (screenWidth - H_PAD * 2 - GAP) / 2;
 
 const styles = StyleSheet.create({
   grid: {
@@ -290,60 +295,63 @@ const styles = StyleSheet.create({
   },
   // ── card shell
   cardWrapper: {
-    width: cardWidth,
-    borderRadius: 18,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 5,
-    backgroundColor: '#FFFFFF', // needed for Android shadow
+    flex: 1,
+    borderRadius: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    backgroundColor: '#FFFFFF',
   },
   cardTouchable: {
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
   },
   accentBar: {
     height: 4,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   cardContent: {
-    padding: 14,
+    padding: 13,
     alignItems: 'flex-start',
   },
   // ── icon
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
   },
   // ── text
   serviceName: {
     color: '#0F172A',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.1,
+    letterSpacing: -0.2,
     marginBottom: 1,
   },
   shortLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontWeight: '800',
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
-    marginBottom: 6,
+    marginBottom: 5,
   },
   description: {
     color: '#64748B',
     fontSize: 11,
-    fontWeight: '400',
+    fontWeight: '500',
     lineHeight: 15,
-    marginBottom: 12,
+    marginBottom: 11,
     minHeight: 30,
   },
   // ── call CTA
@@ -352,14 +360,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
-    gap: 5,
+    paddingVertical: 9,
+    borderRadius: 12,
+    gap: 6,
   },
   callBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });

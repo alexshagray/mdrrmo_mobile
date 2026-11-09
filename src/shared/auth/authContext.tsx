@@ -71,6 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(session.user);
           setRole(session.role);
           setSessionStatus('active');
+
+          // Silently sync latest user profile from API in the background (updates phone_number, etc.)
+          getUserApi().then(async (userData) => {
+            const resolvedUser = userData?.user || userData;
+            if (resolvedUser && resolvedUser.id) {
+              setUser(resolvedUser);
+              await saveSession({ user: resolvedUser, role: resolvedUser.role || session.role }, true);
+            }
+          }).catch(() => {});
         } else {
           // Fallback: If token exists but cached session in AsyncStorage is missing,
           // fetch current user from backend /auth/user
@@ -182,13 +191,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       let errorMessage = 'Registration failed. Please try again.';
+      let fieldErrors: Record<string, string[]> | undefined;
+
       if (error.response?.status === 422) {
-         errorMessage = Object.values(error.response.data.errors || {}).flat().join('\n') || 'Validation failed.';
+         fieldErrors = error.response.data?.errors;
+         const errorsObj = error.response.data?.errors;
+         if (errorsObj && typeof errorsObj === 'object') {
+           const firstKey = Object.keys(errorsObj)[0];
+           errorMessage = (firstKey && errorsObj[firstKey]?.[0]) || 'Validation failed.';
+         } else {
+           errorMessage = Object.values(error.response.data || {}).flat().join('\n') || 'Validation failed.';
+         }
       } else if (error.message === 'Network Error' || !error.response) {
          errorMessage = 'Network error. Please check your connection.';
       }
 
-      return { success: false, error: errorMessage };
+      return { success: false, error: errorMessage, fieldErrors };
     } finally {
       setIsLoggingIn(false);
     }

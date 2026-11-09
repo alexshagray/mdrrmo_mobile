@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Header, SearchBar, StatusChip } from '@/shared/components';
+import { StatusChip, BrandBackground } from '@/shared/components';
 import { MapPin, Calendar, Clock, User, Phone, Filter, X, ArrowLeft } from 'lucide-react-native';
 import { getDispatchHistory } from '@/shared/api/dispatches';
+import { resolveAddressFromCoords } from '@/shared/utils/location';
 
 const CATEGORIES = [
   { id: 'all', label: 'All History' },
@@ -45,6 +46,14 @@ export default function HistoryScreen() {
   const [filterDate, setFilterDate] = useState('');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.navigate('/(responder)');
+    }
+  };
+
   useEffect(() => {
     loadHistory(1, activeCategory, filterDate);
   }, [activeCategory, filterDate]);
@@ -55,11 +64,51 @@ export default function HistoryScreen() {
       else setIsPaginating(true);
 
       const res = await getDispatchHistory(pageNum, type, date);
+      const rawList = res?.data || [];
+
+      // Enhance locations if any are still raw coordinates or generic
+      const enhancedList = await Promise.all(
+        rawList.map(async (item: any) => {
+          let loc = item.location;
+          const isCoords = !loc || /^-?\d+\.\d+,\s*-?\d+\.\d+/.test(String(loc).trim());
+          const isGeneric = isCoords || (typeof loc === 'string' && (loc.toLowerCase() === 'opol, misamis oriental' || loc.toLowerCase() === 'opol'));
+          
+          if (isGeneric && (item.latitude || item.longitude || isCoords)) {
+            let lat = item.latitude;
+            let lng = item.longitude;
+            if ((!lat || !lng) && isCoords && typeof loc === 'string') {
+              const parts = loc.split(',');
+              lat = parseFloat(parts[0]);
+              lng = parseFloat(parts[1]);
+            }
+            if (lat && lng && !isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
+              try {
+                const resolved = await resolveAddressFromCoords(lat, lng);
+                if (resolved && resolved.toLowerCase() !== 'opol, misamis oriental') {
+                  loc = resolved;
+                } else if (item.barangay) {
+                  loc = `Brgy. ${item.barangay}, Opol, Misamis Oriental`;
+                }
+              } catch (e) {
+                if (item.barangay) {
+                  loc = `Brgy. ${item.barangay}, Opol, Misamis Oriental`;
+                }
+              }
+            } else if (item.barangay) {
+              loc = `Brgy. ${item.barangay}, Opol, Misamis Oriental`;
+            }
+          }
+          return {
+            ...item,
+            location: loc || (item.barangay ? `Brgy. ${item.barangay}, Opol, Misamis Oriental` : 'Opol, Misamis Oriental'),
+          };
+        })
+      );
       
       if (pageNum === 1) {
-        setHistory(res.data);
+        setHistory(enhancedList);
       } else {
-        setHistory(prev => [...prev, ...res.data]);
+        setHistory(prev => [...prev, ...enhancedList]);
       }
       
       setHasMore(res.next_page_url !== null);
@@ -86,7 +135,7 @@ export default function HistoryScreen() {
   const renderHistoryCard = (item: any) => (
     <View
       key={item.id}
-      className="bg-white rounded-3xl p-5 border border-slate-200/80 mb-3.5"
+      className="bg-white rounded-xl p-5 border border-slate-200 mb-3.5"
       style={{
         shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 4 },
@@ -103,7 +152,7 @@ export default function HistoryScreen() {
         <StatusChip status={item.status} type="dispatch" />
       </View>
       
-      <View className="bg-slate-50 rounded-2xl p-3.5 mb-3.5 border border-slate-100 space-y-2">
+      <View className="bg-slate-50 rounded-lg p-3.5 mb-3.5 border border-slate-100 space-y-2">
         <View className="flex-row items-center">
           <User size={13} color="#208AEF" />
           <Text className="text-slate-700 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
@@ -116,10 +165,10 @@ export default function HistoryScreen() {
             <Text className="font-bold text-slate-900">Reporter:</Text> {item.reporter_name}
           </Text>
         </View>
-        <View className="flex-row items-center">
-          <MapPin size={13} color="#D97706" />
-          <Text className="text-slate-500 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
-            {item.description || item.location}
+        <View className="flex-row items-start">
+          <MapPin size={13} color="#208AEF" className="mt-0.5" />
+          <Text className="text-slate-700 ml-2 text-xs font-medium flex-1 leading-snug" numberOfLines={2}>
+            {item.location || 'Opol, Misamis Oriental'}
           </Text>
         </View>
       </View>
@@ -129,7 +178,7 @@ export default function HistoryScreen() {
           <Calendar size={13} color="#94A3B8" />
           <Text className="text-slate-400 ml-1.5 text-xs font-medium">{item.date}</Text>
         </View>
-        <View className="flex-row items-center bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
+        <View className="flex-row items-center bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
           <Clock size={11} color="#208AEF" />
           <Text className="text-[#208AEF] ml-1.5 text-[11px] font-mono font-bold tracking-wider">{item.time}</Text>
         </View>
@@ -138,91 +187,134 @@ export default function HistoryScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white mb-3">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="w-10 h-10 rounded-xl bg-slate-100 items-center justify-center border border-slate-200/80 active:bg-slate-200"
-          activeOpacity={0.7}
-        >
-          <ArrowLeft size={18} color="#0F172A" />
-        </TouchableOpacity>
-        <View className="items-center">
-          <Text className="text-slate-900 text-base font-bold tracking-tight">Dispatch History</Text>
-          <Text className="text-slate-400 text-xs">Past Missions & Logs</Text>
-        </View>
-        <TouchableOpacity 
-          onPress={() => setIsFilterModalVisible(true)}
-          className={`h-10 w-10 rounded-xl flex items-center justify-center border ${filterDate ? 'bg-[#208AEF] border-[#208AEF]' : 'bg-slate-100 border-slate-200/80'}`}
-        >
-          <Filter size={16} color={filterDate ? '#FFFFFF' : '#64748B'} />
-        </TouchableOpacity>
-      </View>
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="home" />
 
-      <View className="mb-2">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 10 }}>
-          {CATEGORIES.map(cat => (
-            <TouchableOpacity 
-              key={cat.id}
-              onPress={() => setActiveCategory(cat.id)}
-              className={`mr-2 px-4 py-1.5 rounded-full border ${activeCategory === cat.id ? 'bg-[#208AEF] border-[#208AEF] shadow-sm' : 'bg-white border-slate-200'}`}
-            >
-              <Text className={`font-bold text-xs ${activeCategory === cat.id ? 'text-white' : 'text-slate-600'}`}>
-                {cat.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      <ScrollView className="flex-1 px-5 pt-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-        {isLoading ? (
-          <View className="py-16 items-center justify-center">
-            <ActivityIndicator size="large" color="#208AEF" />
-            <Text className="text-slate-400 text-sm mt-3">Loading mission history...</Text>
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Top App Bar */}
+        <View className="flex-row items-center justify-between px-5 py-3 mb-2">
+          <TouchableOpacity
+            onPress={handleBack}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderWidth: 1,
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <ArrowLeft size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View className="items-center">
+            <Text className="text-white text-base font-bold tracking-tight">Dispatch History</Text>
+            <Text className="text-blue-100 text-xs">Past Missions & Logs</Text>
           </View>
-        ) : history.length === 0 ? (
-          <View className="py-12 items-center justify-center bg-white rounded-3xl border border-slate-200 p-8 mt-2">
-            <View className="w-14 h-14 rounded-2xl bg-slate-100 items-center justify-center border border-slate-200 mb-3">
-              <Filter size={24} color="#94A3B8" />
-            </View>
-            <Text className="text-slate-900 font-bold text-base mb-1">No Missions Found</Text>
-            <Text className="text-slate-400 text-xs text-center">No past missions match your current filters.</Text>
-            {(activeCategory !== 'all' || filterDate !== '') && (
-              <TouchableOpacity onPress={() => { setActiveCategory('all'); setFilterDate(''); }} className="mt-4 bg-slate-100 px-5 py-2.5 rounded-xl border border-slate-200">
-                <Text className="text-slate-700 font-bold text-xs">Clear Filters</Text>
-              </TouchableOpacity>
-            )}
+          <TouchableOpacity 
+            onPress={() => setIsFilterModalVisible(true)}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              backgroundColor: filterDate ? '#FFFFFF' : 'rgba(255, 255, 255, 0.2)',
+              borderWidth: 1,
+              borderColor: filterDate ? '#FFFFFF' : 'rgba(255, 255, 255, 0.3)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <Filter size={16} color={filterDate ? '#208AEF' : '#FFFFFF'} />
+          </TouchableOpacity>
+        </View>
+
+        <View className="mb-3">
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 6 }}>
+            {CATEGORIES.map(cat => {
+              const isSelected = activeCategory === cat.id;
+              return (
+                <TouchableOpacity 
+                  key={cat.id}
+                  onPress={() => setActiveCategory(cat.id)}
+                  style={{
+                    marginRight: 8,
+                    paddingHorizontal: 14,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    backgroundColor: isSelected ? '#FFFFFF' : 'rgba(255, 255, 255, 0.2)',
+                    borderColor: isSelected ? '#FFFFFF' : 'rgba(255, 255, 255, 0.3)',
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text className={`font-bold text-xs ${isSelected ? 'text-[#208AEF]' : 'text-white'}`}>
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
+        {isLoading ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 64 }}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
+            <Text style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 14, marginTop: 12, fontWeight: '500' }}>
+              Loading mission history...
+            </Text>
           </View>
         ) : (
-          <>
-            {history.map(renderHistoryCard)}
-            
-            {hasMore && (
-              <TouchableOpacity 
-                onPress={handleLoadMore}
-                disabled={isPaginating}
-                className="bg-white py-3.5 rounded-2xl items-center justify-center mb-8 border border-slate-200 flex-row active:bg-slate-50"
-              >
-                {isPaginating ? (
-                  <ActivityIndicator size="small" color="#208AEF" />
-                ) : (
-                  <Text className="text-slate-700 font-bold text-xs tracking-wider">LOAD MORE MISSIONS</Text>
+          <ScrollView
+            style={{ flex: 1 }}
+            className="px-5 pt-1"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 110 }}
+          >
+            {history.length === 0 ? (
+              <View className="py-12 items-center justify-center bg-white rounded-xl border border-slate-200 p-8 mt-2">
+                <View className="w-14 h-14 rounded-lg bg-slate-100 items-center justify-center border border-slate-200 mb-3">
+                  <Filter size={24} color="#94A3B8" />
+                </View>
+                <Text className="text-slate-900 font-bold text-base mb-1">No Missions Found</Text>
+                <Text className="text-slate-400 text-xs text-center">No past missions match your current filters.</Text>
+                {(activeCategory !== 'all' || filterDate !== '') && (
+                  <TouchableOpacity onPress={() => { setActiveCategory('all'); setFilterDate(''); }} className="mt-4 bg-slate-100 px-5 py-2.5 rounded-lg border border-slate-200">
+                    <Text className="text-slate-700 font-bold text-xs">Clear Filters</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                {history.map(renderHistoryCard)}
+                
+                {hasMore && (
+                  <TouchableOpacity 
+                    onPress={handleLoadMore}
+                    disabled={isPaginating}
+                    className="bg-white py-3.5 rounded-xl items-center justify-center mb-8 border border-slate-200 flex-row active:bg-slate-50"
+                  >
+                    {isPaginating ? (
+                      <ActivityIndicator size="small" color="#208AEF" />
+                    ) : (
+                      <Text className="text-slate-700 font-bold text-xs tracking-wider">LOAD MORE MISSIONS</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </>
             )}
-          </>
+          </ScrollView>
         )}
-      </ScrollView>
 
       {/* Filter Modal */}
       <Modal visible={isFilterModalVisible} transparent animationType="slide">
-        <View className="flex-1 justify-end bg-slate-900/40">
-          <View className="bg-white rounded-t-[32px] p-6 pb-12 shadow-2xl">
+        <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(15, 23, 42, 0.45)' }}>
+          <View className="bg-white rounded-t-2xl p-6 pb-12" style={{ elevation: 20 }}>
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-slate-900 font-bold text-xl tracking-tight">Filter History</Text>
-              <TouchableOpacity onPress={() => setIsFilterModalVisible(false)} className="bg-slate-100 p-2 rounded-full">
+              <TouchableOpacity onPress={() => setIsFilterModalVisible(false)} className="bg-slate-100 p-2 rounded-lg">
                 <X size={18} color="#64748B" />
               </TouchableOpacity>
             </View>
@@ -230,12 +322,12 @@ export default function HistoryScreen() {
             <Text className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-3">Filter by Date</Text>
             <View className="space-y-2.5 mb-6">
               {getRecentDates().map(dateObj => (
-                <TouchableOpacity key={dateObj.value} onPress={() => applyDateFilter(dateObj.value)} className={`p-3.5 rounded-2xl border ${filterDate === dateObj.value ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                <TouchableOpacity key={dateObj.value} onPress={() => applyDateFilter(dateObj.value)} className={`p-3.5 rounded-xl border ${filterDate === dateObj.value ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
                   <Text className={`font-bold text-xs ${filterDate === dateObj.value ? 'text-[#208AEF]' : 'text-slate-700'}`}>{dateObj.label}</Text>
                 </TouchableOpacity>
               ))}
               
-              <TouchableOpacity onPress={() => applyDateFilter('')} className={`p-3.5 rounded-2xl border ${filterDate === '' ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
+              <TouchableOpacity onPress={() => applyDateFilter('')} className={`p-3.5 rounded-xl border ${filterDate === '' ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
                 <Text className={`font-bold text-xs ${filterDate === '' ? 'text-[#208AEF]' : 'text-slate-700'}`}>Any Date</Text>
               </TouchableOpacity>
             </View>
@@ -243,13 +335,14 @@ export default function HistoryScreen() {
             <TouchableOpacity 
               onPress={() => setIsFilterModalVisible(false)}
               style={{ backgroundColor: '#208AEF' }}
-              className="py-3.5 rounded-2xl items-center active:opacity-90"
+              className="py-3.5 rounded-xl items-center active:opacity-90"
             >
               <Text className="text-white font-bold text-sm tracking-wider">APPLY FILTERS</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal> 
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }

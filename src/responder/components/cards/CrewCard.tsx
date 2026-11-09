@@ -15,7 +15,7 @@ export function CrewCard({
   if (!crew || crew.length === 0) {
     return (
       <View
-        className="bg-white rounded-3xl p-6 border border-slate-200/70 mb-8"
+        className="bg-white rounded-xl p-5 border border-slate-200/70 mb-8 shadow-sm"
         style={{
           shadowColor: '#0F172A',
           shadowOffset: { width: 0, height: 4 },
@@ -25,7 +25,7 @@ export function CrewCard({
         }}
       >
         <View className="flex-row items-center mb-3">
-          <View className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
+          <View className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
             <Users2 size={16} color="#64748B" />
           </View>
           <Text className="text-slate-800 font-bold text-base tracking-tight">Active Crew</Text>
@@ -37,7 +37,7 @@ export function CrewCard({
 
   return (
     <View
-      className="bg-white rounded-3xl p-6 border border-slate-200/70 mb-8"
+      className="bg-white rounded-xl p-5 border border-slate-200/70 mb-8 shadow-sm"
       style={{
         shadowColor: '#0F172A',
         shadowOffset: { width: 0, height: 4 },
@@ -49,13 +49,13 @@ export function CrewCard({
       {/* Header */}
       <View className="flex-row justify-between items-center mb-4 pb-3 border-b border-slate-100">
         <View className="flex-row items-center">
-          <View className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
+          <View className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200/60 items-center justify-center mr-2.5">
             <Users2 size={16} color="#475569" />
           </View>
           <Text className="text-slate-900 font-bold text-base tracking-tight">Team Roster</Text>
         </View>
         {teamName && (
-          <View className="bg-slate-50 border border-slate-200/70 px-2.5 py-1 rounded-full">
+          <View className="bg-slate-50 border border-slate-200/70 px-2.5 py-1 rounded-md">
             <Text className="text-slate-600 font-bold text-[10px] uppercase tracking-widest">
               TEAM {teamName}
             </Text>

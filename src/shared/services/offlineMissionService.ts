@@ -47,18 +47,31 @@ export interface CachedMission {
 }
 
 class OfflineMissionService {
+  private cachedMissionMemory: CachedMission | null | undefined = undefined;
+
   /**
    * Save active dispatch from server to local persistent storage
    */
   public async saveActiveMission(dispatch: any): Promise<void> {
     if (!dispatch || !dispatch.id) return;
     try {
+      // If already cached and unchanged, skip redundant write & log
+      if (
+        this.cachedMissionMemory &&
+        String(this.cachedMissionMemory.id) === String(dispatch.id) &&
+        this.cachedMissionMemory.dispatch_status === dispatch.dispatch_status &&
+        JSON.stringify(this.cachedMissionMemory.incident) === JSON.stringify(dispatch.incident)
+      ) {
+        return;
+      }
+
       const missionToCache: CachedMission = {
         ...dispatch,
         _is_offline_cached: true,
         _cached_at: new Date().toISOString(),
       };
       await AsyncStorage.setItem(CACHED_MISSION_KEY, JSON.stringify(missionToCache));
+      this.cachedMissionMemory = missionToCache;
       console.log(`[OfflineMissionService] Cached active mission #${dispatch.id} to storage`);
     } catch (e) {
       console.error('[OfflineMissionService] Error caching active mission:', e);
@@ -69,10 +82,17 @@ class OfflineMissionService {
    * Get currently cached active mission
    */
   public async getActiveMission(): Promise<CachedMission | null> {
+    if (this.cachedMissionMemory !== undefined) {
+      return this.cachedMissionMemory;
+    }
     try {
       const raw = await AsyncStorage.getItem(CACHED_MISSION_KEY);
-      if (!raw) return null;
+      if (!raw) {
+        this.cachedMissionMemory = null;
+        return null;
+      }
       const parsed: CachedMission = JSON.parse(raw);
+      this.cachedMissionMemory = parsed;
       return parsed;
     } catch (e) {
       console.error('[OfflineMissionService] Error reading cached mission:', e);
@@ -85,8 +105,18 @@ class OfflineMissionService {
    */
   public async clearActiveMission(): Promise<void> {
     try {
-      await AsyncStorage.removeItem(CACHED_MISSION_KEY);
-      console.log('[OfflineMissionService] Cleared cached active mission');
+      if (this.cachedMissionMemory === null) {
+        return; // Already cleared, prevent redundant disk writes and log spam
+      }
+
+      const raw = await AsyncStorage.getItem(CACHED_MISSION_KEY);
+      if (raw !== null) {
+        await AsyncStorage.removeItem(CACHED_MISSION_KEY);
+        this.cachedMissionMemory = null;
+        console.log('[OfflineMissionService] Cleared cached active mission');
+      } else {
+        this.cachedMissionMemory = null;
+      }
     } catch (e) {
       console.error('[OfflineMissionService] Error clearing cached mission:', e);
     }
@@ -123,6 +153,7 @@ class OfflineMissionService {
     }
 
     await AsyncStorage.setItem(CACHED_MISSION_KEY, JSON.stringify(updated));
+    this.cachedMissionMemory = updated;
 
     // Queue operation for server synchronization
     await offlineSyncService.enqueue({
@@ -171,12 +202,8 @@ class OfflineMissionService {
       updated._offline_arrived_at = nowIso;
     }
 
-    if (status === 'completed' || status === 'cancelled') {
-      // Retain offline copy marked as completed until synced
-      await AsyncStorage.setItem(CACHED_MISSION_KEY, JSON.stringify(updated));
-    } else {
-      await AsyncStorage.setItem(CACHED_MISSION_KEY, JSON.stringify(updated));
-    }
+    await AsyncStorage.setItem(CACHED_MISSION_KEY, JSON.stringify(updated));
+    this.cachedMissionMemory = updated;
 
     // Queue operation for server synchronization
     await offlineSyncService.enqueue({

@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { AuthProvider, useAuth, useNetworkStatus } from '@/shared/hooks';
+import { AuthProvider, useAuth } from '@/shared/hooks';
 import { Loading } from '@/shared/components';
-import { OfflineBanner } from '@/shared/components/common/OfflineBanner';
+import ConnectionBanner from '@/shared/components/ConnectionBanner';
 import { View } from 'react-native';
 import '../../global.css';
 
@@ -12,7 +12,6 @@ import Toast from 'react-native-toast-message';
 
 function RootLayoutNav() {
   const { user, role, isLoading, isAuthenticated } = useAuth();
-  const { isOffline } = useNetworkStatus();
   const segments = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
@@ -42,13 +41,14 @@ function RootLayoutNav() {
   }, [isAuthenticated, isLoading, role, segments, user]);
 
   if (isLoading || !rootNavigationState?.key) {
-    return <Loading fullScreen message="Restoring Session..." />;
+    return <Loading fullScreen message="Starting OPOL RESQ..." />;
   }
 
   return (
     <MissionAlarmProvider>
       <ResidentAlertProvider>
-        {isOffline && <OfflineBanner />}
+        {/* Real-time Connection & Sync Banner */}
+        <ConnectionBanner />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />

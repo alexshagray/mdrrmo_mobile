@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TextInputProps, TouchableOpacity, StyleProp, ViewStyle } from 'react-native';
-import { Eye, EyeOff } from 'lucide-react-native';
+import { Eye, EyeOff, AlertCircle } from 'lucide-react-native';
 
 export interface InputProps extends TextInputProps {
   label?: string;
@@ -56,9 +56,9 @@ export function Input({
       )}
       
       <View 
-        className={`flex-row items-center bg-white rounded-2xl px-4 py-3.5 border ${
-          error ? 'border-[#EF4444] bg-red-50/20' :
-          isFocused ? 'border-[#208AEF] bg-blue-50/20' : 'border-slate-200/90'
+        className={`flex-row items-center bg-white rounded-2xl px-4 py-3.5 ${
+          error ? 'border-2 border-red-500 bg-red-50/30' :
+          isFocused ? 'border-2 border-[#208AEF] bg-blue-50/20' : 'border border-slate-200/90'
         }`}
       >
         {renderIcon()}
@@ -88,7 +88,10 @@ export function Input({
       </View>
 
       {error && (
-        <Text className="text-red-500 text-xs mt-1 ml-1">{error}</Text>
+        <View className="flex-row items-center mt-1.5 ml-1">
+          <AlertCircle size={13} color="#EF4444" style={{ marginRight: 4 }} />
+          <Text className="text-red-600 font-semibold text-xs flex-1">{error}</Text>
+        </View>
       )}
     </View>
   );

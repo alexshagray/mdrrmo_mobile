@@ -210,7 +210,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         setMissionRefreshTrigger(prev => prev + 1);
       } else if (data?.type === 'verified_incident_available') {
         handleVerifiedIncidentNotification(data);
-        router.push('/(responder)');
+        router.navigate('/(responder)');
       }
     });
 
@@ -407,8 +407,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   // We removed the pause logic here so responders don't miss missions while outside the app.
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'background' || nextAppState === 'inactive') {
-        // Deliberately doing nothing to allow the alarm to keep playing in the background
+      if ((nextAppState === 'background' || nextAppState === 'inactive') && (sound || incomingMission)) {
+        // Alarm sound or alert modal is currently active
         console.log('App in background - Mission alarm is still active!');
       }
     };
@@ -419,7 +419,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
   const handleOpenMission = () => {
     clearMission();
-    router.push('/(responder)/dispatch');
+    router.navigate('/(responder)/dispatch');
   };
 
   const dispatchInfo = incomingMission?.dispatch;

@@ -19,7 +19,8 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import MapboxGL from '@rnmapbox/maps';
-import { MapView, Avatar, LocationPermissionModal } from '@/shared/components';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MapView, Avatar, LocationPermissionModal, BrandBackground, Header } from '@/shared/components';
 import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
 import {
   Clock,
@@ -40,8 +41,11 @@ import {
   Ambulance,
   Radio,
   Check,
+  Settings,
 } from 'lucide-react-native';
-import { getMyReports, callResponderApi } from '@/shared/api/incidents';
+import { getMyReports, callResponderApi, cancelEmergencyReport } from '@/shared/api/incidents';
+import { resolveAddressFromCoords } from '@/shared/utils/location';
+import { locationService } from '@/shared/services/locationService';
 import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
 import { useRealtime, useAuth } from '@/shared/hooks';
 
@@ -103,68 +107,137 @@ const decodePolyline = (str: string, precision: number = 5) => {
   return coordinates;
 };
 
-// ─── All Clear Screen ─────────────────────────────────────────────────────────
-const AllClearState = () => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
+// ─── All Clear Screen (Material-Inspired Reassuring Empty State) ──────────────
+const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
+  const router = useRouter();
+  const rippleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 2500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
+        Animated.timing(rippleAnim, {
           toValue: 1,
-          duration: 2500,
+          duration: 3200,
           useNativeDriver: true,
         }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -10,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(floatAnim, {
+        Animated.timing(rippleAnim, {
           toValue: 0,
-          duration: 3000,
+          duration: 3200,
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, [pulseAnim, floatAnim]);
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [rippleAnim]);
+
+  const outerScale = rippleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.15],
+  });
+
+  const outerOpacity = rippleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.30, 0.16],
+  });
+
+  const middleScale = rippleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+
+  const middleOpacity = rippleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.60, 0.42],
+  });
 
   return (
-    <View className="flex-1 bg-slate-50 justify-center items-center px-8">
-      <Animated.View className="w-40 h-40 justify-center items-center mb-6">
-        <Animated.View
-          className="absolute inset-0 bg-blue-50/70 rounded-full"
-          style={{ transform: [{ scale: pulseAnim }] }}
+    <View style={styles.allClearRoot}>
+      {/* ── 1. BLUE GRADIENT HEADER (UPPER ~55-58% OF SCREEN) ── */}
+      <View style={styles.gradientHeaderContainer}>
+        <LinearGradient
+          colors={['#1E88E5', '#1976D2']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
         />
-        <Animated.View
-          className="absolute inset-4 bg-blue-100/60 rounded-full"
-          style={{ transform: [{ scale: pulseAnim }] }}
-        />
-        <Animated.View
-          className="w-20 h-20 bg-white rounded-full justify-center items-center shadow-lg shadow-blue-200/50 border border-slate-100"
-          style={{ transform: [{ translateY: floatAnim }] }}
-        >
-          <ShieldCheck size={38} color="#208AEF" strokeWidth={2.25} />
-        </Animated.View>
-      </Animated.View>
 
-      <Text className="text-2xl font-black text-slate-800 text-center tracking-tight mb-2">
-        You're All Clear
-      </Text>
-      <Text className="text-slate-500 text-center text-[15px] leading-relaxed max-w-[280px]">
-        There are no active emergency reports in your area.
-      </Text>
+        {/* Three Subtle Decorative Circles behind content */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {/* Circle 1: Translucent circle in upper-left corner */}
+          <View style={styles.decorativeCircleTopLeft} />
+          {/* Circle 2: Larger darker blue circle on the right */}
+          <View style={styles.decorativeCircleRight} />
+          {/* Circle 3: Translucent blue circle near lower-left corner */}
+          <View style={styles.decorativeCircleBottomLeft} />
+        </View>
+
+        {/* Top App Bar & Settings Button */}
+        <SafeAreaView edges={['top']} style={styles.topSafeArea}>
+          <View style={styles.topBarRow}>
+            <View style={styles.topBrandInfo}>
+              <Text style={styles.topBrandTitle}>OPOL RESQ</Text>
+              <Text style={styles.topBrandSubtitle}>CITIZEN DISPATCH</Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => router.push('/(resident)/account-security')}
+              activeOpacity={0.7}
+              style={styles.headerSettingsBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Account Settings & Security"
+            >
+              <Settings size={20} color="#FFFFFF" strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+
+        {/* ── 2. CENTERED HERO ICON (THREE CONCENTRIC RINGS) ── */}
+        <View style={styles.heroCenterWrapper}>
+          <View style={styles.heroContainer}>
+            {/* Outer Ring: White ~30% opacity */}
+            <Animated.View
+              style={[
+                styles.heroOuterRing,
+                {
+                  transform: [{ scale: outerScale }],
+                  opacity: outerOpacity,
+                },
+              ]}
+            />
+
+            {/* Middle Ring: White ~60% opacity */}
+            <Animated.View
+              style={[
+                styles.heroMiddleRing,
+                {
+                  transform: [{ scale: middleScale }],
+                  opacity: middleOpacity,
+                },
+              ]}
+            />
+
+            {/* Inner Circle: Solid White with blue shield-check */}
+            <View style={styles.heroInnerCircle}>
+              <ShieldCheck size={42} color="#1E88E5" strokeWidth={2.4} />
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* ── 3. STATUS TITLE AND DESCRIPTION (ON #F5F9FC LIGHT BACKGROUND) ── */}
+      <View style={styles.statusSectionWrapper}>
+        <Text style={styles.emptyStatusTitle}>You're All Clear</Text>
+        <Text style={styles.emptyStatusDescription}>
+          There are no active emergency reports in your area.
+        </Text>
+
+        {/* Subtle Reassurance Badge */}
+        <View style={styles.emptyReadinessBadge}>
+          <View style={styles.emptyReadinessDot} />
+          <Text style={styles.emptyReadinessText}>MDRRMO 24/7 COMMAND STANDBY</Text>
+        </View>
+      </View>
     </View>
   );
 };
@@ -179,6 +252,7 @@ const TrackingLockedState = ({
   onNavigateToReport: () => void;
   onRefresh: () => void;
 }) => {
+  const router = useRouter();
   const status = incident.incident_status;
   const dispatchStatus = incident.active_dispatch?.dispatch_status;
   const isRejected = status === 'rejected';
@@ -190,128 +264,194 @@ const TrackingLockedState = ({
     : 'Response Unit';
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50 px-6 justify-center" edges={['top', 'bottom']}>
-      <View className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl shadow-slate-200/60 items-center">
-        <View
-          className={`w-20 h-20 rounded-3xl items-center justify-center mb-5 ${
-            isRejected
-              ? 'bg-red-50 border-2 border-red-200'
-              : isArrived
-              ? 'bg-emerald-50 border-2 border-emerald-200'
-              : isPending
-              ? 'bg-amber-50 border-2 border-amber-200'
-              : isVerified
-              ? 'bg-blue-50 border-2 border-blue-200'
-              : 'bg-indigo-50 border-2 border-indigo-200'
-          }`}
-        >
-          {isRejected ? (
-            <XCircle size={36} color="#FF3B30" strokeWidth={2.2} />
-          ) : isArrived ? (
-            <CheckCircle2 size={36} color="#059669" strokeWidth={2.2} />
-          ) : isPending ? (
-            <Clock size={36} color="#D97706" strokeWidth={2.2} />
-          ) : isVerified ? (
-            <ShieldCheck size={36} color="#208AEF" strokeWidth={2.2} />
-          ) : (
-            <Navigation size={36} color="#208AEF" strokeWidth={2.2} />
-          )}
-        </View>
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="subpage" />
+      <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
+        {/* Header with App Branding and Settings */}
+        <Header
+          title="Live Tracking"
+          subtitle="OPOL RESQ • MISSION STATUS"
+          className="bg-transparent"
+          titleClassName="text-white font-black"
+          subtitleClassName="text-blue-100 font-bold"
+          rightElement={
+            <TouchableOpacity
+              onPress={() => router.push('/(resident)/account-security')}
+              activeOpacity={0.7}
+              className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 items-center justify-center active:bg-white/30 shadow-sm"
+              accessibilityRole="button"
+              accessibilityLabel="Account Settings & Security"
+            >
+              <Settings size={18} color="#FFFFFF" strokeWidth={2.2} />
+            </TouchableOpacity>
+          }
+        />
 
-        <View
-          className={`px-3.5 py-1.5 rounded-xl mb-3 ${
-            isRejected
-              ? 'bg-red-100'
-              : isArrived
-              ? 'bg-emerald-100'
-              : isPending
-              ? 'bg-amber-100'
-              : isVerified
-              ? 'bg-blue-100'
-              : 'bg-indigo-100'
-          }`}
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 120 }}
         >
-          <Text
-            className={`text-xs font-extrabold uppercase tracking-wider ${
-              isRejected
-                ? 'text-red-700'
+          <View style={styles.lockedHeroCard}>
+            <View
+              style={[
+                styles.lockedIconWrapper,
+                isRejected
+                  ? styles.lockedIconBgRejected
+                  : isArrived
+                  ? styles.lockedIconBgArrived
+                  : isPending
+                  ? styles.lockedIconBgPending
+                  : isVerified
+                  ? styles.lockedIconBgVerified
+                  : styles.lockedIconBgAssigned,
+              ]}
+            >
+              {isRejected ? (
+                <XCircle size={32} color="#DC2626" strokeWidth={2.2} />
+              ) : isArrived ? (
+                <CheckCircle2 size={32} color="#059669" strokeWidth={2.2} />
+              ) : isPending ? (
+                <Clock size={32} color="#D97706" strokeWidth={2.2} />
+              ) : isVerified ? (
+                <ShieldCheck size={32} color="#208AEF" strokeWidth={2.2} />
+              ) : (
+                <Navigation size={32} color="#208AEF" strokeWidth={2.2} />
+              )}
+            </View>
+
+            <View
+              style={[
+                styles.lockedBadgePill,
+                isRejected
+                  ? styles.lockedBadgePillRejected
+                  : isArrived
+                  ? styles.lockedBadgePillArrived
+                  : isPending
+                  ? styles.lockedBadgePillPending
+                  : isVerified
+                  ? styles.lockedBadgePillVerified
+                  : styles.lockedBadgePillAssigned,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.lockedBadgeText,
+                  isRejected
+                    ? styles.lockedBadgeTextRejected
+                    : isArrived
+                    ? styles.lockedBadgeTextArrived
+                    : isPending
+                    ? styles.lockedBadgeTextPending
+                    : isVerified
+                    ? styles.lockedBadgeTextVerified
+                    : styles.lockedBadgeTextAssigned,
+                ]}
+              >
+                {isRejected
+                  ? 'REPORT NOT APPROVED'
+                  : isArrived
+                  ? 'RESPONDERS ON SCENE'
+                  : isPending
+                  ? 'VERIFICATION IN PROGRESS'
+                  : isVerified
+                  ? 'INCIDENT APPROVED'
+                  : 'RESPONDER ASSIGNED'}
+              </Text>
+            </View>
+
+            <Text style={styles.lockedTitle}>
+              {isRejected
+                ? 'Tracking Unavailable'
                 : isArrived
-                ? 'text-emerald-700'
+                ? 'Responders Have Arrived'
                 : isPending
-                ? 'text-amber-700'
+                ? 'Waiting for Dispatcher'
                 : isVerified
-                ? 'text-blue-700'
-                : 'text-indigo-700'
-            }`}
-          >
-            {isRejected
-              ? 'Report Not Approved'
-              : isArrived
-              ? 'Responders on Scene'
-              : isPending
-              ? 'Verification in Progress'
-              : isVerified
-              ? 'Incident Approved'
-              : 'Responder Assigned'}
-          </Text>
-        </View>
+                ? 'Assigning Emergency Unit'
+                : 'Preparing for Departure'}
+            </Text>
 
-        <Text className="text-xl font-black text-slate-900 text-center mb-2">
-          {isRejected
-            ? 'Tracking Unavailable'
-            : isArrived
-            ? 'Responders Have Arrived'
-            : isPending
-            ? 'Waiting for Dispatcher'
-            : isVerified
-            ? 'Assigning Emergency Unit'
-            : 'Preparing for Departure'}
-        </Text>
+            <Text style={styles.lockedSubtitle}>
+              {isRejected
+                ? incident.rejection_reason
+                  ? `The dispatcher did not approve this report: "${incident.rejection_reason}".`
+                  : 'Your report was reviewed by the Dispatcher and not approved for dispatch.'
+                : isArrived
+                ? `${unitName} has arrived at your reported emergency location. Medical emergency personnel are on site providing assistance.`
+                : isPending
+                ? 'Your emergency report is currently being reviewed by the Dispatcher. Live GPS tracking unlocks once a team is assigned and en route.'
+                : isVerified
+                ? 'Your report has been verified and approved by the Dispatcher! Live tracking will unlock the moment the assigned responder departs.'
+                : `${unitName} has been assigned and is preparing vehicles and gear. Live tracking activates once they depart.`}
+            </Text>
 
-        <Text className="text-sm text-slate-500 text-center leading-relaxed mb-6 px-2">
-          {isRejected
-            ? incident.rejection_reason
-              ? `The dispatcher did not approve this report: "${incident.rejection_reason}".`
-              : 'Your report was reviewed by the Dispatcher and not approved for dispatch.'
-            : isArrived
-            ? `${unitName} has arrived at your reported emergency location. Medical emergency personnel are on site providing assistance.`
-            : isPending
-            ? 'Your emergency report is currently being reviewed by the Dispatcher. Live GPS tracking unlocks once a team is assigned and en route.'
-            : isVerified
-            ? 'Your report has been verified and approved by the Dispatcher! Live tracking will unlock the moment the assigned responder departs.'
-            : `${unitName} has been assigned and is preparing vehicles and gear. Live tracking activates once they depart.`}
-        </Text>
+            <View style={styles.lockedNoticeBox}>
+              <View style={styles.lockedNoticeIconBox}>
+                {isArrived ? (
+                  <CheckCircle2 size={16} color="#059669" />
+                ) : (
+                  <Lock size={16} color="#64748B" />
+                )}
+              </View>
+              <Text style={styles.lockedNoticeText}>
+                {isArrived ? (
+                  <Text>Responders are at your location. Live GPS route tracking has completed.</Text>
+                ) : (
+                  <Text>
+                    Live GPS route tracking unlocks automatically when the responder is marked{' '}
+                    <Text style={{ fontWeight: '700', color: '#0F172A' }}>En Route</Text>.
+                  </Text>
+                )}
+              </Text>
+            </View>
 
-        <View className="w-full bg-slate-50 rounded-2xl p-3.5 flex-row items-center mb-6 border border-slate-100">
-          <View className="w-8 h-8 rounded-xl bg-slate-200/70 items-center justify-center mr-3">
-            {isArrived ? (
-              <CheckCircle2 size={16} color="#059669" />
-            ) : (
-              <Lock size={16} color="#64748B" />
-            )}
+            <View style={{ width: '100%', gap: 10 }}>
+              <TouchableOpacity
+                style={styles.viewProgressBtn}
+                onPress={onNavigateToReport}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.viewProgressBtnText}>View Incident Progress</Text>
+                <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.4} />
+              </TouchableOpacity>
+
+              {isPending && (
+                <TouchableOpacity
+                  style={styles.cancelReportBtn}
+                  onPress={() => {
+                    Alert.alert(
+                      'Cancel Emergency Request?',
+                      'Are you sure you want to cancel this pending emergency request?',
+                      [
+                        { text: 'Keep Report', style: 'cancel' },
+                        {
+                          text: 'Yes, Cancel Report',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              await cancelEmergencyReport(incident.id);
+                              Alert.alert('Report Cancelled', 'Your emergency report was cancelled.');
+                              onRefresh();
+                            } catch (err: any) {
+                              Alert.alert('Error', err.response?.data?.message || 'Failed to cancel report.');
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <XCircle size={16} color="#DC2626" />
+                  <Text style={styles.cancelReportBtnText}>Cancel Emergency Report</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-          <Text className="text-xs text-slate-600 font-medium flex-1 leading-4">
-            {isArrived ? (
-              <Text>Responders are at your location. Live GPS route tracking has completed.</Text>
-            ) : (
-              <Text>Live GPS route tracking unlocks automatically when the responder is marked <Text className="font-bold text-slate-800">En Route</Text>.</Text>
-            )}
-          </Text>
-        </View>
-
-        <View className="w-full">
-          <TouchableOpacity
-            style={{ backgroundColor: '#208AEF' }}
-            className="w-full py-4 rounded-2xl flex-row items-center justify-center shadow-md shadow-blue-500/20"
-            onPress={onNavigateToReport}
-            activeOpacity={0.85}
-          >
-            <Text className="text-white font-bold text-sm mr-2">View Incident Progress</Text>
-            <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 };
 
@@ -322,6 +462,7 @@ export default function TrackScreen() {
   const { user } = useAuth();
   const [activeIncident, setActiveIncident] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
   const { residentRefreshTrigger } = useResidentAlert();
   const { echo } = useRealtime() as { echo: any };
@@ -461,6 +602,7 @@ export default function TrackScreen() {
   const fetchIncidents = useCallback(async () => {
     if (!user || user.role !== 'resident') return;
     try {
+      setFetchError(null);
       const res = await getMyReports();
       const incidents = Array.isArray(res.data) ? res.data : Array.isArray(res) ? res : [];
       const active = incidents.find((inc: any) =>
@@ -478,12 +620,13 @@ export default function TrackScreen() {
           setAmbulanceCoords({ latitude: lat, longitude: lng, heading });
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch reports', e);
+      setFetchError(e?.message || 'Failed to connect to MDRRMO command center');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -674,16 +817,42 @@ export default function TrackScreen() {
   // Loading State
   if (isLoading) {
     return (
-      <View className="flex-1 bg-slate-50 justify-center items-center">
-        <ActivityIndicator size="large" color="#2563EB" />
-        <Text className="mt-4 text-slate-500 font-medium">Loading status...</Text>
+      <View style={styles.loadingStateContainer}>
+        <ActivityIndicator size="large" color="#1E88E5" />
+        <Text style={styles.loadingStateText}>Checking active dispatch status...</Text>
+      </View>
+    );
+  }
+
+  // Error State with Retry Action (Requirement 6.D)
+  if (fetchError && !activeIncident) {
+    return (
+      <View style={styles.errorStateContainer}>
+        <View style={styles.errorIconBox}>
+          <AlertTriangle size={32} color="#DC2626" />
+        </View>
+        <Text style={styles.errorStateTitle}>Unable to Connect</Text>
+        <Text style={styles.errorStateSubtitle}>
+          We could not load your active incident status. Please check your network connection.
+        </Text>
+        <TouchableOpacity
+          style={styles.errorRetryBtn}
+          onPress={() => {
+            setIsLoading(true);
+            setFetchError(null);
+            fetchIncidents();
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.errorRetryBtnText}>Retry Connection</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   // All Clear State
   if (!activeIncident) {
-    return <AllClearState />;
+    return <AllClearState onRefresh={fetchIncidents} />;
   }
 
   if (!isLiveTracking) {
@@ -1244,6 +1413,413 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F172A',
+  },
+
+  // ─── All Clear Empty State Styles ───
+  allClearRoot: {
+    flex: 1,
+    backgroundColor: '#F5F9FC',
+  },
+  gradientHeaderContainer: {
+    height: Math.min(SCREEN_HEIGHT * 0.58, 460),
+    minHeight: 390,
+    borderBottomLeftRadius: 60,
+    borderBottomRightRadius: 60,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#1976D2',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  decorativeCircleTopLeft: {
+    position: 'absolute',
+    top: -50,
+    left: -50,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  decorativeCircleRight: {
+    position: 'absolute',
+    top: '16%',
+    right: -80,
+    width: 270,
+    height: 270,
+    borderRadius: 135,
+    backgroundColor: '#0D47A1',
+    opacity: 0.28,
+  },
+  decorativeCircleBottomLeft: {
+    position: 'absolute',
+    bottom: -35,
+    left: '6%',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  topSafeArea: {
+    zIndex: 10,
+  },
+  topBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  topBrandInfo: {
+    justifyContent: 'center',
+  },
+  topBrandTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  topBrandSubtitle: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginTop: 1,
+  },
+  headerSettingsBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  heroCenterWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 16,
+  },
+  heroContainer: {
+    width: 170,
+    height: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  heroOuterRing: {
+    position: 'absolute',
+    width: 144,
+    height: 144,
+    borderRadius: 72,
+    backgroundColor: 'rgba(255, 255, 255, 0.30)',
+  },
+  heroMiddleRing: {
+    position: 'absolute',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255, 255, 255, 0.60)',
+  },
+  heroInnerCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  statusSectionWrapper: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingTop: 36,
+    alignItems: 'center',
+  },
+  emptyStatusTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1A2233',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: -0.3,
+  },
+  emptyStatusDescription: {
+    fontSize: 17.5,
+    fontWeight: '400',
+    color: '#6B7A90',
+    textAlign: 'center',
+    lineHeight: 26,
+    maxWidth: 320,
+  },
+  emptyReadinessBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EDF5FC',
+    paddingHorizontal: 13,
+    paddingVertical: 6.5,
+    borderRadius: 16,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: '#D7E7F6',
+  },
+  emptyReadinessDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#1E88E5',
+    marginRight: 8,
+  },
+  emptyReadinessText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1976D2',
+    letterSpacing: 0.6,
+  },
+
+  // ─── Loading & Error State Styles ───
+  loadingStateContainer: {
+    flex: 1,
+    backgroundColor: '#F5F9FC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingStateText: {
+    color: '#6B7A90',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  errorStateContainer: {
+    flex: 1,
+    backgroundColor: '#F5F9FC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  errorStateTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorStateSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  errorRetryBtn: {
+    backgroundColor: '#1E88E5',
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    shadowColor: '#1E88E5',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  errorRetryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // ─── Tracking Locked / Standby Card Styles ───
+  lockedHeroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+    alignItems: 'center',
+  },
+  lockedIconWrapper: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+  },
+  lockedIconBgRejected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  lockedIconBgArrived: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  lockedIconBgPending: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  lockedIconBgVerified: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  lockedIconBgAssigned: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+  },
+  lockedBadgePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  lockedBadgePillRejected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  lockedBadgePillArrived: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
+  lockedBadgePillPending: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  lockedBadgePillVerified: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  lockedBadgePillAssigned: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+  },
+  lockedBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  lockedBadgeTextRejected: {
+    color: '#B91C1C',
+  },
+  lockedBadgeTextArrived: {
+    color: '#047857',
+  },
+  lockedBadgeTextPending: {
+    color: '#B45309',
+  },
+  lockedBadgeTextVerified: {
+    color: '#1D4ED8',
+  },
+  lockedBadgeTextAssigned: {
+    color: '#4338CA',
+  },
+  lockedTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  lockedSubtitle: {
+    fontSize: 13.5,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 18,
+    paddingHorizontal: 8,
+  },
+  lockedNoticeBox: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 18,
+    gap: 10,
+  },
+  lockedNoticeIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockedNoticeText: {
+    fontSize: 12,
+    color: '#475569',
+    flex: 1,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  viewProgressBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#208AEF',
+    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 18,
+    gap: 8,
+    shadowColor: '#208AEF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  viewProgressBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  cancelReportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 8,
+  },
+  cancelReportBtnText: {
+    color: '#DC2626',
+    fontSize: 13.5,
+    fontWeight: '700',
   },
 
   // Incident Marker Styles

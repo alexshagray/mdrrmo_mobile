@@ -6,7 +6,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
-  Dimensions,
+  Alert,
+  StyleSheet,
+  Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -19,16 +22,13 @@ import {
   Ambulance,
   MapPin,
   AlertTriangle,
-  FileText,
   Navigation,
-  ShieldAlert,
-  User,
-  Phone,
   Info,
+  Maximize2,
+  X,
 } from 'lucide-react-native';
-import { getMyReports } from '@/shared/api/incidents';
-
-const { width } = Dimensions.get('window');
+import { getMyReports, cancelEmergencyReport } from '@/shared/api/incidents';
+import { BrandBackground } from '@/shared/components';
 
 export default function ReportDetailsScreen() {
   const router = useRouter();
@@ -37,6 +37,45 @@ export default function ReportDetailsScreen() {
 
   const [report, setReport] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [isPhotoModalVisible, setIsPhotoModalVisible] = useState(false);
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(resident)/my-reports');
+    }
+  };
+
+  const handleCancelReport = () => {
+    if (!report?.id) return;
+    Alert.alert(
+      'Cancel Emergency Request?',
+      'Are you sure you want to cancel this emergency report? This will cancel the triage process.',
+      [
+        { text: 'Keep Report', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Report',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsCancelling(true);
+              await cancelEmergencyReport(report.id);
+              Alert.alert('Report Cancelled', 'Your emergency report has been cancelled successfully.', [
+                { text: 'OK', onPress: handleBack },
+              ]);
+            } catch (err: any) {
+              const msg = err.response?.data?.message || 'Could not cancel the report. Please try again or call the hotline.';
+              Alert.alert('Error', msg);
+            } finally {
+              setIsCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const fetchReport = useCallback(async () => {
     if (!reportId) return;
@@ -59,30 +98,39 @@ export default function ReportDetailsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-[#0B1120] items-center justify-center">
-        <ActivityIndicator size="large" color="#208AEF" />
-        <Text className="text-slate-400 text-sm mt-3">Loading emergency report...</Text>
-      </SafeAreaView>
+      <View style={styles.centerScreen}>
+        <BrandBackground variant="subpage" />
+        <SafeAreaView style={styles.centerContent} edges={['top']}>
+          <ActivityIndicator size="large" color="#208AEF" />
+          <Text style={styles.centerLoadingText}>Loading emergency report...</Text>
+        </SafeAreaView>
+      </View>
     );
   }
 
   if (!report) {
     return (
-      <SafeAreaView className="flex-1 bg-[#0B1120] px-5 items-center justify-center">
-        <View className="w-16 h-16 rounded-3xl bg-slate-800 items-center justify-center mb-4">
-          <AlertTriangle size={28} color="#EF4444" />
-        </View>
-        <Text className="text-white font-bold text-lg text-center">Report Not Found</Text>
-        <Text className="text-slate-400 text-xs text-center mt-1 mb-6">
-          The requested emergency report could not be retrieved.
-        </Text>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="bg-slate-800 px-6 py-3 rounded-2xl border border-slate-700"
-        >
-          <Text className="text-white font-bold text-sm">Return to Reports</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
+      <View style={styles.centerScreen}>
+        <BrandBackground variant="subpage" />
+        <SafeAreaView style={styles.centerContent} edges={['top']}>
+          <View style={styles.notFoundCard}>
+            <View style={styles.notFoundIconBox}>
+              <AlertTriangle size={32} color="#DC2626" strokeWidth={2.2} />
+            </View>
+            <Text style={styles.notFoundTitle}>Report Not Found</Text>
+            <Text style={styles.notFoundSubtitle}>
+              The requested emergency report could not be retrieved or may have been archived.
+            </Text>
+            <TouchableOpacity
+              onPress={handleBack}
+              style={styles.returnButton}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.returnButtonText}>Return to Reports</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -109,7 +157,11 @@ export default function ReportDetailsScreen() {
     report.rejection_reason ||
     'Incident does not meet emergency dispatch criteria or is duplicate.';
 
-  const typeName = report.incident_type?.name || report.incident_type || 'Emergency Incident';
+  const typeName =
+    report.incident_type?.incident_type_name ||
+    report.incident_type?.name ||
+    report.incident_type ||
+    'Emergency Incident';
   const submittedPhoto =
     report.images?.[0]?.image_url ||
     (report.images?.[0]?.image_path
@@ -121,7 +173,7 @@ export default function ReportDetailsScreen() {
     try {
       const d = new Date(dStr);
       return d.toLocaleDateString('en-US', {
-        month: 'long',
+        month: 'short',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',
@@ -200,107 +252,146 @@ export default function ReportDetailsScreen() {
   const timelineSteps = getTimelineSteps();
 
   return (
-    <SafeAreaView className="flex-1 bg-[#0B1120]" edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-[#0F172A]/90">
-        <TouchableOpacity
-          onPress={() => router.back()}
-          className="w-10 h-10 rounded-xl bg-slate-800 items-center justify-center border border-slate-700 active:bg-slate-700"
-          activeOpacity={0.7}
-        >
-          <ArrowLeft size={20} color="#F8FAFC" />
-        </TouchableOpacity>
-        <View className="items-center">
-          <Text className="text-white text-base font-bold tracking-tight">{incidentIdCode}</Text>
-          <Text className="text-slate-400 text-xs">Report Overview</Text>
+    <View style={styles.container}>
+      <BrandBackground variant="subpage" />
+
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Top App Bar Header */}
+        <View style={styles.appBar}>
+          <TouchableOpacity
+            onPress={handleBack}
+            style={styles.backButton}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ArrowLeft size={20} color="#FFFFFF" strokeWidth={2.4} />
+          </TouchableOpacity>
+
+          <View style={styles.appBarCenter}>
+            <Text style={styles.appBarTitle}>{incidentIdCode}</Text>
+            <Text style={styles.appBarSubtitle}>Report Overview</Text>
+          </View>
+
+          {/* Balanced spacer to keep center content perfectly centered */}
+          <View style={styles.appBarSpacer} />
         </View>
-        <View className="w-10" />
-      </View>
 
-      <ScrollView
-        className="flex-1 px-5"
-        contentContainerStyle={{ paddingVertical: 18, paddingBottom: 60 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Verification Status Banner (Section 6 Requirement) */}
-        {isRejected ? (
-          <View className="bg-rose-950/70 border border-rose-800/80 rounded-3xl p-5 mb-5 shadow-lg">
-            <View className="flex-row items-center mb-2">
-              <XCircle size={22} color="#FF3B30" />
-              <Text className="text-rose-400 font-extrabold text-sm uppercase tracking-wider ml-2">
-                REJECTED • NOT APPROVED
-              </Text>
-            </View>
-            <Text className="text-white font-bold text-base mb-1">
-              Dispatch Request Declined
-            </Text>
-            <View className="bg-rose-900/40 rounded-2xl p-3.5 my-2 border border-rose-800/40">
-              <Text className="text-rose-200 text-xs font-semibold uppercase tracking-wider mb-1">
-                Reason Provided by Dispatcher:
-              </Text>
-              <Text className="text-rose-100 text-xs leading-relaxed">{rejectionReason}</Text>
-            </View>
-            <View className="flex-row items-center mt-1">
-              <Info size={14} color="#FDA4AF" />
-              <Text className="text-rose-300 text-[11px] ml-1.5 flex-1">
-                Responder navigation and tracking are disabled for declined reports.
-              </Text>
-            </View>
-          </View>
-        ) : isPending ? (
-          <View className="bg-amber-950/60 border border-amber-800/70 rounded-3xl p-5 mb-5 shadow-lg">
-            <View className="flex-row items-center mb-1.5">
-              <Clock size={20} color="#F59E0B" />
-              <Text className="text-amber-400 font-extrabold text-xs uppercase tracking-wider ml-2">
-                PENDING REVIEW
-              </Text>
-            </View>
-            <Text className="text-white font-bold text-base">Awaiting Dispatcher Verification</Text>
-            <Text className="text-amber-200 text-xs mt-1 leading-relaxed">
-              Your emergency submission is in the triage queue. Dispatchers will verify details before dispatching emergency medical vehicles.
-            </Text>
-          </View>
-        ) : isResolved ? (
-          <View className="bg-emerald-950/60 border border-emerald-800/70 rounded-3xl p-5 mb-5 shadow-lg">
-            <View className="flex-row items-center mb-1.5">
-              <CheckCircle2 size={20} color="#10B981" />
-              <Text className="text-emerald-400 font-extrabold text-xs uppercase tracking-wider ml-2">
-                OPERATION COMPLETED
-              </Text>
-            </View>
-            <Text className="text-white font-bold text-base">Emergency Resolved</Text>
-            <Text className="text-emerald-200 text-xs mt-1">
-              The MDRRMO response mission for this emergency report was successfully completed.
-            </Text>
-          </View>
-        ) : (
-          <View className="bg-blue-950/60 border border-blue-800/70 rounded-3xl p-5 mb-5 shadow-lg">
-            <View className="flex-row items-center mb-1.5">
-              <ShieldCheck size={20} color="#208AEF" />
-              <Text className="text-blue-400 font-extrabold text-xs uppercase tracking-wider ml-2">
-                VERIFIED BY DISPATCHER
-              </Text>
-            </View>
-            <Text className="text-white font-bold text-base">Active Emergency Response</Text>
-            <Text className="text-blue-200 text-xs mt-1">
-              Command center has validated this report. Resources are mobilized to provide assistance.
-            </Text>
-          </View>
-        )}
-
-        {/* Live Responder Tracking Action Banner (Section 8 Requirement) */}
-        {canTrack ? (
-          <View className="bg-indigo-950/80 border border-indigo-700 rounded-3xl p-5 mb-5 shadow-xl">
-            <View className="flex-row items-center justify-between mb-3">
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 items-center justify-center mr-3">
-                  <Ambulance size={20} color="#818CF8" />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ============================================================== */}
+          {/* 1. STATUS CARD (Rejection / Pending / Resolved / Verified)     */}
+          {/* ============================================================== */}
+          {isRejected ? (
+            <View style={styles.rejectionCard}>
+              {/* Header Badge Row */}
+              <View style={styles.statusHeaderRow}>
+                <View style={styles.rejectionIconBox}>
+                  <XCircle size={20} color="#DC2626" strokeWidth={2.4} />
                 </View>
-                <View>
-                  <Text className="text-white font-bold text-base">
+                <View style={styles.rejectionBadge}>
+                  <Text style={styles.rejectionBadgeText}>REJECTED · NOT APPROVED</Text>
+                </View>
+              </View>
+
+              <Text style={styles.rejectionTitle}>Dispatch Request Declined</Text>
+
+              {/* Inset Dispatcher Reason Container */}
+              <View style={styles.rejectionReasonBox}>
+                <Text style={styles.rejectionReasonLabel}>REASON PROVIDED BY DISPATCHER</Text>
+                <Text style={styles.rejectionReasonText}>{rejectionReason}</Text>
+              </View>
+
+              {/* Informational notice */}
+              <View style={styles.rejectionNoticeRow}>
+                <Info size={16} color="#DC2626" strokeWidth={2.2} style={styles.noticeIcon} />
+                <Text style={styles.rejectionNoticeText}>
+                  Responder navigation and tracking are disabled for declined reports.
+                </Text>
+              </View>
+            </View>
+          ) : isPending ? (
+            <View style={styles.pendingCard}>
+              <View style={styles.statusHeaderRow}>
+                <View style={styles.pendingIconBox}>
+                  <Clock size={20} color="#D97706" strokeWidth={2.4} />
+                </View>
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>PENDING REVIEW</Text>
+                </View>
+              </View>
+
+              <Text style={styles.statusTitle}>Awaiting Dispatcher Verification</Text>
+              <Text style={styles.statusDescription}>
+                Your emergency submission is in the triage queue. Dispatchers will verify details before dispatching emergency medical vehicles.
+              </Text>
+
+              <TouchableOpacity
+                onPress={handleCancelReport}
+                disabled={isCancelling}
+                activeOpacity={0.8}
+                style={styles.cancelButton}
+              >
+                {isCancelling ? (
+                  <ActivityIndicator size="small" color="#DC2626" />
+                ) : (
+                  <>
+                    <XCircle size={16} color="#DC2626" strokeWidth={2.2} />
+                    <Text style={styles.cancelButtonText}>Cancel Emergency Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : isResolved ? (
+            <View style={styles.resolvedCard}>
+              <View style={styles.statusHeaderRow}>
+                <View style={styles.resolvedIconBox}>
+                  <CheckCircle2 size={20} color="#059669" strokeWidth={2.4} />
+                </View>
+                <View style={styles.resolvedBadge}>
+                  <Text style={styles.resolvedBadgeText}>OPERATION COMPLETED</Text>
+                </View>
+              </View>
+
+              <Text style={styles.statusTitle}>Emergency Resolved</Text>
+              <Text style={styles.statusDescription}>
+                The MDRRMO response mission for this emergency report was successfully completed.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.verifiedCard}>
+              <View style={styles.statusHeaderRow}>
+                <View style={styles.verifiedIconBox}>
+                  <ShieldCheck size={20} color="#208AEF" strokeWidth={2.4} />
+                </View>
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedBadgeText}>VERIFIED BY DISPATCHER</Text>
+                </View>
+              </View>
+
+              <Text style={styles.statusTitle}>Active Emergency Response</Text>
+              <Text style={styles.statusDescription}>
+                Command center has validated this report. Resources are mobilized to provide assistance.
+              </Text>
+            </View>
+          )}
+
+          {/* ============================================================== */}
+          {/* 2. LIVE TRACKING BANNER (when canTrack)                        */}
+          {/* ============================================================== */}
+          {canTrack ? (
+            <View style={styles.trackingCard}>
+              <View style={styles.trackingHeader}>
+                <View style={styles.trackingIconBox}>
+                  <Ambulance size={22} color="#208AEF" strokeWidth={2.2} />
+                </View>
+                <View style={styles.trackingHeaderText}>
+                  <Text style={styles.trackingUnitName}>
                     {activeDispatch?.ambulance?.vehicle_name || 'MDRRMO Rescue Unit'}
                   </Text>
-                  <Text className="text-indigo-300 text-xs font-semibold">
+                  <Text style={styles.trackingStatusText}>
                     {dispatchStatus === 'en_route'
                       ? 'Currently En Route to Your Scene'
                       : dispatchStatus === 'arrived_on_scene'
@@ -309,155 +400,933 @@ export default function ReportDetailsScreen() {
                   </Text>
                 </View>
               </View>
+
+              <TouchableOpacity
+                onPress={() => router.push('/(resident)/track')}
+                style={styles.trackingButton}
+                activeOpacity={0.8}
+              >
+                <Navigation size={18} color="#FFFFFF" strokeWidth={2.2} />
+                <Text style={styles.trackingButtonText}>Track Live Emergency Response</Text>
+              </TouchableOpacity>
             </View>
+          ) : null}
 
-            <TouchableOpacity
-              onPress={() => router.push('/(resident)/track')}
-              style={{ backgroundColor: '#208AEF' }}
-              className="py-3.5 px-4 rounded-2xl flex-row items-center justify-center shadow-lg active:opacity-90"
-              activeOpacity={0.8}
-            >
-              <Navigation size={18} color="#FFFFFF" />
-              <Text className="text-white font-bold text-sm ml-2">Track Live Emergency Response</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+          {/* ============================================================== */}
+          {/* 3. INCIDENT INFORMATION CARD                                   */}
+          {/* ============================================================== */}
+          <View style={styles.infoCard}>
+            <Text style={styles.sectionHeading}>Incident Information</Text>
 
-        {/* Section: Report Information */}
-        <View className="bg-[#0F172A]/80 border border-slate-800 rounded-3xl p-5 mb-5 shadow-lg">
-          <Text className="text-white font-bold text-base mb-4 tracking-tight">
-            Incident Information
-          </Text>
+            {/* Type & Date Row (Responsive, no clipping) */}
+            <View style={styles.typeDateRow}>
+              <View style={styles.typeCol}>
+                <Text style={styles.fieldLabel}>Incident Type</Text>
+                <Text style={styles.typeValue}>{typeName}</Text>
+              </View>
 
-          {/* Type & Date */}
-          <View className="flex-row items-center justify-between pb-3 border-b border-slate-800/80 mb-3">
-            <View>
-              <Text className="text-slate-400 text-xs">Incident Type</Text>
-              <Text className="text-white font-bold text-sm mt-0.5">{typeName}</Text>
-            </View>
-            <View className="items-end">
-              <Text className="text-slate-400 text-xs">Date Submitted</Text>
-              <Text className="text-slate-300 font-medium text-xs mt-0.5">
-                {formatDate(report.reported_at || report.created_at)}
-              </Text>
-            </View>
-          </View>
-
-          {/* Description */}
-          <View className="mb-4">
-            <Text className="text-slate-400 text-xs mb-1">Description / Chief Complaint</Text>
-            <View className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5">
-              <Text className="text-slate-200 text-xs leading-relaxed">
-                {report.description || report.chief_complaint || 'No detailed description provided.'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Location Details */}
-          <View className="mb-4">
-            <Text className="text-slate-400 text-xs mb-1">Location of Emergency</Text>
-            <View className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex-row items-start">
-              <MapPin size={16} color="#208AEF" className="mt-0.5 mr-2.5" />
-              <View className="flex-1">
-                <Text className="text-white font-semibold text-xs leading-snug">
-                  {report.place_of_incident || report.incident_address || report.address || 'Opol, Misamis Oriental'}
+              <View style={styles.dateCol}>
+                <Text style={styles.fieldLabel}>Date Submitted</Text>
+                <Text style={styles.dateValue}>
+                  {formatDate(report.reported_at || report.created_at)}
                 </Text>
-                {report.location_code ? (
-                  <View className="flex-row items-center mt-1.5">
-                    <View className="bg-blue-900/60 border border-blue-700/50 px-2 py-0.5 rounded">
-                      <Text className="text-blue-300 font-mono text-[10px] font-bold">
+              </View>
+            </View>
+
+            {/* Description / Chief Complaint */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Description / Chief Complaint</Text>
+              <View style={styles.descriptionBox}>
+                <Text
+                  style={[
+                    styles.descriptionText,
+                    !report.description && !report.chief_complaint && styles.emptyDescriptionText,
+                  ]}
+                >
+                  {report.description || report.chief_complaint || 'No detailed description provided.'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Location of Emergency */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Location of Emergency</Text>
+              <View style={styles.locationBox}>
+                <MapPin size={18} color="#208AEF" strokeWidth={2.4} style={styles.locationPinIcon} />
+                <View style={styles.locationContent}>
+                  <Text style={styles.locationText}>
+                    {report.place_of_incident || report.incident_address || report.address || 'Opol, Misamis Oriental'}
+                  </Text>
+                  {report.location_code ? (
+                    <View style={styles.locationCodeBadge}>
+                      <Text style={styles.locationCodeText}>
                         Code: {report.location_code}
                       </Text>
                     </View>
-                  </View>
-                ) : null}
+                  ) : null}
+                </View>
               </View>
             </View>
+
+            {/* Submitted Scene Photo Evidence */}
+            {submittedPhoto ? (
+              <View style={styles.photoFieldGroup}>
+                <View style={styles.photoHeaderRow}>
+                  <Text style={styles.fieldLabel}>Submitted Scene Photo</Text>
+                  <TouchableOpacity
+                    onPress={() => setIsPhotoModalVisible(true)}
+                    style={styles.expandPhotoButton}
+                    activeOpacity={0.7}
+                  >
+                    <Maximize2 size={13} color="#208AEF" strokeWidth={2.2} />
+                    <Text style={styles.expandPhotoText}>View Full Photo</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => setIsPhotoModalVisible(true)}
+                  style={styles.photoContainer}
+                  activeOpacity={0.9}
+                >
+                  <Image
+                    source={{ uri: submittedPhoto }}
+                    style={styles.scenePhoto}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
 
-          {/* Submitted Photo */}
-          {submittedPhoto ? (
-            <View>
-              <Text className="text-slate-400 text-xs mb-2">Submitted Scene Photo</Text>
-              <View className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-900">
-                <Image
-                  source={{ uri: submittedPhoto }}
-                  style={{ width: '100%', height: 190 }}
-                  resizeMode="cover"
-                />
+          {/* ============================================================== */}
+          {/* 4. INCIDENT STATUS TIMELINE (Only for active / resolved)       */}
+          {/* ============================================================== */}
+          {!isRejected ? (
+            <View style={styles.timelineCard}>
+              <Text style={styles.sectionHeading}>Incident Status Timeline</Text>
+              <Text style={styles.timelineSubtitle}>
+                Live lifecycle status from command center
+              </Text>
+
+              <View style={styles.timelineContainer}>
+                {timelineSteps.map((step, idx) => {
+                  const isLast = idx === timelineSteps.length - 1;
+                  const isDone = step.state === 'done';
+                  const isCurrent = step.state === 'current';
+
+                  return (
+                    <View key={step.title} style={styles.timelineStepRow}>
+                      {/* Step Indicator & Connector Line */}
+                      <View style={styles.timelineIndicatorCol}>
+                        <View
+                          style={[
+                            styles.timelineDot,
+                            isDone
+                              ? styles.timelineDotDone
+                              : isCurrent
+                              ? styles.timelineDotCurrent
+                              : styles.timelineDotUpcoming,
+                          ]}
+                        >
+                          {isDone ? (
+                            <CheckCircle2 size={15} color="#FFFFFF" strokeWidth={2.6} />
+                          ) : isCurrent ? (
+                            <View style={styles.currentDotPulse} />
+                          ) : (
+                            <View style={styles.upcomingDotInner} />
+                          )}
+                        </View>
+                        {!isLast ? (
+                          <View
+                            style={[
+                              styles.timelineLine,
+                              isDone ? styles.timelineLineDone : styles.timelineLineUpcoming,
+                            ]}
+                          />
+                        ) : null}
+                      </View>
+
+                      {/* Step Text Info */}
+                      <View style={styles.timelineTextCol}>
+                        <Text
+                          style={[
+                            styles.timelineStepTitle,
+                            isDone
+                              ? styles.timelineTitleDone
+                              : isCurrent
+                              ? styles.timelineTitleCurrent
+                              : styles.timelineTitleUpcoming,
+                          ]}
+                        >
+                          {step.title}
+                        </Text>
+                        <Text style={styles.timelineStepDesc}>{step.description}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             </View>
           ) : null}
-        </View>
+        </ScrollView>
+      </SafeAreaView>
 
-        {/* Section: Incident Status Timeline (Section 7 Requirement) */}
-        {!isRejected ? (
-          <View className="bg-[#0F172A]/80 border border-slate-800 rounded-3xl p-5 mb-5 shadow-lg">
-            <Text className="text-white font-bold text-base mb-1 tracking-tight">
-              Incident Status Timeline
-            </Text>
-            <Text className="text-slate-400 text-xs mb-5">
-              Live lifecycle status from command center
-            </Text>
+      {/* Full Screen Photo Modal */}
+      {submittedPhoto ? (
+        <Modal
+          visible={isPhotoModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsPhotoModalVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <SafeAreaView style={styles.modalSafeArea}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Scene Photo Evidence</Text>
+                <TouchableOpacity
+                  onPress={() => setIsPhotoModalVisible(false)}
+                  style={styles.modalCloseButton}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <X size={20} color="#FFFFFF" strokeWidth={2.4} />
+                </TouchableOpacity>
+              </View>
 
-            <View className="pl-1">
-              {timelineSteps.map((step, idx) => {
-                const isLast = idx === timelineSteps.length - 1;
-                const isDone = step.state === 'done';
-                const isCurrent = step.state === 'current';
-
-                return (
-                  <View key={step.title} className="flex-row items-start">
-                    {/* Circle & Line */}
-                    <View className="items-center mr-4">
-                      <View
-                        className={`w-7 h-7 rounded-full items-center justify-center border-2 ${
-                          isDone
-                            ? 'bg-emerald-600 border-emerald-500'
-                            : isCurrent
-                            ? 'bg-[#208AEF] border-blue-400'
-                            : 'bg-slate-900 border-slate-800'
-                        }`}
-                      >
-                        {isDone ? (
-                          <CheckCircle2 size={14} color="#FFFFFF" strokeWidth={2.5} />
-                        ) : isCurrent ? (
-                          <View className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-                        ) : (
-                          <View className="w-2 h-2 rounded-full bg-slate-700" />
-                        )}
-                      </View>
-                      {!isLast ? (
-                        <View
-                          className={`w-0.5 h-10 my-0.5 ${
-                            isDone ? 'bg-emerald-600/60' : 'bg-slate-800'
-                          }`}
-                        />
-                      ) : null}
-                    </View>
-
-                    {/* Step Info */}
-                    <View className="flex-1 pb-4">
-                      <Text
-                        className={`text-sm font-bold ${
-                          isDone
-                            ? 'text-white'
-                            : isCurrent
-                            ? 'text-[#208AEF]'
-                            : 'text-slate-500'
-                        }`}
-                      >
-                        {step.title}
-                      </Text>
-                      <Text className="text-slate-400 text-xs mt-0.5">{step.description}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+              <View style={styles.modalImageContainer}>
+                <Image
+                  source={{ uri: submittedPhoto }}
+                  style={styles.modalImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </SafeAreaView>
           </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+        </Modal>
+      ) : null}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  centerScreen: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  centerContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  centerLoadingText: {
+    color: '#526174',
+    fontSize: 14.5,
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  notFoundCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  notFoundIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  notFoundTitle: {
+    color: '#1F2937',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  notFoundSubtitle: {
+    color: '#526174',
+    fontSize: 13.5,
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 6,
+    marginBottom: 20,
+  },
+  returnButton: {
+    backgroundColor: '#208AEF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  returnButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  /* App Bar Header */
+  appBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appBarCenter: {
+    alignItems: 'center',
+  },
+  appBarTitle: {
+    color: '#FFFFFF',
+    fontSize: 17.5,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  appBarSubtitle: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  appBarSpacer: {
+    width: 40,
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+
+  /* Common Card Section Headings */
+  sectionHeading: {
+    color: '#1F2937',
+    fontSize: 18.5,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginBottom: 16,
+  },
+
+  /* Status Header Row */
+  statusHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statusTitle: {
+    color: '#1F2937',
+    fontSize: 19,
+    fontWeight: '800',
+    lineHeight: 25,
+    marginBottom: 6,
+  },
+  statusDescription: {
+    color: '#526174',
+    fontSize: 14.5,
+    fontWeight: '400',
+    lineHeight: 22,
+  },
+
+  /* Rejection Status Card */
+  rejectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  rejectionIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  rejectionBadge: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  rejectionBadgeText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  rejectionTitle: {
+    color: '#1F2937',
+    fontSize: 19,
+    fontWeight: '800',
+    lineHeight: 25,
+    marginBottom: 12,
+  },
+  rejectionReasonBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  rejectionReasonLabel: {
+    color: '#991B1B',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  rejectionReasonText: {
+    color: '#7F1D1D',
+    fontSize: 14.5,
+    fontWeight: '500',
+    lineHeight: 21,
+  },
+  rejectionNoticeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingTop: 2,
+  },
+  noticeIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  rejectionNoticeText: {
+    flex: 1,
+    color: '#526174',
+    fontSize: 12.5,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+
+  /* Pending Review Card */
+  pendingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#FDE68A',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  pendingIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  pendingBadge: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pendingBadgeText: {
+    color: '#B45309',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  cancelButton: {
+    marginTop: 14,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    color: '#DC2626',
+    fontSize: 13.5,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+
+  /* Resolved Card */
+  resolvedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#A7F3D0',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  resolvedIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  resolvedBadge: {
+    backgroundColor: '#D1FAE5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  resolvedBadgeText: {
+    color: '#047857',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+
+  /* Verified Card */
+  verifiedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  verifiedIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  verifiedBadge: {
+    backgroundColor: '#DBEAFE',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  verifiedBadgeText: {
+    color: '#1D4ED8',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+
+  /* Live Tracking Card */
+  trackingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  trackingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  trackingIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  trackingHeaderText: {
+    flex: 1,
+  },
+  trackingUnitName: {
+    color: '#1F2937',
+    fontSize: 16.5,
+    fontWeight: '800',
+  },
+  trackingStatusText: {
+    color: '#208AEF',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  trackingButton: {
+    backgroundColor: '#208AEF',
+    height: 48,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#208AEF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  trackingButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+
+  /* Incident Information Card */
+  infoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  typeDateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 16,
+    gap: 12,
+  },
+  typeCol: {
+    flex: 1,
+    minWidth: 130,
+  },
+  dateCol: {
+    flex: 1,
+    minWidth: 130,
+  },
+  fieldLabel: {
+    color: '#64748B',
+    fontSize: 12.5,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  typeValue: {
+    color: '#1F2937',
+    fontSize: 16.5,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  dateValue: {
+    color: '#334155',
+    fontSize: 14.5,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  descriptionBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 14,
+  },
+  descriptionText: {
+    color: '#1F2937',
+    fontSize: 14.5,
+    fontWeight: '500',
+    lineHeight: 21,
+  },
+  emptyDescriptionText: {
+    color: '#64748B',
+    fontStyle: 'italic',
+  },
+  locationBox: {
+    backgroundColor: '#F0F7FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  locationPinIcon: {
+    marginRight: 10,
+    marginTop: 1,
+  },
+  locationContent: {
+    flex: 1,
+  },
+  locationText: {
+    color: '#1F2937',
+    fontSize: 14.5,
+    fontWeight: '600',
+    lineHeight: 21,
+  },
+  locationCodeBadge: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  locationCodeText: {
+    color: '#1D4ED8',
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+
+  /* Submitted Photo Evidence */
+  photoFieldGroup: {
+    marginTop: 4,
+  },
+  photoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  expandPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  expandPhotoText: {
+    color: '#208AEF',
+    fontSize: 12.5,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  photoContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
+  },
+  scenePhoto: {
+    width: '100%',
+    height: 210,
+  },
+
+  /* Timeline Card */
+  timelineCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  timelineSubtitle: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '400',
+    marginTop: -10,
+    marginBottom: 18,
+  },
+  timelineContainer: {
+    paddingLeft: 4,
+  },
+  timelineStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  timelineIndicatorCol: {
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  timelineDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineDotDone: {
+    backgroundColor: '#059669',
+    borderColor: '#059669',
+  },
+  timelineDotCurrent: {
+    backgroundColor: '#208AEF',
+    borderColor: '#93C5FD',
+  },
+  timelineDotUpcoming: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#CBD5E1',
+  },
+  currentDotPulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  upcomingDotInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#94A3B8',
+  },
+  timelineLine: {
+    width: 2,
+    height: 32,
+    marginVertical: 2,
+  },
+  timelineLineDone: {
+    backgroundColor: '#059669',
+  },
+  timelineLineUpcoming: {
+    backgroundColor: '#E2E8F0',
+  },
+  timelineTextCol: {
+    flex: 1,
+    paddingBottom: 16,
+  },
+  timelineStepTitle: {
+    fontSize: 15.5,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  timelineTitleDone: {
+    color: '#1F2937',
+  },
+  timelineTitleCurrent: {
+    color: '#208AEF',
+    fontWeight: '800',
+  },
+  timelineTitleUpcoming: {
+    color: '#94A3B8',
+  },
+  timelineStepDesc: {
+    color: '#526174',
+    fontSize: 13,
+    fontWeight: '400',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+
+  /* Modal Styles for Full Scene Photo */
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+  },
+  modalSafeArea: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 16.5,
+    fontWeight: '700',
+  },
+  modalCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalImageContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+  },
+});
+

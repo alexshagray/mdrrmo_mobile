@@ -1,11 +1,41 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Alert, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  Platform,
+  Linking,
+  StatusBar,
+  AppState,
+  AppStateStatus,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter as useExpoRouter, useLocalSearchParams as useExpoSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { MapView } from '@/shared/components/Map';
 import MapboxGL from '@rnmapbox/maps';
-import { ArrowLeft, Layers, Map as MapIcon, Ambulance, CheckCircle, AlertTriangle, RefreshCw, ShieldAlert } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Settings,
+  RefreshCw,
+  Map as MapIcon,
+  Layers,
+  Compass,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldAlert,
+  ShieldCheck,
+  Ambulance,
+  X,
+  ExternalLink,
+  MapPin,
+  Navigation,
+} from 'lucide-react-native';
 import { useLiveDispatchTracking, useNetworkStatus } from '@/shared/hooks';
 import { updateDispatchStatus, reportUnfoundedDispatch } from '@/shared/api/dispatches';
 import {
@@ -21,15 +51,18 @@ import {
   formatDuration,
 } from '@/shared/services/routingService';
 import {
-  ResponderNavigationArrow,
   IncidentLocationPin,
 } from '@/shared/components/Map/NavigationMarkers';
+import { SmoothResponderMarker } from '@/shared/components/Map/SmoothResponderMarker';
 
 const ARRIVAL_RADIUS_METERS = 50;
+const MAX_ACCURACY_THRESHOLD_METERS = 40; // Reject GPS fixes worse than 40m
+const MAX_REALISTIC_SPEED_MPS = 45; // ~162 km/h - filter out GPS coordinate jumps / teleports
 
 export default function NavigationScreen() {
   const router = useExpoRouter();
   const params = useExpoSearchParams();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapboxGL.Camera>(null);
   const { isOffline } = useNetworkStatus();
 
@@ -47,11 +80,11 @@ export default function NavigationScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace('/(responder)');
+      router.replace('/(responder)/dispatch');
     }
   };
 
-  // State
+  // Navigation State
   const [displayedLocation, setDisplayedLocation] = useState<LatLng | null>(null);
   const [heading, setHeading] = useState<number>(0);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
@@ -59,27 +92,65 @@ export default function NavigationScreen() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [isArriving, setIsArriving] = useState(false);
   const [isFpvMode, setIsFpvMode] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(true); // Smooth auto-follow camera state
+  const [gpsAccuracyWarning, setGpsAccuracyWarning] = useState<number | null>(null);
+  const [mapStyle, setMapStyle] = useState<'dark' | 'satellite'>('dark');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  // Refs for navigation stability & smooth tracking
+  // Refs for tracking, filtering, and animation stability
   const isCalculatingRef = useRef(false);
   const lastRecalcTimeRef = useRef(0);
   const lastReliableHeadingRef = useRef(0);
   const lastRawLocationRef = useRef<LatLng | null>(null);
+  const lastRawTimestampRef = useRef<number>(0);
   const deviationCounterRef = useRef(0);
   const isFpvModeRef = useRef(false);
+  const isFollowingRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRouteRef = useRef<LatLng[]>([]);
+  const latestSnappedLocationRef = useRef<LatLng | null>(null);
 
-  // Keep activeRouteRef in sync with state for access in location callback
+  useEffect(() => {
+    isFpvModeRef.current = isFpvMode;
+  }, [isFpvMode]);
+
+  useEffect(() => {
+    isFollowingRef.current = isFollowing;
+  }, [isFollowing]);
+
   useEffect(() => {
     activeRouteRef.current = routeCoords;
   }, [routeCoords]);
 
-  // Proximity to scene: must be within 50 meters of the incident pin
+  // Proximity to scene: must be within 50 meters of the incident pin based on real GPS
   const distanceToScene = displayedLocation
     ? getDistance(displayedLocation.latitude, displayedLocation.longitude, destination.latitude, destination.longitude)
     : Infinity;
   const isWithinRange = distanceToScene <= ARRIVAL_RADIUS_METERS;
+
+  // External Navigation App launcher
+  const handleOpenExternalNav = () => {
+    const destLat = destination.latitude;
+    const destLng = destination.longitude;
+
+    const url = Platform.select({
+      ios: `maps:0,0?q=${destLat},${destLng}`,
+      android: `google.navigation:q=${destLat},${destLng}&mode=d`,
+      default: `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`,
+    });
+
+    Linking.canOpenURL(url as string)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url as string);
+        } else {
+          Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`);
+        }
+      })
+      .catch(() => {
+        Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`);
+      });
+  };
 
   const executeArrival = async () => {
     setIsArriving(true);
@@ -137,7 +208,8 @@ export default function NavigationScreen() {
 
   const handleConfirmUnfounded = async () => {
     if (!dispatchId || isSubmittingUnfounded) return;
-    const finalReason = unfoundedReason.trim() || 'Responders arrived on scene. Conducted area sweep; zero patients or incident found.';
+    const finalReason =
+      unfoundedReason.trim() || 'Responders arrived on scene. Conducted area sweep; zero patients or incident found.';
     setIsSubmittingUnfounded(true);
     try {
       await reportUnfoundedDispatch(dispatchId, {
@@ -152,7 +224,7 @@ export default function NavigationScreen() {
           {
             text: 'OK',
             onPress: () => router.replace('/(responder)'),
-          }
+          },
         ]
       );
     } catch (e) {
@@ -163,7 +235,7 @@ export default function NavigationScreen() {
     }
   };
 
-  // Fetch full road-following route from Mapbox Directions
+  // Fetch full road-following route from Mapbox Directions with debounce/abort
   const calculateRoute = useCallback(
     async (startLat: number, startLng: number, destLat: number, destLng: number) => {
       if (isCalculatingRef.current) return;
@@ -188,12 +260,12 @@ export default function NavigationScreen() {
           });
           deviationCounterRef.current = 0;
 
-          if (mapRef.current && !isFpvModeRef.current) {
+          if (mapRef.current && !isFpvModeRef.current && !isFollowingRef.current) {
             const lats = [startLat, ...result.coordinates.map((c) => c.latitude), destLat];
             const lngs = [startLng, ...result.coordinates.map((c) => c.longitude), destLng];
             const ne = [Math.max(...lngs), Math.max(...lats)];
             const sw = [Math.min(...lngs), Math.min(...lats)];
-            mapRef.current.fitBounds(ne, sw, [90, 40, 290, 40], 1000);
+            mapRef.current.fitBounds(ne, sw, [110, 40, 310, 40], 1000);
           }
         }
       } catch (e: any) {
@@ -208,7 +280,33 @@ export default function NavigationScreen() {
     []
   );
 
-  // Location Tracking & Dynamic Navigation Engine
+  // Recenter Camera on Responder Location
+  const handleRecenter = useCallback(() => {
+    setIsFollowing(true);
+    isFollowingRef.current = true;
+
+    const loc = latestSnappedLocationRef.current || displayedLocation;
+    if (mapRef.current && loc) {
+      mapRef.current.setCamera({
+        centerCoordinate: [loc.longitude, loc.latitude],
+        heading: isFpvMode ? lastReliableHeadingRef.current : 0,
+        zoomLevel: isFpvMode ? 18.5 : 17,
+        pitch: isFpvMode ? 58 : 28,
+        animationDuration: 900,
+        animationMode: 'easeTo',
+      });
+    }
+  }, [displayedLocation, isFpvMode]);
+
+  // User touched or moved the map manually -> pause auto-follow
+  const handleMapTouch = useCallback(() => {
+    if (isFollowingRef.current) {
+      setIsFollowing(false);
+      isFollowingRef.current = false;
+    }
+  }, []);
+
+  // Location Tracking & High-Performance Dynamic Navigation Engine
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
     let isMounted = true;
@@ -226,44 +324,88 @@ export default function NavigationScreen() {
 
         let isInitialFix = true;
 
-        // Try getting cached position first for instantaneous startup
+        // Instant startup with cached position
         const lastKnown = await Location.getLastKnownPositionAsync();
         if (lastKnown && isMounted) {
           const initCoords = { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
           setDisplayedLocation(initCoords);
+          latestSnappedLocationRef.current = initCoords;
           lastRawLocationRef.current = initCoords;
+          lastRawTimestampRef.current = Date.now();
           calculateRoute(initCoords.latitude, initCoords.longitude, destination.latitude, destination.longitude);
           isInitialFix = false;
+
+          // Initial camera framing
+          if (mapRef.current) {
+            mapRef.current.setCamera({
+              centerCoordinate: [initCoords.longitude, initCoords.latitude],
+              zoomLevel: 17,
+              pitch: 28,
+              heading: 0,
+              animationDuration: 800,
+              animationMode: 'easeTo',
+            });
+          }
         }
 
         const sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
-            timeInterval: 1500,
-            distanceInterval: 3,
+            timeInterval: 1000,
+            distanceInterval: 1.5,
           },
           (loc) => {
             if (!isMounted) return;
+
+            const now = Date.now();
+            const currentAccuracy = loc.coords.accuracy ?? 15;
+            const currentSpeed = loc.coords.speed ?? 0;
+
+            // 1. ACCURACY & OUTLIER FILTERING
+            if (currentAccuracy > MAX_ACCURACY_THRESHOLD_METERS) {
+              setGpsAccuracyWarning(Math.round(currentAccuracy));
+              // If accuracy is very poor and we have a previous location, treat as low-confidence
+              if (lastRawLocationRef.current) {
+                return;
+              }
+            } else {
+              setGpsAccuracyWarning(null);
+            }
 
             const currentRaw: LatLng = {
               latitude: loc.coords.latitude,
               longitude: loc.coords.longitude,
             };
-            const currentAccuracy = loc.coords.accuracy ?? 15;
-            const currentSpeed = loc.coords.speed ?? 0;
 
-            // 1. BEARING / HEADING RESOLUTION & SMOOTHING
+            // Teleport jump rejection (unrealistic speed spikes > 162 km/h)
+            if (lastRawLocationRef.current && lastRawTimestampRef.current > 0) {
+              const dtSeconds = Math.max((now - lastRawTimestampRef.current) / 1000, 0.2);
+              const distJump = getDistance(
+                lastRawLocationRef.current.latitude,
+                lastRawLocationRef.current.longitude,
+                currentRaw.latitude,
+                currentRaw.longitude
+              );
+              const speedJump = distJump / dtSeconds;
+
+              if (speedJump > MAX_REALISTIC_SPEED_MPS && distJump > 60) {
+                console.warn(`[Navigation] Rejected GPS coordinate jump of ${Math.round(distJump)}m (${Math.round(speedJump * 3.6)} km/h)`);
+                return;
+              }
+            }
+
+            // 2. STABLE BEARING & ROTATION SMOOTHING
             let targetHeading = lastReliableHeadingRef.current;
+            const isMoving = currentSpeed > 0.6; // ~2.1 km/h threshold for movement
             const hasGpsHeading =
               typeof loc.coords.heading === 'number' &&
               loc.coords.heading >= 0 &&
-              currentSpeed > 0.6;
+              isMoving;
 
             if (hasGpsHeading) {
-              const validHeading = loc.coords.heading as number;
-              targetHeading = validHeading;
-              lastReliableHeadingRef.current = validHeading;
-            } else if (lastRawLocationRef.current) {
+              targetHeading = loc.coords.heading as number;
+              lastReliableHeadingRef.current = targetHeading;
+            } else if (lastRawLocationRef.current && isMoving) {
               const distMoved = getDistance(
                 lastRawLocationRef.current.latitude,
                 lastRawLocationRef.current.longitude,
@@ -271,41 +413,44 @@ export default function NavigationScreen() {
                 currentRaw.longitude
               );
 
-              // Only update bearing if vehicle actually moved forward by at least 2.5m
-              if (distMoved >= 2.5) {
-                const movementBearing = calculateBearing(
+              // Update bearing from vector if vehicle moved at least 2 meters
+              if (distMoved >= 2.0) {
+                targetHeading = calculateBearing(
                   lastRawLocationRef.current.latitude,
                   lastRawLocationRef.current.longitude,
                   currentRaw.latitude,
                   currentRaw.longitude
                 );
-                targetHeading = movementBearing;
-                lastReliableHeadingRef.current = movementBearing;
+                lastReliableHeadingRef.current = targetHeading;
               }
-              // If stationary or tiny jitter, KEEP lastReliableHeadingRef.current!
             }
 
-            // Smooth the heading with low-pass angular filter
-            setHeading((prev) => smoothAngle(prev, targetHeading, 0.32));
-            lastRawLocationRef.current = currentRaw;
-
-            // 2. DYNAMIC ROUTE PROGRESS & ROAD SNAPPING
+            // 3. DYNAMIC ROAD SNAPPING & PROGRESS TRIMMING
             const currentActiveRoute = activeRouteRef.current;
+            let finalLocation = currentRaw;
 
             if (currentActiveRoute.length >= 2) {
-              // Project onto active road route with 25m road snap threshold
+              // Project onto route with 25m threshold
               const trimResult = trimRouteProgress(currentActiveRoute, currentRaw, 0, 25);
 
               if (trimResult.isSnapped) {
-                // Snapped cleanly to road segment:
+                finalLocation = trimResult.displayLocation;
+                latestSnappedLocationRef.current = trimResult.displayLocation;
                 setDisplayedLocation(trimResult.displayLocation);
 
-                // Dynamically update active road route behind responder
+                // Smoothly align vehicle heading with the road segment bearing if aligned within 40°
+                const angleDiffToRoad = Math.abs(((trimResult.segmentBearing - targetHeading + 540) % 360) - 180);
+                if (angleDiffToRoad < 40) {
+                  targetHeading = smoothAngle(targetHeading, trimResult.segmentBearing, 0.45);
+                  lastReliableHeadingRef.current = targetHeading;
+                }
+
+                // Trim route behind the vehicle
                 setRouteCoords(trimResult.remainingRoute);
                 activeRouteRef.current = trimResult.remainingRoute;
                 deviationCounterRef.current = 0;
 
-                // Dynamically calculate remaining road distance along the active remaining path
+                // Update remaining route distance and ETA along road path
                 let remainingMeters = 0;
                 for (let i = 0; i < trimResult.remainingRoute.length - 1; i++) {
                   remainingMeters += getDistance(
@@ -317,28 +462,28 @@ export default function NavigationScreen() {
                 }
 
                 if (remainingMeters > 0) {
-                  const estSeconds = (remainingMeters / 10) * 1.1; // ~36 km/h city average
+                  const estSeconds = (remainingMeters / 10) * 1.1; // ~36 km/h emergency response city pace
                   setRouteInfo({
                     distance: formatDistance(remainingMeters),
                     duration: formatDuration(estSeconds),
                   });
                 }
               } else {
-                // Not snapped (vehicle took another street or deviated from path):
+                // Not snapped (deviated from route)
+                finalLocation = currentRaw;
+                latestSnappedLocationRef.current = currentRaw;
                 setDisplayedLocation(currentRaw);
 
-                // 3. INTELLIGENT AUTOMATIC REROUTING
-                // If responder is > 25 meters away from the route, they are off-route
-                const isOffRoute = trimResult.crossTrackDistance > 25;
-                const now = Date.now();
-                const canRecalculate = (now - lastRecalcTimeRef.current > 3500) && !isCalculatingRef.current;
+                // 4. INTELLIGENT REROUTING HYSTERESIS
+                const isOffRoute = trimResult.crossTrackDistance > 32;
+                const canRecalculate = now - lastRecalcTimeRef.current > 4000 && !isCalculatingRef.current;
 
                 if (isOffRoute) {
                   deviationCounterRef.current += 1;
 
-                  // Trigger recalculation if off-route for 2 GPS fixes (>25m) OR immediately if far off (>40m)
-                  if ((deviationCounterRef.current >= 2 || trimResult.crossTrackDistance > 40) && canRecalculate) {
-                    console.log(`[Navigation] Off-route by ${Math.round(trimResult.crossTrackDistance)}m. Recalculating fresh road path...`);
+                  // Trigger recalculation if off-route for 2 fixes (>32m) or immediately if far off (>50m)
+                  if ((deviationCounterRef.current >= 2 || trimResult.crossTrackDistance > 50) && canRecalculate) {
+                    console.log(`[Navigation] Off-route by ${Math.round(trimResult.crossTrackDistance)}m. Recalculating path...`);
                     lastRecalcTimeRef.current = now;
                     deviationCounterRef.current = 0;
                     calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
@@ -348,25 +493,33 @@ export default function NavigationScreen() {
                 }
               }
             } else {
+              finalLocation = currentRaw;
+              latestSnappedLocationRef.current = currentRaw;
               setDisplayedLocation(currentRaw);
-              if (!isCalculatingRef.current && (Date.now() - lastRecalcTimeRef.current > 3500)) {
-                lastRecalcTimeRef.current = Date.now();
+
+              if (!isCalculatingRef.current && now - lastRecalcTimeRef.current > 4000) {
+                lastRecalcTimeRef.current = now;
                 calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
               }
             }
 
-            // 4. CAMERA FOLLOWING (FPV MODE)
-            if (isFpvModeRef.current && mapRef.current) {
+            // Update smooth heading state
+            setHeading(targetHeading);
+            lastRawLocationRef.current = currentRaw;
+            lastRawTimestampRef.current = now;
+
+            // 5. SMOOTH CAMERA FOLLOWING (GPU-Accelerated EaseTo)
+            if (isFollowingRef.current && mapRef.current) {
               mapRef.current.setCamera({
-                centerCoordinate: [currentRaw.longitude, currentRaw.latitude],
-                heading: targetHeading,
-                pitch: 62,
-                zoomLevel: 19,
-                animationDuration: 1800,
+                centerCoordinate: [finalLocation.longitude, finalLocation.latitude],
+                heading: isFpvModeRef.current ? targetHeading : 0,
+                zoomLevel: isFpvModeRef.current ? 18.5 : 17,
+                pitch: isFpvModeRef.current ? 58 : 28,
+                animationDuration: 1200,
+                animationMode: 'easeTo',
               });
             }
 
-            // Initial route fetch if not already done
             if (isInitialFix) {
               isInitialFix = false;
               calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
@@ -386,6 +539,21 @@ export default function NavigationScreen() {
 
     startTracking();
 
+    // AppState lifecycle listener: handle backgrounding/foregrounding
+    const appStateSubscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        // App resumed to foreground: re-check immediate GPS position
+        Location.getLastKnownPositionAsync().then((pos) => {
+          if (pos && isMounted) {
+            const freshCoords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+            setDisplayedLocation(freshCoords);
+            latestSnappedLocationRef.current = freshCoords;
+            lastRawLocationRef.current = freshCoords;
+          }
+        }).catch(() => {});
+      }
+    });
+
     return () => {
       isMounted = false;
       if (locationSubscription) {
@@ -394,280 +562,416 @@ export default function NavigationScreen() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      appStateSubscription.remove();
     };
   }, [calculateRoute, destination.latitude, destination.longitude]);
 
-  const handleOverview = () => {
-    isFpvModeRef.current = false;
+  // Overview Fit Bounds (displays complete path from vehicle to incident)
+  const handleOverview = useCallback(() => {
+    setIsFollowing(false);
+    isFollowingRef.current = false;
     setIsFpvMode(false);
+    isFpvModeRef.current = false;
 
     if (mapRef.current && routeCoords.length > 0 && displayedLocation) {
       const lats = [displayedLocation.latitude, ...routeCoords.map((c) => c.latitude), destination.latitude];
       const lngs = [displayedLocation.longitude, ...routeCoords.map((c) => c.longitude), destination.longitude];
       const ne = [Math.max(...lngs), Math.max(...lats)];
       const sw = [Math.min(...lngs), Math.min(...lats)];
-      mapRef.current.fitBounds(ne, sw, [90, 40, 290, 40], 1000);
+      mapRef.current.fitBounds(ne, sw, [110, 40, 310, 40], 1000);
     }
-  };
+  }, [displayedLocation, routeCoords, destination]);
 
-  const toggleFpv = () => {
-    const newFpv = !isFpvModeRef.current;
-    isFpvModeRef.current = newFpv;
-    setIsFpvMode(newFpv);
+  // Toggle First-Person Perspective (FPV 3D Mode)
+  const toggleFpv = useCallback(() => {
+    const nextFpv = !isFpvMode;
+    setIsFpvMode(nextFpv);
+    isFpvModeRef.current = nextFpv;
+
+    // Resuming following on FPV toggle
+    setIsFollowing(true);
+    isFollowingRef.current = true;
 
     if (mapRef.current && displayedLocation) {
-      if (newFpv) {
-        mapRef.current.setCamera({
-          centerCoordinate: [displayedLocation.longitude, displayedLocation.latitude],
-          pitch: 62,
-          heading: heading || 0,
-          zoomLevel: 19,
-          animationDuration: 1000,
-        });
-      } else {
-        handleOverview();
-      }
+      mapRef.current.setCamera({
+        centerCoordinate: [displayedLocation.longitude, displayedLocation.latitude],
+        pitch: nextFpv ? 58 : 28,
+        heading: nextFpv ? lastReliableHeadingRef.current : 0,
+        zoomLevel: nextFpv ? 18.5 : 17,
+        animationDuration: 1000,
+        animationMode: 'easeTo',
+      });
     }
-  };
+  }, [isFpvMode, displayedLocation]);
 
   return (
-    <View className="flex-1 bg-slate-900 relative">
-      <MapView
-        ref={mapRef}
-        className="absolute inset-0"
-        showsUserLocation={false}
-        styleURL={MapboxGL.StyleURL.Dark}
-      >
-        {/* Active Road Route with High-Contrast Casing */}
-        {routeCoords.length >= 2 && (
-          <MapboxGL.ShapeSource
-            id="routeSource"
-            shape={{
-              type: 'LineString',
-              coordinates: routeCoords.map((c) => [c.longitude, c.latitude]),
-            }}
-          >
-            {/* Outer contrasting road border */}
-            <MapboxGL.LineLayer
-              id="routeCasing"
-              style={{
-                lineColor: '#064e3b',
-                lineWidth: 10,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-            {/* Vibrant primary navigation stroke */}
-            <MapboxGL.LineLayer
-              id="routeFill"
-              style={{
-                lineColor: '#10B981',
-                lineWidth: 6,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-          </MapboxGL.ShapeSource>
-        )}
+    <View style={styles.screenContainer}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-        {/* Clean Incident Destination Marker (No Circular Container) */}
-        <MapboxGL.PointAnnotation
-          id="incidentDestination"
-          coordinate={[destination.longitude, destination.latitude]}
-          anchor={{ x: 0.5, y: 1.0 }}
+      {/* Map Engine with Touch Listener to Pause Follow on User Pan */}
+      <View style={StyleSheet.absoluteFill} onTouchStart={handleMapTouch}>
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          showsUserLocation={false}
+          scaleBarEnabled={false}
+          scaleBarPosition={{ top: -9999, left: -9999 }}
+          attributionEnabled={false}
+          compassEnabled={false}
+          styleURL={mapStyle === 'satellite' ? MapboxGL.StyleURL.SatelliteStreet : MapboxGL.StyleURL.Dark}
         >
-          <IncidentLocationPin size={38} />
-        </MapboxGL.PointAnnotation>
+          {/* Active Navigation Route Line matching Screenshot 2 */}
+          {routeCoords.length >= 2 && (
+            <MapboxGL.ShapeSource
+              id="routeSource"
+              shape={{
+                type: 'LineString',
+                coordinates: routeCoords.map((c) => [c.longitude, c.latitude]),
+              }}
+            >
+              {/* Outer contrasting casing */}
+              <MapboxGL.LineLayer
+                id="routeCasing"
+                style={{
+                  lineColor: '#064E3B',
+                  lineWidth: 10,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+              {/* Vivid emerald navigation line */}
+              <MapboxGL.LineLayer
+                id="routeFill"
+                style={{
+                  lineColor: '#10B981',
+                  lineWidth: 6,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          )}
 
-        {/* Clean Directional Responder Arrow (Faces Travel Bearing, No Circular Container) */}
-        {displayedLocation && (
+          {/* Incident Destination Pin (Red emergency pin) */}
           <MapboxGL.PointAnnotation
-            id="userPuck"
-            coordinate={[displayedLocation.longitude, displayedLocation.latitude]}
-            anchor={{ x: 0.5, y: 0.5 }}
+            id="incidentDestination"
+            coordinate={[destination.longitude, destination.latitude]}
+            anchor={{ x: 0.5, y: 1.0 }}
           >
-            <ResponderNavigationArrow heading={heading} size={36} />
+            <IncidentLocationPin size={38} />
           </MapboxGL.PointAnnotation>
-        )}
-      </MapView>
 
-      <SafeAreaView className="flex-1 justify-between" edges={['top', 'bottom']} pointerEvents="box-none">
-        {/* Top Header */}
-        <View className="px-4 mt-2 flex-row items-center" pointerEvents="box-none">
-          <TouchableOpacity
-            onPress={handleBack}
-            className="bg-slate-900/90 p-3 rounded-full shadow-xl mr-3 border border-slate-700/50 pointer-events-auto"
-          >
-            <ArrowLeft size={24} color="#f8fafc" />
-          </TouchableOpacity>
-          <View className="flex-1 bg-slate-900/90 py-3 px-5 rounded-3xl shadow-xl border border-slate-700/50 flex-row items-center pointer-events-auto">
-            <View className="flex-1">
-              <Text className="text-white font-bold text-lg tracking-tight">Responding to Scene</Text>
-              {isCalculating ? (
-                <Text className="text-emerald-400/80 text-sm font-medium">Calculating fastest road route...</Text>
-              ) : (
-                <Text className="text-emerald-400/80 text-sm font-medium">Follow highlighted road path</Text>
-              )}
-            </View>
-          </View>
+          {/* 60 FPS Smoothly Interpolated Responder Navigation Marker */}
+          {displayedLocation && (
+            <SmoothResponderMarker
+              targetLocation={displayedLocation}
+              targetHeading={heading}
+              size={36}
+            />
+          )}
+        </MapView>
+      </View>
+
+      {/* Floating Top Navigation Header */}
+      <View
+        style={[styles.headerContainer, { top: insets.top + (Platform.OS === 'android' ? 8 : 4) }]}
+        pointerEvents="box-none"
+      >
+        {/* Back Navigation Button */}
+        <TouchableOpacity
+          onPress={handleBack}
+          activeOpacity={0.8}
+          style={styles.headerIconButton}
+          accessibilityLabel="Back to dispatch overview"
+        >
+          <ArrowLeft size={22} color="#F8FAFC" />
+        </TouchableOpacity>
+
+        {/* Current Navigation Status Card */}
+        <View style={styles.headerStatusCard}>
+          <Text style={styles.headerStatusTitle} numberOfLines={1}>
+            Responding to Scene
+          </Text>
+          {isCalculating ? (
+            <Text style={styles.headerStatusSubtitleCalculating} numberOfLines={1}>
+              Calculating fastest road route...
+            </Text>
+          ) : gpsAccuracyWarning ? (
+            <Text style={styles.headerStatusSubtitleWarning} numberOfLines={1}>
+              Weak GPS signal (±{gpsAccuracyWarning}m)
+            </Text>
+          ) : isOffline ? (
+            <Text style={styles.headerStatusSubtitleOffline} numberOfLines={1}>
+              Offline: Direct compass bearing
+            </Text>
+          ) : (
+            <Text style={styles.headerStatusSubtitle} numberOfLines={1}>
+              Follow highlighted road path
+            </Text>
+          )}
         </View>
 
-        {/* Bottom Panel */}
-        <View className="px-4 mb-4 flex-col items-end" pointerEvents="box-none">
-          <View className="flex-col items-center mb-6 space-y-4" pointerEvents="box-none">
-            {/* Manual Recalculate Route Button */}
-            <TouchableOpacity
-              onPress={() => {
-                if (displayedLocation && !isCalculating) {
-                  lastRecalcTimeRef.current = Date.now();
-                  calculateRoute(displayedLocation.latitude, displayedLocation.longitude, destination.latitude, destination.longitude);
-                }
-              }}
-              disabled={isCalculating}
-              className="w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto mb-3 bg-slate-900/90 border-slate-700/50"
-            >
-              {isCalculating ? (
-                <ActivityIndicator size="small" color="#34d399" />
-              ) : (
-                <RefreshCw size={22} color="#34d399" />
-              )}
-            </TouchableOpacity>
+        {/* Settings Button */}
+        <TouchableOpacity
+          onPress={() => setShowSettingsModal(true)}
+          activeOpacity={0.8}
+          style={styles.headerIconButton}
+          accessibilityLabel="Navigation settings"
+        >
+          <Settings size={22} color="#CBD5E1" />
+        </TouchableOpacity>
+      </View>
 
-            {/* Overview Map Button */}
-            <TouchableOpacity
-              onPress={handleOverview}
-              className={`w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto mb-3 ${
-                !isFpvMode ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-900/90 border-slate-700/50'
-              }`}
-            >
-              <MapIcon size={24} color={!isFpvMode ? '#ffffff' : '#94A3B8'} />
-            </TouchableOpacity>
+      {/* Floating Recenter Button (Appears when user explores/pans map) */}
+      {!isFollowing && (
+        <View style={[styles.recenterContainer, { bottom: 260 }]} pointerEvents="box-none">
+          <TouchableOpacity
+            onPress={handleRecenter}
+            activeOpacity={0.85}
+            style={styles.recenterButton}
+            accessibilityLabel="Recenter map on responder"
+          >
+            <Navigation size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.recenterButtonText}>RECENTER</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-            {/* FPV Mode Toggle Button */}
-            <TouchableOpacity
-              onPress={toggleFpv}
-              className={`w-14 h-14 rounded-full shadow-2xl items-center justify-center border pointer-events-auto ${
-                isFpvMode ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-900/90 border-slate-700/50'
-              }`}
-            >
-              <Layers size={24} color={isFpvMode ? '#ffffff' : '#34d399'} />
-            </TouchableOpacity>
+      {/* Floating Map Controls on the Right */}
+      <View style={styles.floatingControlsContainer} pointerEvents="box-none">
+        {/* Recalculate / Refresh Route */}
+        <TouchableOpacity
+          onPress={() => {
+            if (displayedLocation && !isCalculating) {
+              lastRecalcTimeRef.current = Date.now();
+              calculateRoute(displayedLocation.latitude, displayedLocation.longitude, destination.latitude, destination.longitude);
+            }
+          }}
+          disabled={isCalculating}
+          activeOpacity={0.8}
+          style={styles.floatingButton}
+          accessibilityLabel="Recalculate route"
+        >
+          {isCalculating ? (
+            <ActivityIndicator size="small" color="#10B981" />
+          ) : (
+            <RefreshCw size={20} color="#10B981" />
+          )}
+        </TouchableOpacity>
+
+        {/* Overview Fit Bounds Button */}
+        <TouchableOpacity
+          onPress={handleOverview}
+          activeOpacity={0.8}
+          style={[styles.floatingButton, !isFpvMode && !isFollowing ? styles.floatingButtonActive : null]}
+          accessibilityLabel="Fit route overview"
+        >
+          <MapIcon size={20} color={!isFpvMode && !isFollowing ? '#FFFFFF' : '#CBD5E1'} />
+        </TouchableOpacity>
+
+        {/* 3D FPV Perspective Mode Button */}
+        <TouchableOpacity
+          onPress={toggleFpv}
+          activeOpacity={0.8}
+          style={[styles.floatingButton, isFpvMode ? styles.floatingButtonActive : null]}
+          accessibilityLabel="Toggle 3D tracking perspective"
+        >
+          <Layers size={20} color={isFpvMode ? '#FFFFFF' : '#CBD5E1'} />
+        </TouchableOpacity>
+
+        {/* External Map Application (Google Maps / Waze) */}
+        <TouchableOpacity
+          onPress={handleOpenExternalNav}
+          activeOpacity={0.8}
+          style={styles.floatingButton}
+          accessibilityLabel="Open in external Google Maps"
+        >
+          <Compass size={20} color="#38BDF8" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Bottom Navigation Information Panel */}
+      <View
+        style={[styles.bottomPanelWrapper, { paddingBottom: Math.max(insets.bottom, 16) }]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.bottomCard}>
+          {/* Row 1: ETA & Distance with Green ACTIVE Status Indicator */}
+          <View style={styles.metricRow}>
+            <View style={styles.metricLeft}>
+              <Text style={styles.etaText}>
+                {routeInfo?.duration || (displayedLocation ? `${Math.max(1, Math.ceil((distanceToScene / 1000) * 2))} min` : '-- min')}
+              </Text>
+              <Text style={styles.distanceText}>
+                {routeInfo?.distance
+                  ? `${routeInfo.distance} REMAINING`
+                  : displayedLocation
+                  ? `${(distanceToScene / 1000).toFixed(1)} KM REMAINING`
+                  : 'CALCULATING REMAINING...'}
+              </Text>
+            </View>
+
+            <View style={styles.activeBadge}>
+              <View style={styles.activeDot} />
+              <Text style={styles.activeBadgeText}>
+                {isCalculating ? 'ROUTING' : isOffline ? 'OFFLINE' : 'ACTIVE'}
+              </Text>
+            </View>
           </View>
 
-          {/* Info Card */}
-          <View className="bg-slate-900/95 w-full rounded-[32px] p-6 shadow-2xl border border-slate-700/80 pointer-events-auto">
-            {routeInfo ? (
-              <View className="flex-row justify-between items-end mb-6">
-                <View>
-                  <Text className="text-6xl font-black text-emerald-400 tracking-tighter shadow-sm">
-                    {routeInfo.duration}
-                  </Text>
-                  <Text className="text-slate-400 font-bold text-sm tracking-widest uppercase mt-1">
-                    {routeInfo.distance} remaining
-                  </Text>
-                </View>
-                <View className="bg-emerald-500/20 px-4 py-2 rounded-full border border-emerald-500/30 flex-row items-center">
-                  {isCalculating && <ActivityIndicator color="#34d399" size="small" style={{ marginRight: 6 }} />}
-                  <Text className="text-emerald-400 font-black text-xs tracking-widest">
-                    {isCalculating ? 'ROUTING' : 'ACTIVE'}
-                  </Text>
-                </View>
+          {/* Row 2: GPS Distance & Manual Override Warning Container */}
+          {!isWithinRange ? (
+            <View style={styles.warningContainer}>
+              <View style={styles.warningLeft}>
+                <AlertTriangle size={16} color="#F59E0B" style={{ marginRight: 8 }} />
+                <Text style={styles.warningText} numberOfLines={1}>
+                  {displayedLocation
+                    ? `${Math.round(distanceToScene)}m away (Limit: ${ARRIVAL_RADIUS_METERS}m)`
+                    : 'Acquiring GPS proximity...'}
+                </Text>
               </View>
-            ) : (
-              <View className="py-2 mb-2">
-                <View className="flex-row justify-between items-end mb-2">
-                  <View>
-                    <Text className="text-4xl font-black text-amber-400 tracking-tighter">
-                      {displayedLocation
-                        ? Math.round(distanceToScene) < 1000
-                          ? `${Math.round(distanceToScene)} m`
-                          : `${(distanceToScene / 1000).toFixed(1)} km`
-                        : '--'}
-                    </Text>
-                    <Text className="text-slate-400 font-bold text-xs tracking-widest uppercase mt-0.5">
-                      Direct Distance to Incident Pin
-                    </Text>
-                  </View>
-                  <View className="bg-amber-500/20 px-3 py-1.5 rounded-full border border-amber-500/30">
-                    <Text className="text-amber-400 font-bold text-[10px] tracking-wider uppercase">
-                      {isOffline ? 'OFFLINE COMPASS' : (isCalculating ? 'ROUTING' : 'DIRECT PATH')}
-                    </Text>
-                  </View>
-                </View>
-                {isOffline && (
-                  <Text className="text-slate-400 text-xs">
-                    Offline mode: Turn-by-turn road calculation requires internet. Follow direct compass bearing.
-                  </Text>
-                )}
-              </View>
-            )}
+              <TouchableOpacity
+                onPress={confirmManualArrival}
+                disabled={isArriving}
+                activeOpacity={0.8}
+                style={styles.overrideButton}
+              >
+                <Text style={styles.overrideButtonText}>Override GPS</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.successContainer}>
+              <CheckCircle2 size={16} color="#10B981" style={{ marginRight: 8 }} />
+              <Text style={styles.successText}>
+                Within arrival range ({Math.round(distanceToScene)}m from incident pin)
+              </Text>
+            </View>
+          )}
 
-            {!isWithinRange ? (
-              <View className="flex-row items-center justify-between mb-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
-                <View className="flex-row items-center flex-1 mr-2">
-                  <AlertTriangle size={15} color="#f59e0b" style={{ marginRight: 6 }} />
-                  <Text className="text-amber-400 text-xs font-semibold">
-                    {displayedLocation
-                      ? `${Math.round(distanceToScene)}m away (Limit: ${ARRIVAL_RADIUS_METERS}m)`
-                      : 'Acquiring GPS to verify arrival proximity...'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={confirmManualArrival}
-                  disabled={isArriving}
-                  className="bg-amber-500/25 px-2.5 py-1 rounded-lg border border-amber-500/40"
-                >
-                  <Text className="text-amber-300 font-bold text-[11px]">Override GPS</Text>
-                </TouchableOpacity>
-              </View>
+          {/* Row 3: Prominent Arrived Button */}
+          <TouchableOpacity
+            onPress={handleArrived}
+            disabled={isArriving}
+            activeOpacity={0.88}
+            style={[
+              styles.btnArrived,
+              !isWithinRange ? styles.btnArrivedOverride : styles.btnArrivedNormal,
+            ]}
+          >
+            {isArriving ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <View className="flex-row items-center justify-center mb-3 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                <CheckCircle size={15} color="#34d399" style={{ marginRight: 6 }} />
-                <Text className="text-emerald-400 text-xs font-bold text-center">
-                  Within arrival range ({Math.round(distanceToScene)}m from incident pin)
+              <View style={styles.btnContentRow}>
+                {!isWithinRange ? (
+                  <ShieldAlert size={21} color="#FEF3C7" style={{ marginRight: 8 }} />
+                ) : (
+                  <ShieldCheck size={21} color="#FFFFFF" style={{ marginRight: 8 }} />
+                )}
+                <Text style={styles.btnArrivedText}>
+                  {!isWithinRange ? 'ARRIVED (MANUAL OVERRIDE)' : 'ARRIVED ON SCENE'}
                 </Text>
               </View>
             )}
+          </TouchableOpacity>
 
+          {/* Row 4: Secondary False Alarm / No Incident Found Button */}
+          <TouchableOpacity
+            onPress={() => setShowUnfoundedModal(true)}
+            activeOpacity={0.8}
+            style={styles.btnUnfounded}
+          >
+            <AlertTriangle size={15} color="#F59E0B" style={{ marginRight: 8 }} />
+            <Text style={styles.btnUnfoundedText}>
+              No Incident Found / False Alarm
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Navigation Settings & Map Options Modal */}
+      <Modal
+        visible={showSettingsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalContentDark}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleRow}>
+                <Settings size={20} color="#10B981" style={{ marginRight: 8 }} />
+                <Text style={styles.modalTitleDark}>Navigation Settings</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowSettingsModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <X size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Map View Mode Toggle */}
+            <Text style={styles.modalSectionLabel}>Map Display Style</Text>
+            <View style={styles.settingToggleRow}>
+              <TouchableOpacity
+                onPress={() => setMapStyle('dark')}
+                style={[
+                  styles.settingToggleOption,
+                  mapStyle === 'dark' ? styles.settingToggleOptionActive : null,
+                ]}
+              >
+                <Text style={[styles.settingToggleText, mapStyle === 'dark' ? styles.settingToggleTextActive : null]}>
+                  Dark Tactical Map
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setMapStyle('satellite')}
+                style={[
+                  styles.settingToggleOption,
+                  mapStyle === 'satellite' ? styles.settingToggleOptionActive : null,
+                ]}
+              >
+                <Text style={[styles.settingToggleText, mapStyle === 'satellite' ? styles.settingToggleTextActive : null]}>
+                  Satellite Aerial
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* External Navigation Link */}
+            <Text style={[styles.modalSectionLabel, { marginTop: 16 }]}>External Navigation</Text>
             <TouchableOpacity
-              onPress={handleArrived}
-              disabled={isArriving}
-              activeOpacity={0.85}
-              style={[
-                styles.btnArrived,
-                !isWithinRange && styles.btnArrivedOverride,
-              ]}
+              onPress={() => {
+                setShowSettingsModal(false);
+                handleOpenExternalNav();
+              }}
+              style={styles.externalNavRow}
             >
-              {isArriving ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  {isWithinRange ? (
-                    <Ambulance size={22} color="#ffffff" style={{ marginRight: 10 }} />
-                  ) : (
-                    <ShieldAlert size={20} color="#fef3c7" style={{ marginRight: 8 }} />
-                  )}
-                  <Text style={styles.btnArrivedText}>
-                    {isWithinRange ? 'ARRIVED ON SCENE' : 'ARRIVED (MANUAL OVERRIDE)'}
-                  </Text>
-                </View>
-              )}
+              <Compass size={18} color="#38BDF8" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.externalNavTitle}>Open in Google Maps / Waze</Text>
+                <Text style={styles.externalNavSubtitle}>Launch external turn-by-turn spoken directions</Text>
+              </View>
+              <ExternalLink size={16} color="#64748B" />
             </TouchableOpacity>
 
-            {/* Report No Incident / False Alarm on Scene Button */}
-            <TouchableOpacity
-              onPress={() => setShowUnfoundedModal(true)}
-              activeOpacity={0.8}
-              style={styles.btnUnfounded}
-            >
-              <AlertTriangle size={15} color="#F59E0B" style={{ marginRight: 6 }} />
-              <Text style={styles.btnUnfoundedText}>
-                No Incident Found / False Alarm
+            {/* Incident Destination Info */}
+            <Text style={[styles.modalSectionLabel, { marginTop: 16 }]}>Target Coordinates</Text>
+            <View style={styles.coordBox}>
+              <MapPin size={16} color="#EF4444" style={{ marginRight: 8 }} />
+              <Text style={styles.coordText}>
+                {destination.latitude.toFixed(6)}, {destination.longitude.toFixed(6)}
               </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => setShowSettingsModal(false)}
+              style={styles.modalDoneButton}
+            >
+              <Text style={styles.modalDoneButtonText}>Close Settings</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+      </Modal>
 
       {/* Modal to report Negative on Scene / False Alarm / Prank */}
       <Modal
@@ -677,47 +981,55 @@ export default function NavigationScreen() {
         onRequestClose={() => !isSubmittingUnfounded && setShowUnfoundedModal(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
-            <View className="items-center mb-3">
-              <View className="w-14 h-14 bg-amber-100 rounded-full items-center justify-center mb-2">
-                <AlertTriangle size={28} color="#D97706" />
+          <View style={styles.modalContentDark}>
+            <View style={styles.modalHeaderCenter}>
+              <View style={styles.amberWarningCircle}>
+                <AlertTriangle size={28} color="#F59E0B" />
               </View>
-              <Text className="text-lg font-bold text-slate-800 text-center">
+              <Text style={styles.unfoundedModalTitle}>
                 Report Negative on Scene
               </Text>
-              <Text className="text-slate-500 text-xs text-center mt-1">
-                If there is no incident or victim found at this location, report it to cancel this mission and release your ambulance.
+              <Text style={styles.unfoundedModalSubtitle}>
+                If there is zero incident or no patient found at this location, report it to close this mission and release your crew.
               </Text>
             </View>
 
             {/* Selection Category */}
-            <View className="flex-row gap-2 mb-3">
+            <View style={styles.unfoundedCategoryRow}>
               <TouchableOpacity
                 onPress={() => setUnfoundedCategory('false_alarm')}
-                className={`flex-1 p-2.5 rounded-xl border items-center ${
-                  unfoundedCategory === 'false_alarm'
-                    ? 'bg-amber-50 border-amber-500'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
+                style={[
+                  styles.categoryCard,
+                  unfoundedCategory === 'false_alarm' ? styles.categoryCardActiveAmber : null,
+                ]}
               >
-                <Text className={`text-xs font-bold ${unfoundedCategory === 'false_alarm' ? 'text-amber-700' : 'text-slate-600'}`}>
+                <Text
+                  style={[
+                    styles.categoryCardTitle,
+                    unfoundedCategory === 'false_alarm' ? styles.categoryCardTitleActiveAmber : null,
+                  ]}
+                >
                   ⚠️ False Alarm
                 </Text>
-                <Text className="text-[10px] text-slate-400 text-center mt-0.5">Good faith / Left scene</Text>
+                <Text style={styles.categoryCardSubtitle}>Good faith / Left scene</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => setUnfoundedCategory('prank')}
-                className={`flex-1 p-2.5 rounded-xl border items-center ${
-                  unfoundedCategory === 'prank'
-                    ? 'bg-red-50 border-red-500'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
+                style={[
+                  styles.categoryCard,
+                  unfoundedCategory === 'prank' ? styles.categoryCardActiveRed : null,
+                ]}
               >
-                <Text className={`text-xs font-bold ${unfoundedCategory === 'prank' ? 'text-red-700' : 'text-slate-600'}`}>
+                <Text
+                  style={[
+                    styles.categoryCardTitle,
+                    unfoundedCategory === 'prank' ? styles.categoryCardTitleActiveRed : null,
+                  ]}
+                >
                   🚨 Intentional Prank
                 </Text>
-                <Text className="text-[10px] text-slate-400 text-center mt-0.5">Fabricated hoax</Text>
+                <Text style={styles.categoryCardSubtitle}>Fabricated hoax</Text>
               </TouchableOpacity>
             </View>
 
@@ -725,32 +1037,31 @@ export default function NavigationScreen() {
             <TextInput
               value={unfoundedReason}
               onChangeText={setUnfoundedReason}
-              placeholder="Enter details (e.g. Conducted area sweep, no patient found, caller unreachable)..."
-              placeholderTextColor="#94A3B8"
+              placeholder="Enter area sweep details (e.g. Conducted 360 survey, zero patients found, caller unreachable)..."
+              placeholderTextColor="#64748B"
               multiline
               numberOfLines={3}
-              className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 mb-4"
-              style={{ textAlignVertical: 'top', height: 75 }}
+              style={styles.unfoundedTextInput}
             />
 
-            <View className="flex-row gap-3">
+            <View style={styles.unfoundedActionsRow}>
               <TouchableOpacity
                 disabled={isSubmittingUnfounded}
                 onPress={() => setShowUnfoundedModal(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-100 items-center justify-center"
+                style={styles.unfoundedCancelBtn}
               >
-                <Text className="text-xs font-bold text-slate-600">Cancel</Text>
+                <Text style={styles.unfoundedCancelBtnText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 disabled={isSubmittingUnfounded}
                 onPress={handleConfirmUnfounded}
-                className="flex-1 py-3 rounded-xl bg-[#FF3B30] items-center justify-center"
+                style={styles.unfoundedSubmitBtn}
               >
                 {isSubmittingUnfounded ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text className="text-xs font-bold text-white">Submit & Free Unit</Text>
+                  <Text style={styles.unfoundedSubmitBtnText}>Submit & Free Unit</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -762,75 +1073,560 @@ export default function NavigationScreen() {
 }
 
 const styles = StyleSheet.create({
-  btnArrived: {
-    width: '100%',
-    backgroundColor: '#059669',
-    paddingVertical: 18,
-    borderRadius: 18,
+  screenContainer: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+
+  // Floating Navigation Header
+  headerContainer: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    zIndex: 50,
   },
-  btnArrivedOverride: {
-    backgroundColor: '#b45309',
-    borderColor: '#f59e0b',
-    borderWidth: 1,
-    shadowColor: '#d97706',
-  },
-  btnArrivedDisabled: {
-    backgroundColor: '#1e293b',
+  headerIconButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#172235',
     borderWidth: 1,
     borderColor: '#334155',
-    shadowOpacity: 0,
-    elevation: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  btnArrivedText: {
-    color: '#ffffff',
-    fontWeight: '900',
+  headerStatusCard: {
+    flex: 1,
+    marginHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#172235',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerStatusTitle: {
+    color: '#F8FAFC',
+    fontWeight: '800',
     fontSize: 16,
+    letterSpacing: 0.3,
+  },
+  headerStatusSubtitle: {
+    color: '#10B981',
+    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  headerStatusSubtitleCalculating: {
+    color: '#38BDF8',
+    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  headerStatusSubtitleWarning: {
+    color: '#F59E0B',
+    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  headerStatusSubtitleOffline: {
+    color: '#F59E0B',
+    fontWeight: '600',
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  // Floating Recenter Button
+  recenterContainer: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 42,
+  },
+  recenterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E88E5',
+    borderColor: '#60A5FA',
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  recenterButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 1.1,
+  },
+
+  // Floating Controls on Right
+  floatingControlsContainer: {
+    position: 'absolute',
+    right: 16,
+    bottom: 255,
+    zIndex: 40,
+    alignItems: 'center',
+  },
+  floatingButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#172235',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  floatingButtonActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+  },
+
+  // Bottom Navigation Panel
+  bottomPanelWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    zIndex: 45,
+  },
+  bottomCard: {
+    backgroundColor: '#172235',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  metricRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  metricLeft: {
+    flex: 1,
+  },
+  etaText: {
+    fontSize: 38,
+    fontWeight: '900',
+    color: '#10B981',
+    letterSpacing: -1,
+    lineHeight: 42,
+  },
+  distanceText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#94A3B8',
     letterSpacing: 1.2,
+    marginTop: 4,
+    textTransform: 'uppercase',
   },
-  btnArrivedTextDisabled: {
-    color: '#64748b',
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.14)',
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
   },
-  btnUnfounded: {
-    marginTop: 10,
+  activeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10B981',
+    marginRight: 6,
+  },
+  activeBadgeText: {
+    color: '#10B981',
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 1.5,
+  },
+
+  // Warnings
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  warningLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  warningText: {
+    color: '#F59E0B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  overrideButton: {
+    backgroundColor: 'rgba(245, 158, 11, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.5)',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  overrideButtonText: {
+    color: '#FDE68A',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  successContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    backgroundColor: 'rgba(30, 41, 59, 0.9)',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(71, 85, 105, 0.6)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  successText: {
+    color: '#10B981',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Arrived Button
+  btnArrived: {
+    width: '100%',
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  btnArrivedNormal: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+    borderWidth: 1,
+    shadowColor: '#10B981',
+  },
+  btnArrivedOverride: {
+    backgroundColor: '#D97706',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    shadowColor: '#D97706',
+  },
+  btnContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnArrivedText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 15,
+    letterSpacing: 1.1,
+  },
+
+  // False Alarm Secondary Button
+  btnUnfounded: {
+    marginTop: 10,
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   btnUnfoundedText: {
-    color: '#FCD34D',
+    color: '#FBBF24',
     fontWeight: '700',
     fontSize: 13,
   },
+
+  // Modals
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  modalContent: {
+  modalContentDark: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#172235',
     borderRadius: 24,
-    padding: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 22,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.35,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 12,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalTitleDark: {
+    color: '#F8FAFC',
+    fontWeight: '800',
+    fontSize: 17,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSectionLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  settingToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  settingToggleOption: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  settingToggleOptionActive: {
+    backgroundColor: '#10B981',
+  },
+  settingToggleText: {
+    color: '#94A3B8',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  settingToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  externalNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 12,
+  },
+  externalNavTitle: {
+    color: '#F8FAFC',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  externalNavSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  coordBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 10,
+  },
+  coordText: {
+    color: '#CBD5E1',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  modalDoneButton: {
+    marginTop: 20,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  modalDoneButtonText: {
+    color: '#CBD5E1',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  // Unfounded modal styles
+  modalHeaderCenter: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  amberWarningCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  unfoundedModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+  },
+  unfoundedModalSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  unfoundedCategoryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  categoryCard: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+  },
+  categoryCardActiveAmber: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: '#F59E0B',
+  },
+  categoryCardActiveRed: {
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    borderColor: '#DC2626',
+  },
+  categoryCardTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#CBD5E1',
+  },
+  categoryCardTitleActiveAmber: {
+    color: '#FBBF24',
+  },
+  categoryCardTitleActiveRed: {
+    color: '#F87171',
+  },
+  categoryCardSubtitle: {
+    fontSize: 10,
+    color: '#64748B',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  unfoundedTextInput: {
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 12,
+    color: '#F8FAFC',
+    height: 75,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  unfoundedActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  unfoundedCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unfoundedCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#CBD5E1',
+  },
+  unfoundedSubmitBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  unfoundedSubmitBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

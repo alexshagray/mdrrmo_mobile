@@ -53,6 +53,11 @@ export const changeResponderPasswordApi = async (data) => {
   return response.data;
 };
 
+export const updateResponderPersonalApi = async (data) => {
+  const response = await apiClient.put('/responder/profile/personal', data);
+  return response.data;
+};
+
 export const getBarangaysApi = async () => {
   const response = await apiClient.get('/barangays');
   return response.data;

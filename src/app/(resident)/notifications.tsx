@@ -7,11 +7,14 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  StyleSheet,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   Bell,
+  ArrowLeft,
   Search,
   CheckCheck,
   ShieldCheck,
@@ -23,13 +26,16 @@ import {
   Radio,
   ChevronRight,
   Info,
+  Navigation,
 } from 'lucide-react-native';
 import { getMyReports } from '@/shared/api/incidents';
+import { BrandBackground } from '@/shared/components';
 import {
   getStoredNotifications,
   saveNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  generateNotificationsFromReports,
 } from '@/shared/api/notifications';
 
 interface NotificationItem {
@@ -67,127 +73,13 @@ export default function NotificationsScreen() {
         }
       });
 
-      // 3. Build notifications list from actual reports
-      const generatedNotifs: NotificationItem[] = [];
+      // 3. Build unified notifications list
+      const generatedNotifs = generateNotificationsFromReports(reportsList, readMap);
+      setNotifications(generatedNotifs as NotificationItem[]);
 
-      // System announcement default
-      generatedNotifs.push({
-        id: 'system-opol-ems-online',
-        title: 'OPOL RESQ Emergency Services Online',
-        message: 'OPOL RESQ Emergency Medical Response System by MDRRMO Opol is active 24/7. In life-threatening emergencies, call 0917-707-6765.',
-        type: 'system',
-        timestamp: new Date().toISOString(),
-        read: readMap.get('system-opol-ems-online') || false,
-      });
-
-      reportsList.forEach((r) => {
-        const idCode = `INC-2026-${r.id?.toString().padStart(5, '0')}`;
-        const typeName = r.incident_type?.name || r.incident_type || 'Medical Emergency';
-        const activeDispatch = r.active_dispatch;
-        const dStatus = activeDispatch?.dispatch_status;
-
-        // Base notification: Report Received
-        const receivedId = `notif-${r.id}-received`;
-        generatedNotifs.push({
-          id: receivedId,
-          reportId: r.id,
-          title: `Emergency Report Received (${idCode})`,
-          message: `Your report for "${typeName}" was received by MDRRMO Command Center and placed in dispatch queue.`,
-          type: 'received',
-          timestamp: r.reported_at || r.created_at,
-          read: readMap.get(receivedId) || false,
-        });
-
-        // Verification or Rejection
-        if (r.incident_status === 'rejected') {
-          const rejectedId = `notif-${r.id}-rejected`;
-          const reason = r.verification_remarks || r.rejection_reason || 'Does not qualify for emergency vehicle dispatch.';
-          generatedNotifs.push({
-            id: rejectedId,
-            reportId: r.id,
-            title: `Report Not Approved (${idCode})`,
-            message: `Dispatcher Review: Declined. Reason: ${reason}`,
-            type: 'rejected',
-            timestamp: r.updated_at || r.reported_at,
-            read: readMap.get(rejectedId) || false,
-            rejectionReason: reason,
-          });
-        } else if (['verified', 'assigned', 'responding', 'resolved'].includes(r.incident_status)) {
-          const verifiedId = `notif-${r.id}-verified`;
-          generatedNotifs.push({
-            id: verifiedId,
-            reportId: r.id,
-            title: `Report Verified (${idCode})`,
-            message: `Command Center has approved your emergency report. Resources are mobilized.`,
-            type: 'verified',
-            timestamp: r.verified_at || r.updated_at || r.reported_at,
-            read: readMap.get(verifiedId) || false,
-          });
-        }
-
-        // Assigned
-        if (activeDispatch || ['assigned', 'responding'].includes(r.incident_status)) {
-          const assignedId = `notif-${r.id}-assigned`;
-          const unit = activeDispatch?.ambulance?.vehicle_name || 'Ambulance Unit';
-          generatedNotifs.push({
-            id: assignedId,
-            reportId: r.id,
-            title: `Responder Assigned (${idCode})`,
-            message: `${unit} has been assigned to your emergency report and is preparing departure.`,
-            type: 'assigned',
-            timestamp: activeDispatch?.created_at || r.updated_at,
-            read: readMap.get(assignedId) || false,
-          });
-        }
-
-        // En route
-        if (['en_route', 'arrived_on_scene', 'completed'].includes(dStatus)) {
-          const enRouteId = `notif-${r.id}-en_route`;
-          generatedNotifs.push({
-            id: enRouteId,
-            reportId: r.id,
-            title: `Responder En Route (${idCode})`,
-            message: `Emergency response unit is traveling to your reported location. Track live on the map.`,
-            type: 'en_route',
-            timestamp: activeDispatch?.updated_at || r.updated_at,
-            read: readMap.get(enRouteId) || false,
-          });
-        }
-
-        // Arrived
-        if (['arrived_on_scene', 'completed'].includes(dStatus)) {
-          const arrivedId = `notif-${r.id}-arrived`;
-          generatedNotifs.push({
-            id: arrivedId,
-            reportId: r.id,
-            title: `Responders On Scene (${idCode})`,
-            message: `Emergency medical team has arrived at your emergency scene.`,
-            type: 'arrived',
-            timestamp: activeDispatch?.updated_at || r.updated_at,
-            read: readMap.get(arrivedId) || false,
-          });
-        }
-
-        // Completed
-        if (r.incident_status === 'resolved' || dStatus === 'completed') {
-          const compId = `notif-${r.id}-completed`;
-          generatedNotifs.push({
-            id: compId,
-            reportId: r.id,
-            title: `Emergency Mission Completed (${idCode})`,
-            message: `Patient care and transport concluded successfully. Stay safe!`,
-            type: 'completed',
-            timestamp: r.resolved_at || r.updated_at,
-            read: readMap.get(compId) || false,
-          });
-        }
-      });
-
-      // Sort newest first
-      generatedNotifs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-      setNotifications(generatedNotifs);
-      await saveNotifications(generatedNotifs);
+      // Mark all current notifications as read now that resident has opened notifications screen
+      const allRead = generatedNotifs.map((n: any) => ({ ...n, read: true }));
+      await saveNotifications(allRead);
     } catch (err) {
       console.error('Failed to load notifications:', err);
     } finally {
@@ -198,6 +90,9 @@ export default function NotificationsScreen() {
 
   useEffect(() => {
     loadNotifications();
+    return () => {
+      markAllNotificationsRead();
+    };
   }, [loadNotifications]);
 
   const onRefresh = () => {
@@ -226,22 +121,89 @@ export default function NotificationsScreen() {
     await markAllNotificationsRead();
   };
 
-  const getNotifIcon = (type: NotificationItem['type']) => {
+  const getNotifMeta = (type: NotificationItem['type']) => {
     switch (type) {
       case 'rejected':
-        return { icon: XCircle, color: '#FF3B30', bg: 'bg-red-50 border-red-200/70' };
-      case 'verified':
-        return { icon: ShieldCheck, color: '#208AEF', bg: 'bg-blue-50 border-blue-200/70' };
-      case 'assigned':
-      case 'en_route':
-        return { icon: Ambulance, color: '#208AEF', bg: 'bg-blue-50 border-blue-200/70' };
-      case 'arrived':
+        return {
+          icon: XCircle,
+          color: '#DC2626',
+          bg: '#FEF2F2',
+          border: '#FECACA',
+          badgeBg: '#FEE2E2',
+          badgeText: '#B91C1C',
+          tag: 'DECLINED',
+        };
       case 'completed':
-        return { icon: CheckCircle2, color: '#059669', bg: 'bg-emerald-50 border-emerald-200/70' };
+        return {
+          icon: CheckCircle2,
+          color: '#059669',
+          bg: '#ECFDF5',
+          border: '#A7F3D0',
+          badgeBg: '#D1FAE5',
+          badgeText: '#047857',
+          tag: 'COMPLETED',
+        };
+      case 'arrived':
+        return {
+          icon: CheckCircle2,
+          color: '#059669',
+          bg: '#ECFDF5',
+          border: '#A7F3D0',
+          badgeBg: '#D1FAE5',
+          badgeText: '#047857',
+          tag: 'ON SCENE',
+        };
+      case 'en_route':
+        return {
+          icon: Navigation,
+          color: '#208AEF',
+          bg: '#EFF6FF',
+          border: '#BFDBFE',
+          badgeBg: '#DBEAFE',
+          badgeText: '#1D4ED8',
+          tag: 'EN ROUTE',
+        };
+      case 'assigned':
+        return {
+          icon: Ambulance,
+          color: '#208AEF',
+          bg: '#EFF6FF',
+          border: '#BFDBFE',
+          badgeBg: '#DBEAFE',
+          badgeText: '#1D4ED8',
+          tag: 'UNIT ASSIGNED',
+        };
+      case 'verified':
+        return {
+          icon: ShieldCheck,
+          color: '#208AEF',
+          bg: '#EFF6FF',
+          border: '#BFDBFE',
+          badgeBg: '#DBEAFE',
+          badgeText: '#1D4ED8',
+          tag: 'VERIFIED',
+        };
       case 'system':
-        return { icon: Radio, color: '#D97706', bg: 'bg-amber-50 border-amber-200/70' };
+        return {
+          icon: Radio,
+          color: '#D97706',
+          bg: '#FFFBEB',
+          border: '#FDE68A',
+          badgeBg: '#FEF3C7',
+          badgeText: '#B45309',
+          tag: 'ANNOUNCEMENT',
+        };
+      case 'received':
       default:
-        return { icon: Clock, color: '#64748B', bg: 'bg-slate-100 border-slate-200' };
+        return {
+          icon: Clock,
+          color: '#208AEF',
+          bg: '#EFF6FF',
+          border: '#BFDBFE',
+          badgeBg: '#DBEAFE',
+          badgeText: '#1D4ED8',
+          tag: 'DISPATCH QUEUE',
+        };
     }
   };
 
@@ -276,199 +238,594 @@ export default function NotificationsScreen() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View className="flex-row items-center justify-between px-5 py-3 border-b border-slate-200/80 bg-white">
-        <View className="flex-row items-center">
-          <View className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200/60 items-center justify-center mr-3">
-            <Bell size={20} color="#208AEF" />
-          </View>
-          <View>
-            <Text className="text-slate-900 text-base font-bold tracking-tight">Notifications</Text>
-            <Text className="text-slate-400 text-xs font-medium">Emergency Alerts & Updates</Text>
-          </View>
-        </View>
+    <View style={styles.container}>
+      <BrandBackground variant="subpage" />
 
-        {unreadCount > 0 ? (
-          <TouchableOpacity
-            onPress={handleMarkAllRead}
-            className="flex-row items-center bg-slate-100 active:bg-slate-200 px-3 py-1.5 rounded-xl border border-slate-200/80"
-            activeOpacity={0.7}
-          >
-            <CheckCheck size={14} color="#208AEF" />
-            <Text className="text-[#208AEF] text-xs font-bold ml-1.5">Mark All Read</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Top App Bar */}
+        <View style={styles.appBar}>
+          <View style={styles.appBarLeft}>
+            <TouchableOpacity
+              onPress={async () => {
+                await markAllNotificationsRead();
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace('/(resident)');
+                }
+              }}
+              style={styles.backButton}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Back to Home"
+            >
+              <ArrowLeft size={18} color="#FFFFFF" strokeWidth={2.4} />
+            </TouchableOpacity>
+            <View>
+              <Text style={styles.appBarTitle}>Notifications</Text>
+              <Text style={styles.appBarSubtitle}>Emergency Alerts & Updates</Text>
+            </View>
+          </View>
 
-      {/* Search Input Bar */}
-      <View className="px-5 pt-3.5 pb-2">
-        <View className="flex-row items-center bg-white border border-slate-200/80 rounded-2xl px-4 py-2.5 shadow-sm">
-          <Search size={18} color="#94A3B8" />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search alerts & notifications..."
-            placeholderTextColor="#94A3B8"
-            className="flex-1 ml-3 text-slate-800 text-sm font-medium"
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <XCircle size={16} color="#94A3B8" />
+          {unreadCount > 0 ? (
+            <TouchableOpacity
+              onPress={handleMarkAllRead}
+              style={styles.markAllButton}
+              activeOpacity={0.7}
+            >
+              <CheckCheck size={15} color="#FFFFFF" strokeWidth={2.2} />
+              <Text style={styles.markAllText}>Mark all read</Text>
             </TouchableOpacity>
           ) : null}
         </View>
-      </View>
 
-      {/* Filter Tabs */}
-      <View className="flex-row gap-2 px-5 py-2">
-        <TouchableOpacity
-          onPress={() => setFilterTab('all')}
-          className={`px-4 py-2 rounded-2xl border ${
-            filterTab === 'all'
-              ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
-              : 'bg-white border-slate-200/80'
-          }`}
-          activeOpacity={0.75}
-        >
-          <Text className={`text-xs font-bold ${filterTab === 'all' ? 'text-white' : 'text-slate-600'}`}>
-            All ({notifications.length})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setFilterTab('unread')}
-          className={`px-4 py-2 rounded-2xl border ${
-            filterTab === 'unread'
-              ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
-              : 'bg-white border-slate-200/80'
-          }`}
-          activeOpacity={0.75}
-        >
-          <Text className={`text-xs font-bold ${filterTab === 'unread' ? 'text-white' : 'text-slate-600'}`}>
-            Unread ({unreadCount})
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => setFilterTab('updates')}
-          className={`px-4 py-2 rounded-2xl border ${
-            filterTab === 'updates'
-              ? 'bg-[#208AEF] border-[#208AEF] shadow-sm'
-              : 'bg-white border-slate-200/80'
-          }`}
-          activeOpacity={0.75}
-        >
-          <Text className={`text-xs font-bold ${filterTab === 'updates' ? 'text-white' : 'text-slate-600'}`}>
-            Report Updates
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Notification List */}
-      {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#208AEF" />
-          <Text className="text-slate-400 text-sm mt-3 font-medium">Loading notifications...</Text>
-        </View>
-      ) : (
-        <ScrollView
-          className="flex-1 px-5 pt-2"
-          contentContainerStyle={{ paddingBottom: 110 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={onRefresh}
-              tintColor="#208AEF"
-              colors={['#208AEF']}
+        {/* Search Input Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBox}>
+            <Search size={18} color="#64748B" />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search alerts & updates..."
+              placeholderTextColor="#94A3B8"
+              style={styles.searchInput}
             />
-          }
-        >
-          {filteredNotifs.length === 0 ? (
-            <View className="items-center justify-center py-16 px-4 bg-white border border-slate-200/80 rounded-3xl mt-4 shadow-sm">
-              <View className="w-16 h-16 rounded-2xl bg-slate-100 items-center justify-center border border-slate-200/60 mb-3">
-                <Bell size={28} color="#94A3B8" />
+            {searchQuery ? (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.clearSearchBtn}
+              >
+                <XCircle size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Filter Tabs */}
+        <View style={styles.filterTabsRow}>
+          <TouchableOpacity
+            onPress={() => setFilterTab('all')}
+            style={[
+              styles.filterTab,
+              filterTab === 'all' ? styles.filterTabActive : styles.filterTabInactive,
+            ]}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={[
+                styles.filterTabText,
+                filterTab === 'all' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+              ]}
+            >
+              All ({notifications.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setFilterTab('unread')}
+            style={[
+              styles.filterTab,
+              filterTab === 'unread' ? styles.filterTabActive : styles.filterTabInactive,
+            ]}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={[
+                styles.filterTabText,
+                filterTab === 'unread' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+              ]}
+            >
+              Unread ({unreadCount})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setFilterTab('updates')}
+            style={[
+              styles.filterTab,
+              filterTab === 'updates' ? styles.filterTabActive : styles.filterTabInactive,
+            ]}
+            activeOpacity={0.75}
+          >
+            <Text
+              style={[
+                styles.filterTabText,
+                filterTab === 'updates' ? styles.filterTabTextActive : styles.filterTabTextInactive,
+              ]}
+            >
+              Report Updates
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Notification List */}
+        {isLoading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#208AEF" />
+            <Text style={styles.loadingText}>Loading emergency alerts & updates...</Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={onRefresh}
+                tintColor="#208AEF"
+                colors={['#208AEF']}
+              />
+            }
+          >
+            {filteredNotifs.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconBox}>
+                  {searchQuery ? (
+                    <Search size={30} color="#64748B" strokeWidth={2} />
+                  ) : (
+                    <Bell size={30} color="#64748B" strokeWidth={2} />
+                  )}
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {searchQuery
+                    ? 'No Matching Alerts'
+                    : filterTab === 'unread'
+                    ? 'No Unread Notifications'
+                    : 'No Notifications Found'}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {searchQuery
+                    ? `No notifications found matching "${searchQuery}". Try a different keyword.`
+                    : filterTab === 'unread'
+                    ? 'You have read all emergency reports and dispatch alerts.'
+                    : "You're all caught up. MDRRMO response updates and emergency notices will appear here."}
+                </Text>
+                {searchQuery ? (
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery('')}
+                    style={styles.clearFilterButton}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.clearFilterButtonText}>Clear Search</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
-              <Text className="text-slate-900 font-bold text-base text-center">No Notifications Found</Text>
-              <Text className="text-slate-400 text-xs text-center mt-1 font-medium">
-                You're all caught up with emergency alerts and reports.
-              </Text>
-            </View>
-          ) : (
-            filteredNotifs.map((item) => {
-              const iconInfo = getNotifIcon(item.type);
-              const IconComp = iconInfo.icon;
+            ) : (
+              filteredNotifs.map((item) => {
+                const meta = getNotifMeta(item.type);
+                const IconComp = meta.icon;
 
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => handleMarkAsRead(item)}
-                  className={`border rounded-3xl p-4 mb-3 shadow-sm active:bg-slate-50 ${
-                    item.read
-                      ? 'bg-white border-slate-200/80'
-                      : 'bg-white border-blue-300 ring-1 ring-blue-200'
-                  }`}
-                  style={{
-                    shadowColor: '#0F172A',
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.04,
-                    shadowRadius: 10,
-                    elevation: 2,
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View className="flex-row items-start">
-                    <View
-                      className={`w-10 h-10 rounded-2xl items-center justify-center border mr-3 mt-0.5 ${iconInfo.bg}`}
-                    >
-                      <IconComp size={18} color={iconInfo.color} strokeWidth={2.25} />
-                    </View>
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => handleMarkAsRead(item)}
+                    activeOpacity={0.75}
+                    style={[
+                      styles.card,
+                      !item.read ? styles.unreadCard : styles.readCard,
+                    ]}
+                  >
+                    <View style={styles.cardHeaderRow}>
+                      {/* Left Icon Container */}
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          { backgroundColor: meta.bg, borderColor: meta.border },
+                        ]}
+                      >
+                        <IconComp size={22} color={meta.color} strokeWidth={2.2} />
+                      </View>
 
-                    <View className="flex-1">
-                      <View className="flex-row items-center justify-between mb-1">
+                      {/* Content Area */}
+                      <View style={styles.cardContent}>
+                        {/* Meta Row: Status Pill on Left, Timestamp + Dot on Right */}
+                        <View style={styles.metaRow}>
+                          <View style={[styles.badge, { backgroundColor: meta.badgeBg }]}>
+                            <Text style={[styles.badgeText, { color: meta.badgeText }]}>
+                              {meta.tag}
+                            </Text>
+                          </View>
+
+                          <View style={styles.timeRow}>
+                            {!item.read ? <View style={styles.unreadDot} /> : null}
+                            <Text
+                              style={[
+                                styles.timestamp,
+                                !item.read && styles.unreadTimestamp,
+                              ]}
+                            >
+                              {formatTime(item.timestamp)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Title - Bold, Readable, Wraps Naturally */}
                         <Text
-                          className={`text-xs font-black flex-1 mr-2 ${
-                            item.read ? 'text-slate-700' : 'text-slate-900'
-                          }`}
-                          numberOfLines={1}
+                          style={[
+                            styles.cardTitle,
+                            !item.read ? styles.unreadCardTitle : styles.readCardTitle,
+                          ]}
                         >
                           {item.title}
                         </Text>
-                        <View className="flex-row items-center">
-                          {!item.read ? (
-                            <View className="w-2 h-2 rounded-full bg-[#208AEF] mr-1.5" />
-                          ) : null}
-                          <Text className="text-slate-400 text-[10px] font-semibold">
-                            {formatTime(item.timestamp)}
-                          </Text>
-                        </View>
+
+                        {/* Description - Charcoal / Medium Gray, Clear Line Height */}
+                        <Text
+                          style={[
+                            styles.cardMessage,
+                            !item.read ? styles.unreadCardMessage : styles.readCardMessage,
+                          ]}
+                        >
+                          {item.message}
+                        </Text>
+
+                        {/* Action Link: View Report Details */}
+                        {item.reportId ? (
+                          <View style={styles.actionRow}>
+                            <Text style={styles.actionText}>View Report Details</Text>
+                            <ChevronRight size={16} color="#208AEF" strokeWidth={2.4} />
+                          </View>
+                        ) : null}
                       </View>
-
-                      <Text
-                        className={`text-xs leading-relaxed font-medium ${
-                          item.read ? 'text-slate-500' : 'text-slate-700'
-                        }`}
-                      >
-                        {item.message}
-                      </Text>
-
-                      {item.reportId ? (
-                        <View className="flex-row items-center mt-2.5 pt-2 border-t border-slate-100">
-                          <Text className="text-[#208AEF] text-[11px] font-bold">
-                            View Report Details
-                          </Text>
-                          <ChevronRight size={13} color="#208AEF" style={{ marginLeft: 2 }} />
-                        </View>
-                      ) : null}
                     </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </ScrollView>
-      )}
-    </SafeAreaView>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  appBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
+  },
+  appBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  appBarIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  appBarTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  appBarSubtitle: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  markAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+  },
+  markAllText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 48,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 10,
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  filterTabsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  filterTabActive: {
+    backgroundColor: '#208AEF',
+    borderColor: '#208AEF',
+    shadowColor: '#208AEF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  filterTabInactive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+  },
+  filterTabText: {
+    fontSize: 12,
+  },
+  filterTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  filterTabTextInactive: {
+    color: '#475569',
+    fontWeight: '600',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 50,
+  },
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 24,
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    marginTop: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  emptyIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    color: '#64748B',
+    fontSize: 13.5,
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  clearFilterButton: {
+    marginTop: 16,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  clearFilterButtonText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  readCard: {
+    borderColor: '#E2E8F0',
+  },
+  unreadCard: {
+    borderColor: '#BFDBFE',
+    borderLeftWidth: 4.5,
+    borderLeftColor: '#208AEF',
+    backgroundColor: '#FFFFFF',
+    shadowOpacity: 0.08,
+    elevation: 3,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    marginTop: 2,
+  },
+  cardContent: {
+    flex: 1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 7,
+  },
+  badgeText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unreadDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#208AEF',
+    marginRight: 6,
+  },
+  timestamp: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  unreadTimestamp: {
+    color: '#208AEF',
+    fontWeight: '700',
+  },
+  cardTitle: {
+    fontSize: 16.5,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  readCardTitle: {
+    color: '#1E293B',
+    fontWeight: '700',
+  },
+  unreadCardTitle: {
+    color: '#0F172A',
+    fontWeight: '800',
+  },
+  cardMessage: {
+    fontSize: 14.5,
+    lineHeight: 21,
+  },
+  readCardMessage: {
+    color: '#475569',
+    fontWeight: '400',
+  },
+  unreadCardMessage: {
+    color: '#334155',
+    fontWeight: '500',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  actionText: {
+    color: '#208AEF',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+});
+

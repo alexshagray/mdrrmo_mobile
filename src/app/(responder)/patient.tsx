@@ -7,13 +7,15 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Header, Button } from '@/shared/components';
 import { SignaturePad, BodyDiagram } from '@/shared/components';
-import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2, AlertCircle, UserCheck, UserX, HelpCircle, Edit3, HeartPulse } from 'lucide-react-native';
+import { WebView } from 'react-native-webview';
+import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2, AlertCircle, UserCheck, UserX, HelpCircle, Edit3, HeartPulse, Printer, Share2, X, CheckCircle2 } from 'lucide-react-native';
 import { searchPatients, createPatient, identifyPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
 import { offlineMissionService } from '@/shared/services/offlineMissionService';
 import { offlineSyncService } from '@/shared/services/offlineSyncService';
+import { printPcrDocument, sharePcrPdf } from '@/shared/utils/pcrPrintService';
 
 function debounce(func: Function, wait: number) {
   let timeout: any;
@@ -86,6 +88,55 @@ const isPlusCode = (text: string | null | undefined): boolean => {
 const cleanFormattedAddress = (addr: string | null | undefined): string => {
   if (!addr) return '';
   return addr.replace(/^[A-Z0-9]{2,8}\+[A-Z0-9]{2,8}(,\s*)?/gi, '').trim();
+};
+
+export const formatUniqueResponders = (...sources: any[]): string => {
+  const cleanAndTitleCase = (raw: string): string => {
+    if (!raw) return '';
+    const stripped = raw
+      .replace(/\s*\([^)]*\)/gi, '')
+      .replace(/\s*-\s*(driver|emt|team\s*leader|crew|responder|leader|paramedic)/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!stripped) return '';
+    return stripped
+      .toLowerCase()
+      .split(' ')
+      .filter(Boolean)
+      .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  };
+
+  const formatName = (u: any): string => {
+    if (!u) return '';
+    if (typeof u === 'string') return u.trim();
+    const first = u.first_name || '';
+    const last = u.last_name || '';
+    const full = `${first} ${last}`.trim();
+    return full || u.name || '';
+  };
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  sources.flat(Infinity).forEach((item) => {
+    if (!item) return;
+    const nameStr = formatName(item);
+    if (!nameStr) return;
+    const parts = nameStr.split(',').map((p: string) => p.trim()).filter(Boolean);
+    parts.forEach((rawPart: string) => {
+      const cleanName = cleanAndTitleCase(rawPart);
+      if (!cleanName) return;
+      const norm = cleanName.toLowerCase();
+      if (norm === 'none assigned' || norm === 'none' || norm === 'unassigned' || norm === 'null') return;
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        unique.push(cleanName);
+      }
+    });
+  });
+
+  return unique.join(', ');
 };
 
 const TOTAL_STEPS = 8;
@@ -212,12 +263,41 @@ export default function PatientCareRecordScreen() {
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<any>(null);
 
+  // PCR Print & Export state
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [pcrPreviewVisible, setPcrPreviewVisible] = useState(false);
+  const [pcrPreviewHtml, setPcrPreviewHtml] = useState<string>('');
+
   const triggerToast = (msg: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setSuccessToast(msg);
     toastTimeoutRef.current = setTimeout(() => {
       setSuccessToast(null);
     }, 3500);
+  };
+
+  // PCR Submission Success Modal State
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalData, setSuccessModalData] = useState<{
+    type: 'success' | 'offline' | 'unfounded';
+    title: string;
+    message: string;
+    incidentRef?: string;
+    patientName?: string;
+    statusBadge?: string;
+    timestamp?: string;
+  } | null>(null);
+
+  const handleCloseSuccessModal = () => {
+    setShowSuccessModal(false);
+    setSuccessModalData(null);
+    setPcrPhotos([]);
+    setSelectedPhotoIndex(0);
+    setActiveDispatch(null);
+    setStep(1);
+    setReachedReview(false);
+    setFormData(initialFormData);
+    router.replace('/(responder)');
   };
 
   // Unidentified Patient identification modal state
@@ -228,7 +308,7 @@ export default function PatientCareRecordScreen() {
     last_name: '',
     age: '',
     gender: 'male',
-    street: '',
+    address: '',
     contact_number: '',
   });
   const [isIdentifying, setIsIdentifying] = useState(false);
@@ -373,21 +453,22 @@ export default function PatientCareRecordScreen() {
         category: unfoundedCategory,
       });
       setShowUnfoundedModal(false);
+      const incCode = activeDispatch?.incident?.incident_code || (activeDispatch?.id ? `#DISP-${activeDispatch.id}` : 'Incident');
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       if (activeDispatch?.id) {
         AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
       }
-      setActiveDispatch(null);
-      setFormData(initialFormData);
-      Alert.alert(
-        'Mission Closed',
-        'Negative result reported. Your unit and crew have been released back to Available.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/(responder)'),
-          }
-        ]
-      );
+      setSuccessModalData({
+        type: 'unfounded',
+        title: 'Mission Closed',
+        message: 'Negative result reported. Your unit and crew have been released back to Available.',
+        incidentRef: incCode,
+        patientName: 'Zero Patients (False Alarm)',
+        statusBadge: 'Unit Released',
+        timestamp: timeStr,
+      });
+      setShowSuccessModal(true);
     } catch (e) {
       console.error(e);
       Alert.alert('Error', 'Failed to submit report. Please check your connection and try again.');
@@ -538,13 +619,12 @@ export default function PatientCareRecordScreen() {
 
         // Comprehensive address resolution (from existing patient record, PCR, or resident profile)
         const residentBarangay = residentProfile?.barangay?.barangay_name || residentProfile?.barangay?.name || '';
-        const residentAddressParts = [residentProfile?.house_no, residentProfile?.street, residentBarangay].filter(Boolean);
-        const residentHomeAddress = residentAddressParts.join(', ');
+        const residentHomeAddress = residentBarangay ? `Barangay ${residentBarangay}, Opol` : '';
 
         const defaultHomeAddress = (
           pcr?.incident_address ||
           existingPatient?.address ||
-          existingPatient?.street ||
+          existingPatient?.home_address ||
           residentHomeAddress ||
           resident?.address ||
           ''
@@ -621,11 +701,14 @@ export default function PatientCareRecordScreen() {
             dispatch_time: formatTime24ForApi(dispatch.created_at),
             en_route_time: formatTime24ForApi(dispatch.en_route_at),
             on_scene_time: formatTime24ForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
-            responders: [
-              dispatch.team_leader ? `${dispatch.team_leader.first_name} ${dispatch.team_leader.last_name}` : null,
-              dispatch.driver ? `${dispatch.driver.first_name} ${dispatch.driver.last_name}` : null,
-              dispatch.emt ? `${dispatch.emt.first_name} ${dispatch.emt.last_name}` : null
-            ].filter(Boolean).join(', '),
+            responders: formatUniqueResponders(
+              dispatch.team_leader,
+              dispatch.driver,
+              dispatch.emt,
+              dispatch.crew,
+              pcr?.responders,
+              cachedDraft?.responders
+            ),
             place_of_incident: prev.place_of_incident?.trim() || cachedDraft?.place_of_incident?.trim() || defaultPlaceOfIncident || prev.place_of_incident,
             incident_address: resolvedIncidentAddress,
             address: resolvedIncidentAddress,
@@ -863,7 +946,7 @@ export default function PatientCareRecordScreen() {
   const selectPatient = (patient: any) => {
     setFormData(prev => {
       const calculatedAge = patient.birthdate ? calculateAge(patient.birthdate) : (patient.age ? String(patient.age) : prev.age);
-      const homeAddress = (patient.address || patient.incident_address || `${patient.street || ''} ${patient.barangay?.name || ''}`).trim();
+      const homeAddress = (patient.address || patient.incident_address || (patient.barangay?.name ? `Barangay ${patient.barangay.name}` : '')).trim();
       return {
         ...prev,
         patient_id: patient.id || patient.patient_id, // Handle API response variation
@@ -1016,7 +1099,7 @@ export default function PatientCareRecordScreen() {
         last_name: identifyForm.last_name.trim(),
         age: identifyForm.age ? parseInt(identifyForm.age, 10) : null,
         gender: identifyForm.gender || null,
-        street: identifyForm.street.trim() || null,
+        address: identifyForm.address.trim() || null,
         contact_number: identifyForm.contact_number.trim() || null,
       });
 
@@ -1027,8 +1110,8 @@ export default function PatientCareRecordScreen() {
         last_name: updated.last_name,
         age: updated.age ? String(updated.age) : prev.age,
         gender: updated.gender || prev.gender,
-        incident_address: updated.street || prev.incident_address,
-        address: updated.street || prev.address,
+        incident_address: updated.address || updated.home_address || prev.incident_address,
+        address: updated.address || updated.home_address || prev.address,
         contact_number: updated.contact_number || prev.contact_number,
         searchQuery: `${updated.first_name} ${updated.last_name}`,
         is_unidentified: false,
@@ -1220,6 +1303,40 @@ export default function PatientCareRecordScreen() {
     }
   };
 
+  const handlePrintPcr = async () => {
+    try {
+      setIsPrinting(true);
+      const res = await printPcrDocument({
+        formData,
+        activeDispatch,
+        pcrPhotos,
+      });
+      if (res?.fallback === 'webview' || !res?.success) {
+        setPcrPreviewHtml(res.html);
+        setPcrPreviewVisible(true);
+      }
+    } catch (e: any) {
+      Alert.alert('Printing Error', e?.message || 'Failed to print PCR');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
+  const handleSharePcr = async () => {
+    try {
+      setIsPrinting(true);
+      await sharePcrPdf({
+        formData,
+        activeDispatch,
+        pcrPhotos,
+      });
+    } catch (e: any) {
+      Alert.alert('Export Error', e?.message || 'Failed to export PCR PDF');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const handleFinalSubmit = async () => {
     const saved = await saveCurrentStep();
     if (!saved) return;
@@ -1288,24 +1405,35 @@ export default function PatientCareRecordScreen() {
         AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
       }
 
-      if (submitRes?.is_offline_queued) {
-        Alert.alert(
-          'PCR Saved Offline',
-          'Your Patient Care Report and scene photos have been securely preserved on this device. They will automatically synchronize with the MDRRMO server when internet returns.',
-          [{ text: 'OK', onPress: () => router.replace('/(responder)') }]
-        );
-      } else {
-        Alert.alert('Success', 'PCR submitted successfully!', [
-          { text: 'OK', onPress: () => router.replace('/(responder)') }
-        ]);
-      }
+      const pName = [formData.first_name, formData.last_name].filter(Boolean).join(' ') ||
+        (isWalkIn ? 'Walk-In Patient' : 'Patient');
+      const incCode = activeDispatch?.incident?.incident_code ||
+        (activeDispatch?.id ? `#DISP-${activeDispatch.id}` : (isWalkIn ? 'Walk-In Record' : 'Incident Ref'));
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      setPcrPhotos([]);
-      setSelectedPhotoIndex(0);
-      setActiveDispatch(null);
-      setStep(1);
-      setReachedReview(false);
-      setFormData(initialFormData);
+      if (submitRes?.is_offline_queued) {
+        setSuccessModalData({
+          type: 'offline',
+          title: 'PCR Saved Offline',
+          message: 'Your Patient Care Report and scene photos have been securely preserved on this device. They will automatically synchronize with the MDRRMO server when internet returns.',
+          incidentRef: incCode,
+          patientName: pName,
+          statusBadge: 'Saved Offline',
+          timestamp: timeStr,
+        });
+        setShowSuccessModal(true);
+      } else {
+        setSuccessModalData({
+          type: 'success',
+          title: 'PCR Submitted Successfully',
+          message: 'Patient Care Report has been officially submitted and recorded in the MDRRMO dispatch system.',
+          incidentRef: incCode,
+          patientName: pName,
+          statusBadge: 'Official Record Filed',
+          timestamp: timeStr,
+        });
+        setShowSuccessModal(true);
+      }
     } catch (e: any) {
       console.log('PCR Submit Error:', e.response?.data || e.message);
       const isNetwork = e.isNetworkError || !e.response || e.code === 'ERR_NETWORK';
@@ -1316,17 +1444,23 @@ export default function PatientCareRecordScreen() {
           dispatchId: activeDispatch.id,
           payload: {},
         });
-        Alert.alert(
-          'PCR Saved Offline',
-          'Network connection lost. Your PCR has been saved locally and will synchronize automatically when internet returns.',
-          [{ text: 'OK', onPress: () => router.replace('/(responder)') }]
-        );
-        setPcrPhotos([]);
-        setSelectedPhotoIndex(0);
-        setActiveDispatch(null);
-        setStep(1);
-        setReachedReview(false);
-        setFormData(initialFormData);
+        if (activeDispatch?.id) {
+          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+        }
+        const pName = [formData.first_name, formData.last_name].filter(Boolean).join(' ') || 'Patient';
+        const incCode = activeDispatch?.incident?.incident_code || `#DISP-${activeDispatch.id}`;
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setSuccessModalData({
+          type: 'offline',
+          title: 'PCR Saved Offline',
+          message: 'Network connection lost. Your PCR has been saved locally and will synchronize automatically when internet returns.',
+          incidentRef: incCode,
+          patientName: pName,
+          statusBadge: 'Saved Locally (Pending Sync)',
+          timestamp: timeStr,
+        });
+        setShowSuccessModal(true);
         return;
       }
       const errorMsg = e.response?.data?.message || e.message || 'Failed to submit PCR.';
@@ -1456,8 +1590,8 @@ export default function PatientCareRecordScreen() {
         <TouchableOpacity key={p.id} style={styles.resultItem} onPress={() => { selectPatient(p); setErrors({ ...errors, patient_id: '' }); }}>
           <Text style={styles.resultName}>{p.first_name} {p.last_name}</Text>
           <Text style={styles.resultSub}>Patient ID: PAT-{p.id} • {p.gender ? p.gender.charAt(0).toUpperCase() + p.gender.slice(1) : 'Gender N/A'}{p.age ? ` • ${p.age} yrs` : ''}</Text>
-          {(p.address || p.street) && (
-            <Text style={styles.resultSub} numberOfLines={1}>{p.address || `${p.street || ''} ${p.barangay?.name || ''}`.trim()}</Text>
+          {p.address && (
+            <Text style={styles.resultSub} numberOfLines={1}>{p.address}</Text>
           )}
         </TouchableOpacity>
       ))}
@@ -1498,7 +1632,7 @@ export default function PatientCareRecordScreen() {
                     last_name: '',
                     age: formData.age && !formData.age.includes('-') ? formData.age : '',
                     gender: formData.gender || 'male',
-                    street: formData.incident_address && !formData.incident_address.includes('Pending Identification') ? formData.incident_address : '',
+                    address: formData.incident_address && !formData.incident_address.includes('Pending Identification') ? formData.incident_address : '',
                     contact_number: formData.contact_number || '',
                   });
                   setShowIdentifyModal(true);
@@ -2038,7 +2172,7 @@ export default function PatientCareRecordScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 13, color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 }}>Responders on Duty</Text>
-          <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '600', marginTop: 2 }}>{formData.responders || 'None Assigned'}</Text>
+          <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '600', marginTop: 2 }}>{formatUniqueResponders(formData.responders) || 'None Assigned'}</Text>
         </View>
       </View>
 
@@ -2149,20 +2283,55 @@ export default function PatientCareRecordScreen() {
       value,
       subtitle,
       onEdit,
+      isLast = false,
     }: {
       icon: any;
       title: string;
       value: string;
       subtitle?: string;
       onEdit?: () => void;
+      isLast?: boolean;
     }) => (
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 }}>
-        <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 14, marginTop: 2 }}>
-          <Icon size={20} color="#0f172a" />
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          borderBottomWidth: isLast ? 0 : 1,
+          borderBottomColor: '#e2e8f0',
+          paddingBottom: isLast ? 0 : 14,
+          marginBottom: isLast ? 0 : 14,
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: '#ffffff',
+            width: 38,
+            height: 38,
+            borderRadius: 10,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 12,
+            marginTop: 2,
+            borderWidth: 1,
+            borderColor: '#e2e8f0',
+          }}
+        >
+          <Icon size={18} color="#0f172a" />
         </View>
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Text
+              style={{
+                flex: 1,
+                fontSize: 12,
+                color: '#334155',
+                fontWeight: '800',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+                marginRight: 8,
+              }}
+              numberOfLines={1}
+            >
               {title}
             </Text>
             {onEdit && (
@@ -2173,26 +2342,27 @@ export default function PatientCareRecordScreen() {
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: '#eff6ff',
-                  paddingHorizontal: 10,
+                  backgroundColor: '#EEF2FF',
+                  paddingHorizontal: 12,
                   paddingVertical: 5,
-                  borderRadius: 8,
+                  borderRadius: 20,
                   borderWidth: 1,
-                  borderColor: '#bfdbfe',
+                  borderColor: '#C7D2FE',
+                  flexShrink: 0,
                 }}
               >
-                <Edit3 size={12} color="#2563eb" />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563eb', marginLeft: 4 }}>
+                <Edit3 size={11} color="#4F46E5" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#4F46E5', marginLeft: 4 }}>
                   Edit
                 </Text>
               </TouchableOpacity>
             )}
           </View>
-          <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '700', lineHeight: 22 }}>
+          <Text style={{ fontSize: 15, color: '#0f172a', fontWeight: '700', lineHeight: 21 }}>
             {value || 'None'}
           </Text>
           {subtitle ? (
-            <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: '500' }}>
+            <Text style={{ fontSize: 12, color: '#64748b', marginTop: 3, fontWeight: '500', lineHeight: 17 }}>
               {subtitle}
             </Text>
           ) : null}
@@ -2201,18 +2371,18 @@ export default function PatientCareRecordScreen() {
     );
 
     return (
-      <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 24, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#f1f5f9' }}>
-        <View style={{ alignItems: 'center', marginBottom: 28 }}>
-          <View style={{ width: 72, height: 72, backgroundColor: '#f0fdf4', borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 16, borderWidth: 4, borderColor: '#dcfce7' }}>
-            <Check size={36} color="#16a34a" />
+      <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#f1f5f9', overflow: 'hidden' }}>
+        <View style={{ alignItems: 'center', marginBottom: 20 }}>
+          <View style={{ width: 64, height: 64, backgroundColor: '#f0fdf4', borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 3, borderColor: '#dcfce7' }}>
+            <Check size={32} color="#16a34a" />
           </View>
-          <Text style={{ fontSize: 26, fontWeight: '900', color: '#0f172a' }}>Review & Submit</Text>
-          <Text style={{ fontSize: 15, color: '#64748b', textAlign: 'center', marginTop: 8, lineHeight: 22, paddingHorizontal: 16 }}>
+          <Text style={{ fontSize: 24, fontWeight: '900', color: '#0f172a' }}>Review & Submit</Text>
+          <Text style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginTop: 6, lineHeight: 19, paddingHorizontal: 8 }}>
             Please review the summary of the Patient Care Record before final submission. Tap "Edit" on any section to make changes.
           </Text>
         </View>
 
-        <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 24, marginBottom: 32, borderWidth: 1, borderColor: '#e2e8f0' }}>
+        <View style={{ backgroundColor: '#f8fafc', borderRadius: 16, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' }}>
           <SummaryRow
             icon={User}
             title="Patient Information"
@@ -2254,6 +2424,7 @@ export default function PatientCareRecordScreen() {
             title="Disposition"
             value={formData.disposition.length > 0 ? formData.disposition.join(', ') : 'None selected'}
             onEdit={() => setStep(5)}
+            isLast={!isTransported && false}
           />
 
           {isTransported && (
@@ -2263,16 +2434,42 @@ export default function PatientCareRecordScreen() {
               value={formData.transported_to || 'Transport facility not set'}
               subtitle={formData.received_by ? `Received by: ${formData.received_by}` : undefined}
               onEdit={() => setStep(6)}
+              isLast={false}
             />
           )}
 
+          {/* Signatures Attached Row */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-            <View style={{ backgroundColor: '#f1f5f9', padding: 10, borderRadius: 12, marginRight: 14, marginTop: 2 }}>
-              <FileText size={20} color="#0f172a" />
+            <View
+              style={{
+                backgroundColor: '#ffffff',
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+                marginTop: 2,
+                borderWidth: 1,
+                borderColor: '#e2e8f0',
+              }}
+            >
+              <FileText size={18} color="#0f172a" />
             </View>
             <View style={{ flex: 1, justifyContent: 'center' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 12,
+                    color: '#334155',
+                    fontWeight: '800',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                    marginRight: 8,
+                  }}
+                  numberOfLines={1}
+                >
                   Signatures Attached
                 </Text>
                 <TouchableOpacity
@@ -2282,36 +2479,37 @@ export default function PatientCareRecordScreen() {
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: '#eff6ff',
-                    paddingHorizontal: 10,
+                    backgroundColor: '#EEF2FF',
+                    paddingHorizontal: 12,
                     paddingVertical: 5,
-                    borderRadius: 8,
+                    borderRadius: 20,
                     borderWidth: 1,
-                    borderColor: '#bfdbfe',
+                    borderColor: '#C7D2FE',
+                    flexShrink: 0,
                   }}
                 >
-                  <Edit3 size={12} color="#2563eb" />
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563eb', marginLeft: 4 }}>
+                  <Edit3 size={11} color="#4F46E5" />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#4F46E5', marginLeft: 4 }}>
                     Edit
                   </Text>
                 </TouchableOpacity>
               </View>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                 {formData.waiver_signature ? (
-                  <View style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef3c7' : '#ecfdf5', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fde68a' : '#a7f3d0' }}>
-                    <Text style={{ color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#b45309' : '#059669', fontWeight: '800', fontSize: 13 }}>
+                  <View style={{ backgroundColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fef3c7' : '#ecfdf5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#fde68a' : '#a7f3d0' }}>
+                    <Text style={{ color: formData.waiver_signature === 'UNABLE_TO_SIGN' ? '#b45309' : '#059669', fontWeight: '800', fontSize: 12 }}>
                       {formData.waiver_signature === 'UNABLE_TO_SIGN' ? '⚠ UNABLE TO SIGN' : '✓ WAIVER'}
                     </Text>
                   </View>
                 ) : null}
                 {formData.witness_signature ? (
-                  <View style={{ backgroundColor: '#eff6ff', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#bfdbfe' }}>
-                    <Text style={{ color: '#2563eb', fontWeight: '800', fontSize: 13 }}>✓ WITNESS</Text>
+                  <View style={{ backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#bfdbfe' }}>
+                    <Text style={{ color: '#2563eb', fontWeight: '800', fontSize: 12 }}>✓ WITNESS</Text>
                   </View>
                 ) : null}
                 {!formData.waiver_signature && !formData.witness_signature && (
-                  <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                    <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 13 }}>NONE</Text>
+                  <View style={{ backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                    <Text style={{ color: '#64748b', fontWeight: '700', fontSize: 12 }}>NONE</Text>
                   </View>
                 )}
               </View>
@@ -2320,32 +2518,33 @@ export default function PatientCareRecordScreen() {
         </View>
 
         {/* Optional Incident Scene Photos (Max 3) */}
-        <View style={{ backgroundColor: '#f8fafc', borderRadius: 20, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: '#e2e8f0' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={{ backgroundColor: '#e0e7ff', padding: 8, borderRadius: 10 }}>
+        <View style={{ backgroundColor: '#f8fafc', borderRadius: 16, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
+              <View style={{ backgroundColor: '#e0e7ff', width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}>
                 <Camera size={18} color="#4f46e5" />
               </View>
-              <View>
-                <Text style={{ fontSize: 14, fontWeight: '800', color: '#0f172a' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#0f172a' }} numberOfLines={1}>
                   Incident Scene Photos
                 </Text>
-                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500' }}>
-                  Optional documentation • {pcrPhotos.length} of 3 photos
+                <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '500' }} numberOfLines={1}>
+                  {pcrPhotos.length} of 3 photos attached
                 </Text>
               </View>
             </View>
             <View style={{
               backgroundColor: pcrPhotos.length === 3 ? '#ecfdf5' : pcrPhotos.length > 0 ? '#eff6ff' : '#f1f5f9',
-              paddingHorizontal: 10,
+              paddingHorizontal: 8,
               paddingVertical: 4,
               borderRadius: 8,
               borderWidth: 1,
               borderColor: pcrPhotos.length === 3 ? '#a7f3d0' : pcrPhotos.length > 0 ? '#bfdbfe' : '#e2e8f0',
+              flexShrink: 0,
             }}>
               <Text style={{
-                fontSize: 11,
-                fontWeight: '700',
+                fontSize: 10,
+                fontWeight: '800',
                 color: pcrPhotos.length === 3 ? '#059669' : pcrPhotos.length > 0 ? '#2563eb' : '#64748b',
               }}>
                 {pcrPhotos.length === 3 ? '3/3 ATTACHED' : pcrPhotos.length > 0 ? `${pcrPhotos.length}/3 PHOTOS` : 'OPTIONAL (MAX 3)'}
@@ -2359,7 +2558,7 @@ export default function PatientCareRecordScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingBottom: 12 }}
+                contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingBottom: 10 }}
               >
                 {pcrPhotos.map((photoItem, idx) => {
                   const isSelected = idx === selectedPhotoIndex;
@@ -2374,10 +2573,10 @@ export default function PatientCareRecordScreen() {
                         backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
                         borderWidth: 1.5,
                         borderColor: isSelected ? '#3b82f6' : '#cbd5e1',
-                        borderRadius: 12,
-                        padding: 6,
-                        paddingRight: 10,
-                        gap: 8,
+                        borderRadius: 10,
+                        padding: 5,
+                        paddingRight: 8,
+                        gap: 6,
                         shadowColor: '#000',
                         shadowOffset: { width: 0, height: 1 },
                         shadowOpacity: isSelected ? 0.08 : 0.02,
@@ -2385,12 +2584,12 @@ export default function PatientCareRecordScreen() {
                         elevation: isSelected ? 2 : 1,
                       }}
                     >
-                      <Image source={{ uri: photoItem.uri }} style={{ width: 34, height: 34, borderRadius: 8 }} />
+                      <Image source={{ uri: photoItem.uri }} style={{ width: 32, height: 32, borderRadius: 6 }} />
                       <View>
-                        <Text style={{ fontSize: 12, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
+                        <Text style={{ fontSize: 11, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
                           Photo {idx + 1}
                         </Text>
-                        <Text style={{ fontSize: 10, color: isSelected ? '#2563eb' : '#64748b', fontWeight: isSelected ? '700' : '500' }}>
+                        <Text style={{ fontSize: 9, color: isSelected ? '#2563eb' : '#64748b', fontWeight: isSelected ? '700' : '500' }}>
                           {isSelected ? 'Viewing' : 'Tap to view'}
                         </Text>
                       </View>
@@ -2410,15 +2609,15 @@ export default function PatientCareRecordScreen() {
                       borderWidth: 1.5,
                       borderColor: '#93c5fd',
                       borderStyle: 'dashed',
-                      borderRadius: 12,
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      gap: 6,
+                      borderRadius: 10,
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      gap: 4,
                       justifyContent: 'center',
                     }}
                   >
-                    <Plus size={16} color="#2563eb" />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#2563eb' }}>
+                    <Plus size={14} color="#2563eb" />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563eb' }}>
                       Add Photo ({pcrPhotos.length}/3)
                     </Text>
                   </TouchableOpacity>
@@ -2428,15 +2627,15 @@ export default function PatientCareRecordScreen() {
               {/* Active Selected Photo Preview */}
               {pcrPhotos[selectedPhotoIndex] && (
                 <View>
-                  <View style={{ position: 'relative', height: 185, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#cbd5e1' }}>
+                  <View style={{ position: 'relative', height: 180, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#cbd5e1' }}>
                     <Image
                       source={{ uri: pcrPhotos[selectedPhotoIndex].uri }}
                       style={{ width: '100%', height: '100%', resizeMode: 'cover' }}
                     />
 
                     {/* Photo Number Badge */}
-                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: 'rgba(15, 23, 42, 0.75)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
-                      <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>
+                    <View style={{ position: 'absolute', top: 8, left: 8, backgroundColor: 'rgba(15, 23, 42, 0.75)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 14 }}>
+                      <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>
                         Photo {selectedPhotoIndex + 1} of {pcrPhotos.length}
                       </Text>
                     </View>
@@ -2446,11 +2645,11 @@ export default function PatientCareRecordScreen() {
                       onPress={() => handleRemovePcrPhoto(selectedPhotoIndex)}
                       style={{
                         position: 'absolute',
-                        top: 10,
-                        right: 10,
+                        top: 8,
+                        right: 8,
                         backgroundColor: '#dc2626',
-                        borderRadius: 20,
-                        padding: 7,
+                        borderRadius: 16,
+                        padding: 6,
                         shadowColor: '#000',
                         shadowOffset: { width: 0, height: 2 },
                         shadowOpacity: 0.25,
@@ -2458,41 +2657,41 @@ export default function PatientCareRecordScreen() {
                         elevation: 4,
                       }}
                     >
-                      <Trash2 size={16} color="#ffffff" />
+                      <Trash2 size={14} color="#ffffff" />
                     </TouchableOpacity>
                   </View>
 
                   {/* Photo Metadata Details */}
-                  <View style={{ backgroundColor: '#ffffff', borderRadius: 12, padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <MapPin size={14} color="#3b82f6" style={{ marginTop: 2, marginRight: 8 }} />
+                  <View style={{ backgroundColor: '#ffffff', borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
+                      <MapPin size={13} color="#3b82f6" style={{ marginTop: 2, marginRight: 6 }} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Location</Text>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }} numberOfLines={2}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#64748b' }}>Location</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#0f172a' }} numberOfLines={2}>
                           {pcrPhotos[selectedPhotoIndex].locationName}
                         </Text>
                       </View>
                     </View>
 
-                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
+                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 3 }} />
 
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <Navigation size={14} color="#10b981" style={{ marginTop: 2, marginRight: 8 }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 }}>
+                      <Navigation size={13} color="#10b981" style={{ marginTop: 2, marginRight: 6 }} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>GPS Coordinates</Text>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f766e', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#64748b' }}>GPS Coordinates</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#0f766e', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
                           {pcrPhotos[selectedPhotoIndex].latitude ? `${pcrPhotos[selectedPhotoIndex].latitude.toFixed(6)}, ${pcrPhotos[selectedPhotoIndex].longitude.toFixed(6)}` : 'Recorded from scene'}
                         </Text>
                       </View>
                     </View>
 
-                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 4 }} />
+                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginVertical: 3 }} />
 
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                      <Clock size={14} color="#f59e0b" style={{ marginTop: 2, marginRight: 8 }} />
+                      <Clock size={13} color="#f59e0b" style={{ marginTop: 2, marginRight: 6 }} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Date & Time Taken</Text>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#0f172a' }}>
+                        <Text style={{ fontSize: 10, fontWeight: '600', color: '#64748b' }}>Date & Time Taken</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#0f172a' }}>
                           {pcrPhotos[selectedPhotoIndex].formattedDateTime}
                         </Text>
                       </View>
@@ -2500,13 +2699,13 @@ export default function PatientCareRecordScreen() {
                   </View>
 
                   {/* Action Buttons: Retake current photo or Add another photo */}
-                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TouchableOpacity
                       onPress={() => handleTakePcrPhoto(selectedPhotoIndex)}
                       disabled={isTakingPhoto}
                       style={{
                         flex: 1,
-                        paddingVertical: 10,
+                        paddingVertical: 9,
                         borderRadius: 10,
                         borderWidth: 1,
                         borderColor: '#cbd5e1',
@@ -2515,7 +2714,7 @@ export default function PatientCareRecordScreen() {
                         backgroundColor: '#ffffff',
                       }}
                     >
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>
                         Retake Photo {selectedPhotoIndex + 1}
                       </Text>
                     </TouchableOpacity>
@@ -2526,13 +2725,13 @@ export default function PatientCareRecordScreen() {
                         disabled={isTakingPhoto}
                         style={{
                           flex: 1,
-                          paddingVertical: 10,
+                          paddingVertical: 9,
                           borderRadius: 10,
                           backgroundColor: '#2563eb',
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexDirection: 'row',
-                          gap: 6,
+                          gap: 4,
                           shadowColor: '#2563eb',
                           shadowOffset: { width: 0, height: 2 },
                           shadowOpacity: 0.2,
@@ -2540,8 +2739,8 @@ export default function PatientCareRecordScreen() {
                           elevation: 2,
                         }}
                       >
-                        <Plus size={15} color="#ffffff" />
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff' }}>
+                        <Plus size={14} color="#ffffff" />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#ffffff' }}>
                           Add Photo ({pcrPhotos.length}/3)
                         </Text>
                       </TouchableOpacity>
@@ -2560,25 +2759,27 @@ export default function PatientCareRecordScreen() {
                 borderWidth: 1.5,
                 borderColor: '#cbd5e1',
                 borderStyle: 'dashed',
-                borderRadius: 16,
-                paddingVertical: 22,
+                borderRadius: 14,
+                paddingVertical: 18,
+                paddingHorizontal: 12,
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 8,
+                gap: 6,
+                width: '100%',
               }}
             >
               {isTakingPhoto ? (
                 <ActivityIndicator color="#4f46e5" size="small" />
               ) : (
                 <>
-                  <View style={{ backgroundColor: '#eef2ff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}>
-                    <Camera size={24} color="#4f46e5" />
+                  <View style={{ backgroundColor: '#eef2ff', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
+                    <Camera size={22} color="#4f46e5" />
                   </View>
-                  <Text style={{ fontSize: 15, fontWeight: '700', color: '#334155' }}>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e293b', textAlign: 'center' }}>
                     📷 Take Incident Scene Photo
                   </Text>
-                  <Text style={{ fontSize: 12, color: '#94a3b8', fontWeight: '500' }}>
-                    Tap to open camera (You can take 2 or 3 photos)
+                  <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '500', textAlign: 'center' }}>
+                    Tap to open camera (Optional, up to 3 photos)
                   </Text>
                 </>
               )}
@@ -2586,17 +2787,106 @@ export default function PatientCareRecordScreen() {
           )}
         </View>
 
+        {/* Print & Share Official PCR (Last Step) */}
+        <View style={{
+          backgroundColor: '#eff6ff',
+          borderRadius: 16,
+          padding: 14,
+          marginBottom: 16,
+          borderWidth: 1,
+          borderColor: '#bfdbfe',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{
+              backgroundColor: '#dbeafe',
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: 10,
+            }}>
+              <Printer size={20} color="#2563eb" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '800', color: '#1e3a8a' }}>
+                Print Patient Care Record
+              </Text>
+              <Text style={{ fontSize: 11, color: '#3b82f6', fontWeight: '500', marginTop: 1 }}>
+                Official MDRRMO layout • Letterhead & Signatures
+              </Text>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              onPress={handlePrintPcr}
+              disabled={isPrinting || isSaving}
+              activeOpacity={0.8}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                backgroundColor: '#2563eb',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+                shadowColor: '#2563eb',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 4,
+                elevation: 3,
+              }}
+            >
+              {isPrinting ? (
+                <ActivityIndicator color="#ffffff" size="small" />
+              ) : (
+                <>
+                  <Printer size={16} color="#ffffff" />
+                  <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>
+                    PRINT PCR
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleSharePcr}
+              disabled={isPrinting || isSaving}
+              activeOpacity={0.8}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                borderRadius: 12,
+                backgroundColor: '#ffffff',
+                borderWidth: 1.5,
+                borderColor: '#3b82f6',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 6,
+              }}
+            >
+              <Share2 size={16} color="#2563eb" />
+              <Text style={{ color: '#2563eb', fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>
+                SHARE PDF
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <TouchableOpacity
           onPress={handleFinalSubmit}
           disabled={isSaving}
-          style={{ width: '100%', paddingVertical: 18, borderRadius: 16, backgroundColor: isSaving ? '#94a3b8' : '#10b981', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
+          style={{ width: '100%', paddingVertical: 16, borderRadius: 14, backgroundColor: isSaving ? '#94a3b8' : '#10b981', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
         >
           {isSaving ? (
             <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
           ) : (
-            <Send size={20} color="#fff" style={{ marginRight: 8 }} />
+            <Send size={18} color="#fff" style={{ marginRight: 8 }} />
           )}
-          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.5 }}>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
             {isSaving ? 'SUBMITTING...' : 'SUBMIT REPORT'}
           </Text>
         </TouchableOpacity>
@@ -2605,84 +2895,84 @@ export default function PatientCareRecordScreen() {
   };
 
   if (isLoading) {
-    return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color="#e11d48" /></SafeAreaView>;
+    return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color="#208AEF" /></SafeAreaView>;
   }
 
   if (!activeDispatch) {
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center px-6" edges={['top', 'left', 'right']}>
-        <View className="items-center justify-center bg-white p-8 rounded-[32px] border-2 border-slate-200 border-dashed w-full shadow-sm">
-          <View className="bg-slate-100 p-5 rounded-full mb-5">
-            <ShieldCheck size={48} color="#94A3B8" />
-          </View>
-          <Text className="text-slate-800 font-black text-2xl tracking-tight mb-2 text-center">No Active Dispatch</Text>
-          <Text className="text-slate-500 font-medium text-center mb-8 leading-5">
-            You can only fill out a Patient Care Record when you are actively assigned to an emergency dispatch.
-          </Text>
-          <View className="w-full space-y-3">
-            <TouchableOpacity
-              onPress={() => {
-                setIsLoading(true);
-                loadActiveDispatch();
-              }}
-              className="w-full py-3.5 bg-slate-100 active:bg-slate-200 rounded-xl items-center flex-row justify-center mb-3 border border-slate-200"
-            >
-              <RefreshCw size={16} color="#475569" style={{ marginRight: 8 }} />
-              <Text className="text-slate-700 font-bold">Check for Active Mission</Text>
-            </TouchableOpacity>
-
-            <Button
-              title="Create Walk-In PCR"
-              onPress={handleOpenWalkInModal}
-              style={{ width: '100%', backgroundColor: '#e11d48' }}
-            />
-          </View>
+      <View className="flex-1 bg-slate-50">
+        {/* Background Elements (Same as Log in form) */}
+        <View className="absolute top-0 left-0 right-0 h-[60%] bg-[#208AEF] rounded-b-[60px] overflow-hidden" pointerEvents="none">
+          <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
+          <View className="absolute top-[20%] right-[-80px] w-80 h-80 bg-[#1570C7] rounded-full opacity-40" />
+          <View className="absolute bottom-[-30px] left-[10%] w-40 h-40 bg-[#70B9FA] rounded-full opacity-30" />
         </View>
 
-        {/* Walk-In Confirmation Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showWalkInModal}
-          onRequestClose={() => setShowWalkInModal(false)}
-        >
-          <View className="flex-1 justify-center items-center bg-slate-900/70 p-4">
-            <View className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-200">
-              <View className="items-center mb-4">
-                <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
-                  <Plus size={32} color="#e11d48" />
-                </View>
-                <Text className="text-xl font-bold text-slate-800 text-center mb-2">
-                  Create Direct / Walk-In PCR
-                </Text>
-                <Text className="text-slate-500 text-center font-medium leading-5">
-                  Use this when a family member or citizen requested help in person and you responded to the incident scene. This will capture the incident scene location.
-                </Text>
-              </View>
-              <View className="flex-row justify-between space-x-3 mt-4">
-                <TouchableOpacity
-                  onPress={() => setShowWalkInModal(false)}
-                  disabled={isCreatingWalkIn}
-                  className="flex-1 py-3.5 bg-slate-100 rounded-xl items-center"
-                >
-                  <Text className="text-slate-600 font-bold">CANCEL</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleConfirmWalkIn}
-                  disabled={isCreatingWalkIn}
-                  className="flex-1 py-3.5 bg-rose-600 rounded-xl items-center shadow-sm flex-row justify-center"
-                >
-                  {isCreatingWalkIn ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text className="text-white font-bold">CONFIRM</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+        <SafeAreaView className="flex-1 items-center justify-center px-6" edges={['top', 'left', 'right']} style={{ paddingBottom: 90 }}>
+          <View className="items-center justify-center bg-white p-8 rounded-[32px] border border-white/80 w-full shadow-xl shadow-blue-900/10">
+            <View className="bg-blue-50 border border-blue-100 p-5 rounded-3xl mb-5 shadow-xs">
+              <ShieldCheck size={48} color="#208AEF" strokeWidth={2.2} />
+            </View>
+            <Text className="text-slate-900 font-black text-2xl tracking-tight mb-2 text-center">No Active Dispatch</Text>
+            <Text className="text-slate-600 font-semibold text-center text-sm mb-7 leading-relaxed px-2">
+              You can only fill out a Patient Care Record when you are actively assigned to an emergency dispatch.
+            </Text>
+            <View className="w-full">
+              <TouchableOpacity
+                onPress={handleOpenWalkInModal}
+                className="w-full py-4 bg-[#208AEF] active:bg-[#1877D5] rounded-2xl items-center flex-row justify-center shadow-lg shadow-blue-500/25"
+              >
+                <Plus size={18} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 8 }} />
+                <Text className="text-white font-extrabold text-base tracking-wide">CREATE PCR</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </SafeAreaView>
+
+          {/* Walk-In Confirmation Modal */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={showWalkInModal}
+            onRequestClose={() => setShowWalkInModal(false)}
+          >
+            <View className="flex-1 justify-center items-center bg-slate-900/70 p-4">
+              <View className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-200">
+                <View className="items-center mb-4">
+                  <View className="w-16 h-16 bg-blue-50 border border-blue-100 rounded-2xl items-center justify-center mb-4 shadow-xs">
+                    <Plus size={32} color="#208AEF" strokeWidth={2.5} />
+                  </View>
+                  <Text className="text-xl font-black text-slate-800 text-center mb-2">
+                    Create Direct / Walk-In PCR
+                  </Text>
+                  <Text className="text-slate-600 text-center font-medium leading-relaxed text-sm">
+                    Use this when a family member or citizen requested help in person and you responded to the incident scene. This will capture the incident scene location.
+                  </Text>
+                </View>
+                <View className="flex-row justify-between space-x-3 mt-4">
+                  <TouchableOpacity
+                    onPress={() => setShowWalkInModal(false)}
+                    disabled={isCreatingWalkIn}
+                    className="flex-1 py-3.5 bg-slate-100 active:bg-slate-200 rounded-xl items-center"
+                  >
+                    <Text className="text-slate-600 font-bold">CANCEL</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleConfirmWalkIn}
+                    disabled={isCreatingWalkIn}
+                    className="flex-1 py-3.5 bg-[#208AEF] active:bg-[#1877D5] rounded-xl items-center shadow-md shadow-blue-500/20 flex-row justify-center"
+                  >
+                    {isCreatingWalkIn ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text className="text-white font-bold">CONFIRM</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -2696,76 +2986,97 @@ export default function PatientCareRecordScreen() {
     const statusLabel = isEnRoute ? 'En Route to Scene' : (isAccepted ? 'Mission Accepted' : 'Mission Assigned');
 
     return (
-      <SafeAreaView className="flex-1 bg-slate-50 items-center justify-center px-6" edges={['top', 'left', 'right']}>
-        <View className="items-center justify-center bg-white p-7 rounded-[32px] border border-slate-200 w-full shadow-lg shadow-slate-200/50">
-          <View className="w-20 h-20 bg-amber-50 rounded-3xl items-center justify-center mb-5 border border-amber-200/60 shadow-sm shadow-amber-200">
-            <Lock size={38} color="#D97706" strokeWidth={2.25} />
-          </View>
+      <View className="flex-1 bg-slate-50">
+        {/* Background Elements (Same as Log in form) */}
+        <View className="absolute top-0 left-0 right-0 h-[60%] bg-[#208AEF] rounded-b-[60px] overflow-hidden" pointerEvents="none">
+          <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
+          <View className="absolute top-[20%] right-[-80px] w-80 h-80 bg-[#1570C7] rounded-full opacity-40" />
+          <View className="absolute bottom-[-30px] left-[10%] w-40 h-40 bg-[#70B9FA] rounded-full opacity-30" />
+        </View>
 
-          <View className="bg-amber-100/70 px-3 py-1 rounded-full mb-3">
-            <Text className="text-amber-800 text-[11px] font-extrabold uppercase tracking-wider">
-              {statusLabel}
-            </Text>
-          </View>
+        <SafeAreaView className="flex-1 items-center justify-center px-6" edges={['top', 'left', 'right']}>
+          <View className="items-center justify-center bg-white p-7 rounded-[32px] border border-white/80 w-full shadow-xl shadow-blue-900/10">
+            <View className="w-20 h-20 bg-amber-50 rounded-3xl items-center justify-center mb-5 border border-amber-200/60 shadow-sm shadow-amber-200">
+              <Lock size={38} color="#D97706" strokeWidth={2.25} />
+            </View>
 
-          <Text className="text-slate-900 font-black text-2xl tracking-tight mb-2 text-center">
-            Arrival on Scene Required
-          </Text>
-
-          <Text className="text-slate-500 text-sm text-center mb-6 leading-relaxed">
-            The Patient Care Record (PCR) unlocks once you arrive at the incident scene and your status transitions to <Text className="font-bold text-slate-700">Arrived on Scene</Text>.
-          </Text>
-
-          {/* Mission Details Preview Card */}
-          <View className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-200/70 mb-6">
-            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Target Mission</Text>
-            <Text className="text-slate-900 font-bold text-base mb-2">
-              {activeDispatch.incident?.incident_type?.name || 'Emergency Mission'}
-            </Text>
-            <View className="flex-row items-start pt-1 border-t border-slate-200/60">
-              <View className="mt-0.5 mr-2">
-                <MapPin size={14} color="#64748B" />
-              </View>
-              <Text className="text-slate-600 text-xs font-medium flex-1 leading-5" numberOfLines={3}>
-                {activeDispatch.incident?.place_of_incident || activeDispatch.incident?.location || 'Reported Location'}
+            <View className="bg-amber-100/70 px-3 py-1 rounded-full mb-3">
+              <Text className="text-amber-800 text-[11px] font-extrabold uppercase tracking-wider">
+                {statusLabel}
               </Text>
             </View>
-          </View>
 
-          <View className="w-full space-y-3">
-            <TouchableOpacity
-              onPress={() => router.push('/(responder)/dispatch')}
-              activeOpacity={0.85}
-              className="w-full py-4 bg-slate-900 active:bg-slate-800 rounded-2xl items-center flex-row justify-center shadow-md shadow-slate-900/20"
-            >
-              <Navigation size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-              <Text className="text-white font-extrabold text-sm tracking-wider uppercase">
-                Open Mission & Navigation
+            <Text className="text-slate-900 font-black text-2xl tracking-tight mb-2 text-center">
+              Arrival on Scene Required
+            </Text>
+
+            <Text className="text-slate-500 text-sm text-center mb-6 leading-relaxed">
+              The Patient Care Record (PCR) unlocks once you arrive at the incident scene and your status transitions to <Text className="font-bold text-slate-700">Arrived on Scene</Text>.
+            </Text>
+
+            {/* Mission Details Preview Card */}
+            <View className="w-full bg-slate-50 p-4 rounded-2xl border border-slate-200/70 mb-6">
+              <Text className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Target Mission</Text>
+              <Text className="text-slate-900 font-bold text-base mb-2">
+                {activeDispatch.incident?.incident_type?.name || 'Emergency Mission'}
               </Text>
-            </TouchableOpacity>
+              <View className="flex-row items-start pt-1 border-t border-slate-200/60">
+                <View className="mt-0.5 mr-2">
+                  <MapPin size={14} color="#64748B" />
+                </View>
+                <Text className="text-slate-600 text-xs font-medium flex-1 leading-5" numberOfLines={3}>
+                  {activeDispatch.incident?.place_of_incident || activeDispatch.incident?.location || 'Reported Location'}
+                </Text>
+              </View>
+            </View>
 
-            <TouchableOpacity
-              onPress={() => {
-                setIsLoading(true);
-                loadActiveDispatch();
-              }}
-              activeOpacity={0.7}
-              className="w-full py-3 bg-transparent items-center flex-row justify-center mt-1"
-            >
-              <RefreshCw size={14} color="#64748B" style={{ marginRight: 6 }} />
-              <Text className="text-slate-600 text-xs font-bold">Refresh Status</Text>
-            </TouchableOpacity>
+            <View className="w-full space-y-3">
+              <TouchableOpacity
+                onPress={() => router.navigate('/(responder)/dispatch')}
+                activeOpacity={0.85}
+                className="w-full py-4 bg-slate-900 active:bg-slate-800 rounded-2xl items-center flex-row justify-center shadow-md shadow-slate-900/20"
+              >
+                <Navigation size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text className="text-white font-extrabold text-sm tracking-wider uppercase">
+                  Open Mission & Navigation
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setIsLoading(true);
+                  loadActiveDispatch();
+                }}
+                activeOpacity={0.7}
+                className="w-full py-3 bg-transparent items-center flex-row justify-center mt-1"
+              >
+                <RefreshCw size={14} color="#64748B" style={{ marginRight: 6 }} />
+                <Text className="text-slate-600 text-xs font-bold">Refresh Status</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.main} edges={['top', 'left', 'right']}>
-      <KeyboardAvoidingView style={styles.flex1} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Header title={`PCR: ${activeDispatch.incident?.tracking_number || 'Walk-In'}`} />
-        {renderStepIndicator()}
+    <View style={{ flex: 1, backgroundColor: '#f1f5f9' }}>
+      {/* Background Elements (Same as Log in form) */}
+      <View className="absolute top-0 left-0 right-0 h-[190px] bg-[#208AEF] rounded-b-[36px] overflow-hidden" pointerEvents="none">
+        <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
+        <View className="absolute top-[20%] right-[-80px] w-80 h-80 bg-[#1570C7] rounded-full opacity-40" />
+        <View className="absolute bottom-[-30px] left-[10%] w-40 h-40 bg-[#70B9FA] rounded-full opacity-30" />
+      </View>
+
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top', 'left', 'right']}>
+        <KeyboardAvoidingView style={styles.flex1} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Header
+            title={`PCR: ${activeDispatch.incident?.tracking_number || 'Walk-In'}`}
+            titleClassName="text-white"
+            subtitleClassName="text-blue-100"
+          />
+          {renderStepIndicator()}
 
         {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
@@ -3039,8 +3350,8 @@ export default function PatientCareRecordScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="Zone, Barangay, Municipality"
-                  value={identifyForm.street}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, street: v })}
+                  value={identifyForm.address}
+                  onChangeText={v => setIdentifyForm({ ...identifyForm, address: v })}
                 />
 
                 <Text style={styles.label}>Contact Number</Text>
@@ -3346,8 +3657,348 @@ export default function PatientCareRecordScreen() {
           </View>
         </Modal>
 
+        {/* Full-Screen PCR Print Preview Modal */}
+        <Modal
+          animationType="slide"
+          transparent={false}
+          visible={pcrPreviewVisible}
+          onRequestClose={() => setPcrPreviewVisible(false)}
+        >
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }} edges={['top', 'bottom', 'left', 'right']}>
+            {/* Modal Header */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              backgroundColor: '#1e293b',
+              borderBottomWidth: 1,
+              borderBottomColor: '#334155',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
+                <View style={{ backgroundColor: '#2563eb', width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                  <Printer size={18} color="#ffffff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#ffffff' }} numberOfLines={1}>
+                    PCR Print Preview
+                  </Text>
+                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500' }} numberOfLines={1}>
+                    MDRRMO Official Patient Care Record
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={handleSharePcr}
+                  activeOpacity={0.7}
+                  style={{
+                    backgroundColor: '#2563eb',
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 5,
+                  }}
+                >
+                  <Share2 size={14} color="#ffffff" />
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>Share</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setPcrPreviewVisible(false)}
+                  activeOpacity={0.7}
+                  style={{
+                    backgroundColor: '#334155',
+                    width: 34,
+                    height: 34,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <X size={18} color="#cbd5e1" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Document WebView */}
+            <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+              {pcrPreviewHtml ? (
+                <WebView
+                  originWhitelist={['*']}
+                  source={{ html: pcrPreviewHtml }}
+                  style={{ flex: 1 }}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  scalesPageToFit={true}
+                  startInLoadingState={true}
+                  renderLoading={() => (
+                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
+                      <ActivityIndicator size="large" color="#2563eb" />
+                      <Text style={{ marginTop: 10, fontSize: 13, color: '#64748b', fontWeight: '600' }}>
+                        Rendering PCR Document...
+                      </Text>
+                    </View>
+                  )}
+                />
+              ) : (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator size="large" color="#2563eb" />
+                </View>
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
+
+        {/* Professional PCR Submission & Completion Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showSuccessModal}
+          onRequestClose={handleCloseSuccessModal}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={handleCloseSuccessModal}
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(15, 23, 42, 0.65)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              paddingHorizontal: 20,
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: 345,
+                backgroundColor: '#FFFFFF',
+                borderRadius: 28,
+                paddingHorizontal: 22,
+                paddingVertical: 24,
+                alignItems: 'center',
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 16 },
+                shadowOpacity: 0.18,
+                shadowRadius: 24,
+                elevation: 10,
+                borderWidth: 1,
+                borderColor: '#F1F5F9',
+              }}
+            >
+              {/* Concentric Dual-Ring Icon Badge */}
+              <View
+                style={{
+                  width: 68,
+                  height: 68,
+                  borderRadius: 34,
+                  backgroundColor:
+                    successModalData?.type === 'offline'
+                      ? '#EFF6FF'
+                      : successModalData?.type === 'unfounded'
+                      ? '#FEF2F2'
+                      : '#ECFDF5',
+                  borderWidth: 1.5,
+                  borderColor:
+                    successModalData?.type === 'offline'
+                      ? '#BFDBFE'
+                      : successModalData?.type === 'unfounded'
+                      ? '#FECACA'
+                      : '#A7F3D0',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor:
+                      successModalData?.type === 'offline'
+                        ? '#2563EB'
+                        : successModalData?.type === 'unfounded'
+                        ? '#EF4444'
+                        : '#10B981',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor:
+                      successModalData?.type === 'offline'
+                        ? '#2563EB'
+                        : successModalData?.type === 'unfounded'
+                        ? '#EF4444'
+                        : '#10B981',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 8,
+                    elevation: 3,
+                  }}
+                >
+                  {successModalData?.type === 'unfounded' ? (
+                    <ShieldCheck size={26} color="#FFFFFF" strokeWidth={2.4} />
+                  ) : (
+                    <CheckCircle2 size={26} color="#FFFFFF" strokeWidth={2.4} />
+                  )}
+                </View>
+              </View>
+
+              {/* Status Pill */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  backgroundColor:
+                    successModalData?.type === 'offline'
+                      ? '#DBEAFE'
+                      : successModalData?.type === 'unfounded'
+                      ? '#FEE2E2'
+                      : '#D1FAE5',
+                  paddingHorizontal: 12,
+                  paddingVertical: 4.5,
+                  borderRadius: 20,
+                  marginBottom: 10,
+                }}
+              >
+                <View
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor:
+                      successModalData?.type === 'offline'
+                        ? '#2563EB'
+                        : successModalData?.type === 'unfounded'
+                        ? '#DC2626'
+                        : '#059669',
+                  }}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '800',
+                    letterSpacing: 0.8,
+                    color:
+                      successModalData?.type === 'offline'
+                        ? '#1D4ED8'
+                        : successModalData?.type === 'unfounded'
+                        ? '#DC2626'
+                        : '#047857',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {successModalData?.statusBadge || 'MISSION COMPLETED'}
+                </Text>
+              </View>
+
+              {/* Modal Title */}
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: '800',
+                  color: '#0F172A',
+                  textAlign: 'center',
+                  letterSpacing: -0.3,
+                  marginBottom: 6,
+                }}
+              >
+                {successModalData?.title || 'PCR Submitted Successfully'}
+              </Text>
+
+              {/* Description */}
+              <Text
+                style={{
+                  fontSize: 13,
+                  color: '#64748B',
+                  textAlign: 'center',
+                  lineHeight: 18,
+                  marginBottom: 16,
+                  paddingHorizontal: 6,
+                }}
+              >
+                {successModalData?.message ||
+                  'Patient Care Report has been officially filed and recorded in the MDRRMO command system.'}
+              </Text>
+
+              {/* Mission Receipt / Summary Card */}
+              <View
+                style={{
+                  width: '100%',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  marginBottom: 18,
+                  gap: 8,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Incident Ref</Text>
+                  <Text style={{ fontSize: 12.5, color: '#0F172A', fontWeight: '700' }} numberOfLines={1}>
+                    {successModalData?.incidentRef || 'N/A'}
+                  </Text>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#E2E8F0' }} />
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Patient</Text>
+                  <Text style={{ fontSize: 12.5, color: '#0F172A', fontWeight: '700', maxWidth: '62%' }} numberOfLines={1}>
+                    {successModalData?.patientName || 'Patient'}
+                  </Text>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: '#E2E8F0' }} />
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Time</Text>
+                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
+                    {successModalData?.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Done / Back to Missions Action Button */}
+              <TouchableOpacity
+                onPress={handleCloseSuccessModal}
+                activeOpacity={0.85}
+                style={{
+                  width: '100%',
+                  height: 48,
+                  backgroundColor: '#208AEF',
+                  borderRadius: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  shadowColor: '#208AEF',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 4,
+                  gap: 6,
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15, letterSpacing: 0.2 }}>
+                  Back to Missions
+                </Text>
+                <ChevronRight size={17} color="#FFFFFF" strokeWidth={2.4} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -3355,14 +4006,14 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: '#f1f5f9' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   flex1: { flex: 1 },
-  scroll: { padding: 20, paddingBottom: 60 },
+  scroll: { padding: 14, paddingBottom: 140 },
   content: { backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   title: { fontSize: 24, fontWeight: '800', color: '#0f172a', marginBottom: 20 },
   subtitle: { fontSize: 16, fontWeight: '700', color: '#334155', marginTop: 15, marginBottom: 10 },
   label: { fontSize: 14, fontWeight: '600', color: '#475569', marginBottom: 8, marginTop: 15 },
   stepContainer: { flexDirection: 'row', justifyContent: 'center', marginBottom: 20, gap: 8 },
-  stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#cbd5e1' },
-  stepActive: { backgroundColor: '#208AEF', width: 24 },
+  stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255, 255, 255, 0.45)' },
+  stepActive: { backgroundColor: '#ffffff', width: 24 },
 
   // MODAL STYLES
   modalOverlay: {

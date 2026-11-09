@@ -89,7 +89,13 @@ export default function ResetPasswordScreen() {
       {/* Header */}
       <View className="flex-row items-center justify-between mb-6">
         <TouchableOpacity
-          onPress={() => router.replace('/login')}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/login');
+            }
+          }}
           className="w-10 h-10 rounded-2xl bg-white/20 items-center justify-center border border-white/30 backdrop-blur-md"
           activeOpacity={0.7}
         >

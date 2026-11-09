@@ -14,7 +14,8 @@ import {
   ShieldCheck, 
   Check, 
   ArrowRight,
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { AuthBackground, LoginCard } from '@/auth/components';
@@ -38,11 +39,18 @@ export default function RegisterScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-calculate age from YYYY-MM-DD
-  const calculateAgeFromDate = (dateString: string): string => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return '';
-    const birthDate = new Date(dateString);
+  // Auto-calculate age from MM-DD-YYYY
+  const calculateAgeFromMmDdYyyy = (dateString: string): string => {
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(dateString)) return '';
+    const [monthStr, dayStr, yearStr] = dateString.split('-');
+    const month = parseInt(monthStr, 10);
+    const day = parseInt(dayStr, 10);
+    const year = parseInt(yearStr, 10);
+
+    if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900) return '';
+    const birthDate = new Date(year, month - 1, day);
     if (isNaN(birthDate.getTime())) return '';
+
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
@@ -52,26 +60,139 @@ export default function RegisterScreen() {
     return age >= 0 && age <= 120 ? String(age) : '';
   };
 
-  // Birthday formatter: auto-inserts dashes and rejects any letters
+  // Convert MM-DD-YYYY to backend SQL ISO format YYYY-MM-DD
+  const convertMmDdYyyyToIso = (dateString: string): string | null => {
+    if (!dateString) return null;
+    const parts = dateString.split('-');
+    if (parts.length === 3 && parts[2].length === 4) {
+      const mm = parts[0].padStart(2, '0');
+      const dd = parts[1].padStart(2, '0');
+      const yyyy = parts[2];
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    return dateString;
+  };
+
+  // Birthday formatter: strictly formats MM-DD-YYYY, auto-pads single digits, and enforces 10-char max
   const handleBirthdayChange = (raw: string) => {
-    // Only allow numbers
-    const digits = raw.replace(/[^0-9]/g, '').slice(0, 8);
-    let formatted = digits;
-    if (digits.length > 4 && digits.length <= 6) {
-      formatted = `${digits.slice(0, 4)}-${digits.slice(4)}`;
-    } else if (digits.length > 6) {
-      formatted = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+    const prev = formData.birthdate;
+    // Allow natural backspacing
+    if (raw.length < prev.length) {
+      const nextVal = raw.endsWith('-') ? raw.slice(0, -1) : raw;
+      setFormData(f => ({ ...f, birthdate: nextVal }));
+      if (errors.birthdate) setErrors(f => ({ ...f, birthdate: '' }));
+      return;
     }
 
-    const calculatedAge = calculateAgeFromDate(formatted);
-    setFormData(prev => ({
-      ...prev,
+    // Extract numbers only
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) {
+      setFormData(f => ({ ...f, birthdate: '', age: '' }));
+      return;
+    }
+
+    // --- 1. Month Logic ---
+    const firstDigit = parseInt(digits[0], 10);
+    let monthStr = '';
+    let remaining = '';
+
+    if (firstDigit >= 2 && firstDigit <= 9) {
+      // Month digit is 2-9 (e.g. 6) -> immediately format as 06-
+      monthStr = `0${firstDigit}`;
+      remaining = digits.slice(1);
+    } else if (digits.length === 1) {
+      // Only 0 or 1 entered so far
+      setFormData(f => ({ ...f, birthdate: digits[0] }));
+      return;
+    } else {
+      // 2 or more digits starting with 0 or 1
+      const twoDigitMonth = parseInt(digits.slice(0, 2), 10);
+      if (twoDigitMonth === 0) {
+        monthStr = '01';
+        remaining = digits.slice(2);
+      } else if (twoDigitMonth > 12) {
+        // e.g. user typed 1 followed by 5 -> month 01, day 5
+        monthStr = `0${firstDigit}`;
+        remaining = digits.slice(1);
+      } else {
+        monthStr = digits.slice(0, 2);
+        remaining = digits.slice(2);
+      }
+    }
+
+    let formatted = `${monthStr}-`;
+    if (!remaining) {
+      setFormData(f => ({ ...f, birthdate: formatted }));
+      return;
+    }
+
+    // --- 2. Day Logic ---
+    const dayFirstDigit = parseInt(remaining[0], 10);
+    let dayStr = '';
+    let yearRemaining = '';
+
+    if (dayFirstDigit >= 4 && dayFirstDigit <= 9) {
+      // Day digit is 4-9 (e.g. 6) -> immediately format as 06-
+      dayStr = `0${dayFirstDigit}`;
+      yearRemaining = remaining.slice(1);
+    } else if (remaining.length === 1) {
+      // 0, 1, 2, 3 -> wait for second digit of day
+      setFormData(f => ({ ...f, birthdate: `${formatted}${remaining[0]}` }));
+      return;
+    } else {
+      const twoDigitDay = parseInt(remaining.slice(0, 2), 10);
+      if (twoDigitDay === 0) {
+        dayStr = '01';
+      } else if (twoDigitDay > 31) {
+        dayStr = '31';
+      } else {
+        dayStr = remaining.slice(0, 2);
+      }
+      yearRemaining = remaining.slice(2);
+    }
+
+    formatted = `${monthStr}-${dayStr}-`;
+    if (!yearRemaining) {
+      setFormData(f => ({ ...f, birthdate: formatted }));
+      return;
+    }
+
+    // --- 3. Year Logic (STRICTLY MAXIMUM 4 DIGITS) ---
+    const yearStr = yearRemaining.slice(0, 4);
+    formatted = `${monthStr}-${dayStr}-${yearStr}`;
+
+    const calculatedAge = calculateAgeFromMmDdYyyy(formatted);
+    setFormData(f => ({
+      ...f,
       birthdate: formatted,
-      age: calculatedAge || prev.age,
+      age: calculatedAge || f.age,
     }));
 
     if (errors.birthdate) {
-      setErrors(prev => ({ ...prev, birthdate: '' }));
+      setErrors(f => {
+        const next = { ...f };
+        delete next.birthdate;
+        return next;
+      });
+    }
+  };
+
+  const handleBirthdayBlur = () => {
+    if (!formData.birthdate) return;
+    const parts = formData.birthdate.split('-');
+    if (parts.length >= 2) {
+      const mm = parts[0] ? String(Math.min(12, Math.max(1, parseInt(parts[0], 10) || 1))).padStart(2, '0') : '';
+      const dd = parts[1] ? String(Math.min(31, Math.max(1, parseInt(parts[1], 10) || 1))).padStart(2, '0') : '';
+      const yyyy = parts[2] ? parts[2].replace(/[^0-9]/g, '').slice(0, 4) : '';
+      let normalized = mm;
+      if (dd) normalized += `-${dd}`;
+      if (yyyy) normalized += `-${yyyy}`;
+      const age = calculateAgeFromMmDdYyyy(normalized);
+      setFormData(f => ({
+        ...f,
+        birthdate: normalized,
+        age: age || f.age,
+      }));
     }
   };
 
@@ -80,14 +201,45 @@ export default function RegisterScreen() {
     const cleanNumber = raw.replace(/[^0-9]/g, '').slice(0, 3);
     setFormData(prev => ({ ...prev, age: cleanNumber }));
     if (errors.age) {
-      setErrors(prev => ({ ...prev, age: '' }));
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next.age;
+        return next;
+      });
+    }
+  };
+
+  // Phone input: allows numbers and plus, restricts to valid length
+  const handlePhoneChange = (raw: string) => {
+    const cleanPhone = raw.replace(/[^\d+]/g, '').slice(0, 13);
+    setFormData(prev => ({ ...prev, phone_number: cleanPhone }));
+    if (errors.phone_number) {
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next.phone_number;
+        return next;
+      });
     }
   };
 
   const handleChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+    }
+    // Also live re-evaluate password match error
+    if (name === 'password' || name === 'password_confirmation') {
+      if (errors.password_confirmation && (name === 'password' ? value === formData.password_confirmation : value === formData.password)) {
+        setErrors(prev => {
+          const next = { ...prev };
+          delete next.password_confirmation;
+          return next;
+        });
+      }
     }
   };
 
@@ -101,8 +253,24 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.first_name.trim()) newErrors.first_name = 'First name is required';
-    if (!formData.last_name.trim()) newErrors.last_name = 'Last name is required';
+    if (!formData.first_name.trim()) {
+      newErrors.first_name = 'First name is required';
+    } else if (formData.first_name.trim().length > 255) {
+      newErrors.first_name = 'First name cannot exceed 255 characters';
+    }
+
+    if (!formData.last_name.trim()) {
+      newErrors.last_name = 'Last name is required';
+    } else if (formData.last_name.trim().length > 255) {
+      newErrors.last_name = 'Last name cannot exceed 255 characters';
+    }
+
+    if (formData.phone_number.trim()) {
+      const cleanPhone = formData.phone_number.trim().replace(/[-\s]/g, '');
+      if (!/^(09\d{9}|\+639\d{9})$/.test(cleanPhone)) {
+        newErrors.phone_number = 'Please enter a valid Philippine mobile number (e.g. 09123456789)';
+      }
+    }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!formData.email.trim()) {
@@ -111,8 +279,19 @@ export default function RegisterScreen() {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    if (formData.birthdate && !/^\d{4}-\d{2}-\d{2}$/.test(formData.birthdate)) {
-      newErrors.birthdate = 'Format must be YYYY-MM-DD';
+    if (formData.birthdate) {
+      if (!/^\d{2}-\d{2}-\d{4}$/.test(formData.birthdate)) {
+        newErrors.birthdate = 'Format must be MM-DD-YYYY (e.g. 06-15-1998)';
+      } else {
+        const [mStr, dStr, yStr] = formData.birthdate.split('-');
+        const m = parseInt(mStr, 10);
+        const d = parseInt(dStr, 10);
+        const y = parseInt(yStr, 10);
+        const bDate = new Date(y, m - 1, d);
+        if (isNaN(bDate.getTime()) || m < 1 || m > 12 || d < 1 || d > 31 || bDate >= new Date() || y < 1900) {
+          newErrors.birthdate = 'Birthday must be a valid past date (MM-DD-YYYY)';
+        }
+      }
     }
 
     if (formData.age) {
@@ -139,18 +318,20 @@ export default function RegisterScreen() {
     if (Object.keys(newErrors).length > 0) {
       Toast.show({
         type: 'error',
-        text1: 'Validation Error',
-        text2: 'Please check the highlighted fields.',
+        text1: 'Incomplete Registration Form',
+        text2: `Please resolve the ${Object.keys(newErrors).length} highlighted error(s) below.`,
       });
       return;
     }
 
     setIsSubmitting(true);
+    const isoBirthdate = formData.birthdate ? convertMmDdYyyyToIso(formData.birthdate) : null;
     const payload = {
       ...formData,
       email: formData.email.trim(),
+      phone_number: formData.phone_number.trim() || null,
       age: formData.age ? parseInt(formData.age, 10) : null,
-      birthdate: formData.birthdate || null,
+      birthdate: isoBirthdate,
     };
 
     const result = await register(payload);
@@ -163,14 +344,29 @@ export default function RegisterScreen() {
         text2: 'Welcome to OPOL RESQ!',
       });
     } else {
-      if (result.error?.toLowerCase().includes('email')) {
-        setErrors(prev => ({ ...prev, email: 'This email is already registered.' }));
+      if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
+        const serverErrors: Record<string, string> = {};
+        for (const [field, messages] of Object.entries(result.fieldErrors)) {
+          serverErrors[field] = Array.isArray(messages) ? messages[0] : (messages as string);
+        }
+        setErrors(serverErrors);
+        Toast.show({
+          type: 'error',
+          text1: 'Registration Error',
+          text2: 'Please review the highlighted fields with issues.',
+        });
+      } else {
+        if (result.error?.toLowerCase().includes('email')) {
+          setErrors(prev => ({ ...prev, email: 'This email is already registered.' }));
+        } else if (result.error?.toLowerCase().includes('phone')) {
+          setErrors(prev => ({ ...prev, phone_number: 'This phone number is already registered.' }));
+        }
+        Toast.show({
+          type: 'error',
+          text1: 'Registration Failed',
+          text2: result.error || 'Unable to register account. Please try again.',
+        });
       }
-      Toast.show({
-        type: 'error',
-        text1: 'Registration Failed',
-        text2: result.error || 'Unable to register account. Please try again.',
-      });
     }
   };
 
@@ -183,7 +379,13 @@ export default function RegisterScreen() {
       >
         {/* Navigation Bar */}
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/login');
+            }
+          }}
           activeOpacity={0.7}
           className="flex-row items-center self-start bg-white/20 border border-white/30 px-3.5 py-1.5 rounded-full mb-6"
         >
@@ -250,9 +452,10 @@ export default function RegisterScreen() {
             <View className="flex-1">
               <Input
                 label="Birthday"
-                placeholder="YYYY-MM-DD"
+                placeholder="MM-DD-YYYY"
                 value={formData.birthdate}
                 onChangeText={handleBirthdayChange}
+                onBlur={handleBirthdayBlur}
                 keyboardType="numeric"
                 maxLength={10}
                 icon={<Calendar />}
@@ -279,8 +482,9 @@ export default function RegisterScreen() {
             label="Phone Number (Optional)"
             placeholder="09XXXXXXXXX"
             value={formData.phone_number}
-            onChangeText={(val) => handleChange('phone_number', val)}
+            onChangeText={handlePhoneChange}
             keyboardType="phone-pad"
+            maxLength={13}
             icon={<Phone />}
             error={errors.phone_number}
           />
@@ -348,12 +552,34 @@ export default function RegisterScreen() {
           </View>
         </View>
 
+        {/* Error Summary Banner when validation errors exist */}
+        {Object.keys(errors).length > 0 && (
+          <View className="mb-3.5 p-4 rounded-2xl bg-red-50 border-2 border-red-200">
+            <View className="flex-row items-center mb-1.5">
+              <AlertCircle size={18} color="#DC2626" />
+              <Text className="text-red-700 font-bold text-xs uppercase tracking-wide ml-2">
+                Please correct the following ({Object.keys(errors).length}):
+              </Text>
+            </View>
+            <View className="space-y-1 pl-1">
+              {Object.entries(errors).map(([field, msg]) => (
+                <View key={field} className="flex-row items-start mt-1">
+                  <View className="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 mt-1.5" />
+                  <Text className="text-red-600 text-xs font-semibold flex-1 leading-relaxed">
+                    {msg}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Submit Button */}
         <TouchableOpacity
           onPress={handleRegister}
           disabled={isSubmitting}
           activeOpacity={0.8}
-          className={`w-full rounded-2xl overflow-hidden shadow-lg shadow-blue-500/30 mt-3 ${isSubmitting ? 'opacity-80' : ''}`}
+          className={`w-full rounded-2xl overflow-hidden shadow-lg shadow-blue-500/30 mt-2 ${isSubmitting ? 'opacity-80' : ''}`}
         >
           <View className="bg-[#208AEF] py-4 flex-row justify-center items-center">
             {isSubmitting ? (

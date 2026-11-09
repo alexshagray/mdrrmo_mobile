@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { Home, Map as MapIcon, UserCircle, ClipboardList, User } from 'lucide-react-native';
-import { View } from 'react-native';
+import { View, Platform, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getActiveDispatches } from '@/shared/api/dispatches';
 import { useLiveDispatchTracking } from '@/shared/hooks';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
-import ConnectionBanner from '@/shared/components/ConnectionBanner';
 import { offlineMissionService } from '@/shared/services/offlineMissionService';
 
 export default function ResponderLayout() {
+  const insets = useSafeAreaInsets();
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
   const { missionRefreshTrigger } = useMissionAlarm();
+
+  // Adaptive bottom margin: respects Android system navigation (3-button or gesture) and iOS home indicator
+  const bottomOffset = Platform.select({
+    android: insets.bottom > 0 ? insets.bottom + 4 : 10,
+    ios: insets.bottom > 0 ? insets.bottom : 10,
+    default: 10,
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -26,8 +34,8 @@ export default function ResponderLayout() {
       if (isMounted && res?.data && res.data.length > 0) {
         setActiveDispatch(res.data[0]);
         offlineMissionService.saveActiveMission(res.data[0]);
-      } else if (isMounted) {
-        // Only clear if confirmed by server that no active dispatches exist
+      } else if (isMounted && !res?.is_offline) {
+        // Only clear if confirmed by server (online) that no active dispatches exist
         setActiveDispatch(null);
         offlineMissionService.clearActiveMission();
       }
@@ -47,30 +55,64 @@ export default function ResponderLayout() {
   useLiveDispatchTracking(activeDispatch?.id, activeDispatch?.dispatch_status, { driverId: activeDispatch?.driver_id });
   return (
     <View style={{ flex: 1 }}>
-      <ConnectionBanner />
       <Tabs
-      screenOptions={{
+        backBehavior="history"
+        screenOptions={{
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          bottom: 18,
-          left: 20,
-          right: 20,
-          elevation: 6,
+          bottom: bottomOffset,
+          left: 18,
+          right: 18,
+          elevation: 8,
           backgroundColor: '#FFFFFF',
-          borderRadius: 28,
-          height: 60,
+          borderRadius: 22,
+          height: 56,
           shadowColor: '#0F172A',
-          shadowOffset: { width: 0, height: 6 },
+          shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.08,
-          shadowRadius: 16,
+          shadowRadius: 14,
           borderTopWidth: 0,
           borderWidth: 1,
-          borderColor: '#F1F5F9',
+          borderColor: '#E2E8F0',
           paddingBottom: 0,
-          paddingHorizontal: 6,
+          paddingTop: 0,
+          paddingHorizontal: 4,
           alignItems: 'center',
           justifyContent: 'space-around',
+        },
+        tabBarItemStyle: {
+          height: 56,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingVertical: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+        },
+        tabBarIconStyle: {
+          width: '100%',
+          height: '100%',
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+        tabBarButton: (props: any) => {
+          const { ref, ...rest } = props;
+          return (
+            <Pressable
+              ref={ref}
+              {...rest}
+              style={({ pressed }) => [
+                props.style,
+                {
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingTop: 0,
+                  paddingBottom: 0,
+                  opacity: pressed ? 0.75 : 1,
+                },
+              ]}
+            />
+          );
         },
         tabBarShowLabel: false,
       }}

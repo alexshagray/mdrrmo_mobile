@@ -1,4 +1,4 @@
-import { initializeEcho, destroyEcho } from './echo';
+import { initializeEcho, destroyEcho, getEcho } from './echo';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 
@@ -6,9 +6,18 @@ let appState = AppState.currentState;
 let isOnline = true;
 let isInitialized = false;
 
+const isSocketConnected = () => {
+  const echo = getEcho();
+  const state = echo?.connector?.pusher?.connection?.state;
+  return state === 'connected';
+};
+
 const _handleAppStateChange = (nextAppState) => {
   if (appState && appState.match(/inactive|background/) && nextAppState === 'active') {
-    reconnect().catch(err => console.log('Reconnect error:', err));
+    // Only reconnect if the socket is actually disconnected/failed
+    if (!isSocketConnected()) {
+      reconnect().catch(err => console.log('Reconnect error:', err));
+    }
   }
   appState = nextAppState;
 };
@@ -22,7 +31,9 @@ const setupListeners = () => {
   NetInfo.addEventListener(state => {
     const currentlyOnline = state.isConnected && state.isInternetReachable !== false;
     if (!isOnline && currentlyOnline) {
-      reconnect().catch(err => console.log('Reconnect error:', err));
+      if (!isSocketConnected()) {
+        reconnect().catch(err => console.log('Reconnect error:', err));
+      }
     }
     isOnline = currentlyOnline;
   });
@@ -48,6 +59,9 @@ const disconnect = () => {
 };
 
 const reconnect = async () => {
+  if (isSocketConnected()) {
+    return getEcho();
+  }
   console.log('Reconnecting WebSocket...');
   disconnect();
   return await connect();

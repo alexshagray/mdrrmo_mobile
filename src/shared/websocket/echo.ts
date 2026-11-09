@@ -55,6 +55,23 @@ export const connectWebSocket = async () => {
     },
   });
 
+  const pusher = echoInstance.connector?.pusher;
+  if (pusher?.connection) {
+    pusher.connection.bind('state_change', (states: any) => {
+      console.log(`[WebSocket] State: ${states.previous} -> ${states.current} (ws://${ENV.REVERB_HOST}:${ENV.REVERB_PORT})`);
+    });
+    pusher.connection.bind('connected', () => {
+      console.log(`[WebSocket] Connected to ws://${ENV.REVERB_HOST}:${ENV.REVERB_PORT}`);
+    });
+    pusher.connection.bind('error', (err: any) => {
+      const msg = err?.error?.data?.message || err?.message || JSON.stringify(err);
+      console.warn(`[WebSocket] Error (ws://${ENV.REVERB_HOST}:${ENV.REVERB_PORT}):`, msg);
+    });
+    pusher.connection.bind('disconnected', () => {
+      console.log(`[WebSocket] Disconnected from ws://${ENV.REVERB_HOST}:${ENV.REVERB_PORT}`);
+    });
+  }
+
   return echoInstance;
 };
 

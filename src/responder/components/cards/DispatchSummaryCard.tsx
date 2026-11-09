@@ -15,7 +15,7 @@ export function DispatchSummaryCard({
     <View className="flex-row gap-3 mb-6">
       {/* Completed Dispatches Card */}
       <View
-        className="flex-1 bg-white rounded-2xl p-5 border border-slate-200/70"
+        className="flex-1 bg-white rounded-xl p-5 border border-slate-200/70"
         style={{
           shadowColor: '#0F172A',
           shadowOffset: { width: 0, height: 4 },
@@ -25,10 +25,10 @@ export function DispatchSummaryCard({
         }}
       >
         <View className="flex-row items-center justify-between mb-3">
-          <View className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200/60 items-center justify-center">
+          <View className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200/60 items-center justify-center">
             <CheckCircle2 size={18} color="#059669" />
           </View>
-          <Text className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest bg-emerald-50/80 px-2 py-0.5 rounded-full">
+          <Text className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest bg-emerald-50/80 px-2 py-0.5 rounded-md">
             TODAY
           </Text>
         </View>
@@ -40,7 +40,7 @@ export function DispatchSummaryCard({
 
       {/* Patients Treated Card */}
       <View
-        className="flex-1 bg-white rounded-2xl p-5 border border-slate-200/70"
+        className="flex-1 bg-white rounded-xl p-5 border border-slate-200/70"
         style={{
           shadowColor: '#0F172A',
           shadowOffset: { width: 0, height: 4 },
@@ -50,10 +50,10 @@ export function DispatchSummaryCard({
         }}
       >
         <View className="flex-row items-center justify-between mb-3">
-          <View className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 items-center justify-center">
+          <View className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200/60 items-center justify-center">
             <Users size={18} color="#208AEF" />
           </View>
-          <Text className="text-[10px] font-bold text-[#208AEF] uppercase tracking-widest bg-blue-50/80 px-2 py-0.5 rounded-full">
+          <Text className="text-[10px] font-bold text-[#208AEF] uppercase tracking-widest bg-blue-50/80 px-2 py-0.5 rounded-md">
             SERVED
           </Text>
         </View>

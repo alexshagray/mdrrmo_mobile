@@ -9,7 +9,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Header } from '@/shared/components';
+import { Header, BrandBackground } from '@/shared/components';
 import { EmergencyButton } from '@/resident/components/common/EmergencyButton';
 import { EmergencyHotlineGrid } from '@/resident/components/cards/HotlineCard';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -32,9 +32,11 @@ import {
   X,
   Radio,
   CheckCircle2,
+  Settings,
 } from 'lucide-react-native';
 import { useAuth } from '@/shared/hooks';
-import { getMyReports } from '@/shared/api/incidents';
+import { getMyReports, markReportsHistoryViewed } from '@/shared/api/incidents';
+import { getStoredNotifications, getUnreadNotificationsCount } from '@/shared/api/notifications';
 import { useResidentAlert } from '@/shared/contexts/ResidentAlertContext';
 
 // ─── Disaster Tips Data ───────────────────────────────────────────────────────
@@ -121,16 +123,27 @@ const DISASTER_GUIDES: DisasterGuide[] = [
   },
 ];
 
+const formatCapitalize = (str: string | undefined | null) => {
+  if (!str) return 'Resident';
+  return str
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { residentRefreshTrigger } = useResidentAlert();
-  const userName = user?.first_name || user?.name || 'Resident';
+  const rawUserName = user?.first_name || user?.name || 'Resident';
+  const userName = formatCapitalize(rawUserName);
 
   const [recentReport, setRecentReport] = useState<any>(null);
   const [loadingReports, setLoadingReports] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeGuide, setActiveGuide] = useState<DisasterGuide | null>(null);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
 
   const fetchIncidents = useCallback(async () => {
     if (!user || user.role !== 'resident') {
@@ -142,6 +155,14 @@ export default function HomeScreen() {
       const res = await getMyReports();
       const incidents = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
       
+      // Calculate unread alerts count
+      try {
+        const unread = await getUnreadNotificationsCount(incidents);
+        setUnreadNotifs(unread);
+      } catch (err) {
+        // Ignore unread calculation error
+      }
+
       if (incidents.length > 0) {
         // Find latest active emergency if exists, otherwise take first latest
         const activeItem = incidents.find((i: any) => 
@@ -246,89 +267,182 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" edges={['top']}>
-      <Header
-        title={`Hi, ${userName} 👋`}
-        subtitle="OPOL RESQ • CITIZEN EMERGENCY PORTAL"
-        className="bg-transparent pb-0"
-      />
+    <View className="flex-1 bg-slate-50">
+      <BrandBackground variant="home" />
 
-      <ScrollView
-        className="flex-1 px-5"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 110 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#208AEF"
-          />
-        }
-      >
+      <SafeAreaView className="flex-1" edges={['top']}>
+        <Header
+          title={`Hi, ${userName} 👋`}
+          subtitle={user?.verification_status === 'Verified' ? "OPOL RESQ • VERIFIED RESIDENT" : "OPOL RESQ • CITIZEN EMERGENCY PORTAL"}
+          className="bg-transparent pb-0"
+          titleClassName="text-white font-black"
+          subtitleClassName="text-blue-100 font-bold"
+          rightElement={
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => router.navigate('/(resident)/notifications')}
+                activeOpacity={0.7}
+                className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 items-center justify-center active:bg-white/30 shadow-sm relative"
+                accessibilityRole="button"
+                accessibilityLabel="Notifications and Alerts"
+              >
+                <Bell size={18} color="#FFFFFF" strokeWidth={2.2} />
+                {unreadNotifs > 0 && (
+                  <View
+                    className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1 border-2 border-[#1E40AF]"
+                    style={{ elevation: 4 }}
+                  >
+                    <Text className="text-white text-[10px] font-black leading-none">
+                      {unreadNotifs > 99 ? '99+' : unreadNotifs}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => router.navigate('/(resident)/account-security')}
+                activeOpacity={0.7}
+                className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 items-center justify-center active:bg-white/30 shadow-sm"
+                accessibilityRole="button"
+                accessibilityLabel="Account Settings & Security"
+              >
+                <Settings size={18} color="#FFFFFF" strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+          }
+        />
+
+        <ScrollView
+          className="flex-1 px-5"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#ffffff"
+            />
+          }
+        >
+        {/* ─── Profile Verification Reminder Banner for Pending Residents ─── */}
+        {user?.verification_status === 'Pending' && (
+          <View
+            className="bg-amber-50 border border-amber-300/80 rounded-3xl p-4 mb-4 shadow-sm"
+            style={{
+              shadowColor: '#D97706',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.08,
+              shadowRadius: 8,
+              elevation: 2,
+            }}
+          >
+            <View className="flex-row items-start">
+              <View className="w-10 h-10 rounded-2xl bg-amber-100 border border-amber-300/60 items-center justify-center mr-3 mt-0.5">
+                <ShieldAlert size={21} color="#D97706" strokeWidth={2.4} />
+              </View>
+              <View className="flex-1">
+                <View className="flex-row items-center justify-between mb-1">
+                  <Text className="text-amber-950 font-black text-sm tracking-tight">
+                    Profile Verification Required
+                  </Text>
+                  <View className="bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                    <Text className="text-amber-800 text-[10px] font-extrabold uppercase tracking-wide">
+                      Pending
+                    </Text>
+                  </View>
+                </View>
+                <Text className="text-amber-800 text-xs font-medium leading-4 mb-3">
+                  Complete your personal information to unlock the accident reporting feature.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.navigate('/(resident)/personal-info')}
+                  activeOpacity={0.8}
+                  className="bg-amber-600 active:bg-amber-700 py-2.5 px-4 rounded-xl flex-row items-center justify-center self-start shadow-sm"
+                >
+                  <Text className="text-white text-xs font-bold mr-1.5">
+                    Complete Personal Information
+                  </Text>
+                  <ArrowRight size={13} color="#FFFFFF" strokeWidth={2.5} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
         {/* Urgent Emergency SOS Card */}
-        <EmergencyButton onPress={() => router.push('/(resident)/report')} />
+        <EmergencyButton onPress={() => router.navigate('/(resident)/report')} />
 
         {/* ─── Quick Services Hub ────────────────────────────────────────── */}
         <View
-          className="bg-white rounded-3xl p-4 border border-slate-200/80 mb-6 flex-row justify-between items-center"
+          className="bg-white rounded-3xl p-3.5 border border-slate-200/90 mb-5 flex-row justify-between items-center shadow-sm"
           style={{
             shadowColor: '#0F172A',
-            shadowOffset: { width: 0, height: 4 },
+            shadowOffset: { width: 0, height: 3 },
             shadowOpacity: 0.04,
-            shadowRadius: 12,
+            shadowRadius: 10,
             elevation: 2,
           }}
         >
           {/* File Emergency Report */}
           <TouchableOpacity
-            onPress={() => router.push('/(resident)/report')}
+            onPress={() => router.navigate('/(resident)/report')}
             activeOpacity={0.75}
-            className="items-center flex-1"
+            className="items-center flex-1 py-1"
+            accessibilityRole="button"
+            accessibilityLabel="File New Emergency Report"
           >
-            <View className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200/80 items-center justify-center mb-1.5 shadow-sm">
-              <ShieldAlert size={22} color="#FF3B30" strokeWidth={2.25} />
+            <View className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200/90 items-center justify-center mb-1.5 shadow-sm">
+              <ShieldAlert size={22} color="#DC2626" strokeWidth={2.2} />
             </View>
-            <Text className="text-slate-800 text-[11px] font-bold text-center">New Report</Text>
-            <Text className="text-slate-400 text-[9px] font-medium text-center">Emergency</Text>
+            <Text className="text-slate-900 text-xs font-extrabold text-center leading-tight">New Report</Text>
+            <Text className="text-red-600 text-[10px] font-bold text-center mt-0.5 tracking-wide">Emergency</Text>
           </TouchableOpacity>
 
           {/* My Incident History */}
           <TouchableOpacity
-            onPress={() => router.push('/(resident)/my-reports')}
+            onPress={() => {
+              markReportsHistoryViewed().catch(() => {});
+              router.navigate('/(resident)/my-reports');
+            }}
             activeOpacity={0.75}
-            className="items-center flex-1"
+            className="items-center flex-1 py-1"
+            accessibilityRole="button"
+            accessibilityLabel="View My Incident Reports History"
           >
-            <View className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200/80 items-center justify-center mb-1.5 shadow-sm">
-              <FileText size={22} color="#208AEF" strokeWidth={2.25} />
+            <View className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200/90 items-center justify-center mb-1.5 shadow-sm">
+              <FileText size={22} color="#208AEF" strokeWidth={2.2} />
             </View>
-            <Text className="text-slate-800 text-[11px] font-bold text-center">My Reports</Text>
-            <Text className="text-slate-400 text-[9px] font-medium text-center">History</Text>
+            <Text className="text-slate-900 text-xs font-extrabold text-center leading-tight">My Reports</Text>
+            <Text className="text-[#208AEF] text-[10px] font-bold text-center mt-0.5 tracking-wide">History</Text>
           </TouchableOpacity>
 
           {/* Live Dispatch Tracking */}
           <TouchableOpacity
-            onPress={() => router.push('/(resident)/track')}
+            onPress={() => router.navigate('/(resident)/track')}
             activeOpacity={0.75}
-            className="items-center flex-1"
+            className="items-center flex-1 py-1"
+            accessibilityRole="button"
+            accessibilityLabel="Live Dispatch Route Tracking"
           >
-            <View className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-200/60 items-center justify-center mb-1.5 shadow-sm">
-              <Navigation size={21} color="#0284C7" strokeWidth={2.25} />
+            <View className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-200/90 items-center justify-center mb-1.5 shadow-sm">
+              <Navigation size={21} color="#0284C7" strokeWidth={2.2} />
             </View>
-            <Text className="text-slate-800 text-[11px] font-bold text-center">Live Track</Text>
-            <Text className="text-slate-400 text-[9px] font-medium text-center">Navigation</Text>
+            <Text className="text-slate-900 text-xs font-extrabold text-center leading-tight">Live Track</Text>
+            <Text className="text-sky-600 text-[10px] font-bold text-center mt-0.5 tracking-wide">Navigation</Text>
           </TouchableOpacity>
 
           {/* Emergency Directory */}
           <TouchableOpacity
-            onPress={() => router.push('/(resident)/help-support')}
+            onPress={() => router.navigate('/(resident)/help-support')}
             activeOpacity={0.75}
-            className="items-center flex-1"
+            className="items-center flex-1 py-1"
+            accessibilityRole="button"
+            accessibilityLabel="Emergency Hotlines Directory"
           >
-            <View className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200/60 items-center justify-center mb-1.5 shadow-sm">
-              <PhoneCall size={22} color="#059669" strokeWidth={2.25} />
+            <View className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200/90 items-center justify-center mb-1.5 shadow-sm">
+              <PhoneCall size={21} color="#059669" strokeWidth={2.2} />
             </View>
-            <Text className="text-slate-800 text-[11px] font-bold text-center">Directory</Text>
-            <Text className="text-slate-400 text-[9px] font-medium text-center">Hotlines</Text>
+            <Text className="text-slate-900 text-xs font-extrabold text-center leading-tight">Directory</Text>
+            <Text className="text-emerald-600 text-[10px] font-bold text-center mt-0.5 tracking-wide">Hotlines</Text>
           </TouchableOpacity>
         </View>
 
@@ -414,7 +528,7 @@ export default function HomeScreen() {
 
                     {/* Track Button */}
                     <TouchableOpacity
-                      onPress={() => router.push('/(resident)/track')}
+                      onPress={() => router.navigate('/(resident)/track')}
                       activeOpacity={0.85}
                       style={{ backgroundColor: '#208AEF' }}
                       className="w-full py-3 rounded-2xl flex-row items-center justify-center shadow-sm"
@@ -430,16 +544,55 @@ export default function HomeScreen() {
               })()}
             </View>
           ) : (
-            <View className="py-8 px-6 items-center justify-center bg-white rounded-3xl border border-slate-200/70 mb-6 shadow-sm">
-              <View className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 items-center justify-center mb-3">
-                <ShieldCheck size={26} color="#059669" />
+            <View
+              className="bg-white rounded-3xl p-5 border border-slate-200/90 mb-5 shadow-sm"
+              style={{
+                shadowColor: '#0F172A',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.04,
+                shadowRadius: 10,
+                elevation: 2,
+              }}
+            >
+              {/* Header Row */}
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1 mr-2">
+                  <View className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200/80 items-center justify-center mr-3">
+                    <ShieldCheck size={24} color="#059669" strokeWidth={2.3} />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-slate-400 text-[10px] font-extrabold tracking-wider uppercase mb-0.5">
+                      SECTOR STATUS
+                    </Text>
+                    <Text className="text-slate-900 font-extrabold text-base tracking-tight" numberOfLines={1}>
+                      All Clear · No Active Emergencies
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Standby Status Pill */}
+                <View className="bg-emerald-50 border border-emerald-200/90 px-2.5 py-1 rounded-full flex-row items-center">
+                  <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                  <Text className="text-emerald-700 text-[10px] font-extrabold tracking-wider uppercase">
+                    STANDBY 24/7
+                  </Text>
+                </View>
               </View>
-              <Text className="text-slate-900 font-bold text-base tracking-tight mb-1">
-                All Clear • No Active Emergencies
+
+              <View className="h-[1px] bg-slate-100 my-3" />
+
+              {/* Status Description */}
+              <Text className="text-slate-600 text-xs font-medium leading-relaxed mb-2.5">
+                MDRRMO rescue teams and Alpha units are on active 24/7 standby across Opol municipality. No active emergency dispatches in your sector.
               </Text>
-              <Text className="text-slate-400 text-xs font-medium text-center leading-relaxed">
-                MDRRMO rescue teams and Alpha units are on active 24/7 standby in Opol.
-              </Text>
+
+              {/* System Indicator */}
+              <View className="flex-row items-center bg-emerald-50/70 rounded-xl px-3 py-1.5 border border-emerald-100">
+                <Radio size={12} color="#059669" />
+                <Text className="text-emerald-800 text-[11px] font-bold ml-1.5 tracking-tight">
+                  MDRRMO Opol Command Center Online & Ready
+                </Text>
+              </View>
             </View>
           )}
         </View>
@@ -447,11 +600,21 @@ export default function HomeScreen() {
         {/* ─── Direct Emergency Hotlines ─────────────────────────────────── */}
         <View className="mb-6">
           <View className="flex-row items-center justify-between mb-3 px-1">
-            <Text className="text-base font-bold text-slate-900 tracking-tight">
-              Emergency Hotlines
-            </Text>
-            <TouchableOpacity onPress={() => router.push('/(resident)/help-support')}>
-              <Text className="text-[#208AEF] text-xs font-bold">Directory</Text>
+            <View>
+              <Text className="text-base font-extrabold text-slate-900 tracking-tight">
+                Emergency Hotlines
+              </Text>
+              <Text className="text-slate-400 text-xs font-medium">
+                Tap to dial emergency responders immediately
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.navigate('/(resident)/help-support')}
+              className="flex-row items-center bg-blue-50 border border-blue-200/70 px-3 py-1.5 rounded-xl active:bg-blue-100"
+              activeOpacity={0.7}
+            >
+              <Text className="text-[#208AEF] text-xs font-bold mr-1">Directory</Text>
+              <ArrowRight size={13} color="#208AEF" strokeWidth={2.5} />
             </TouchableOpacity>
           </View>
           <EmergencyHotlineGrid />
@@ -592,6 +755,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
     </SafeAreaView>
-  );
+  </View>
+);
 }
 

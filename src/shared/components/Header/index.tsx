@@ -9,6 +9,8 @@ interface HeaderProps {
   showBack?: boolean;
   rightElement?: React.ReactNode;
   className?: string;
+  titleClassName?: string;
+  subtitleClassName?: string;
 }
 
 export function Header({ 
@@ -16,7 +18,9 @@ export function Header({
   subtitle, 
   showBack = false, 
   rightElement = null, 
-  className = '' 
+  className = '',
+  titleClassName = '',
+  subtitleClassName = '',
 }: HeaderProps) {
   const router = useRouter();
 
@@ -34,12 +38,12 @@ export function Header({
         )}
         <View className="flex-1">
           {subtitle && (
-            <Text className="text-slate-400 font-bold uppercase tracking-wider text-[11px] mb-0.5">
+            <Text className={`font-bold uppercase tracking-wider text-[11px] mb-0.5 ${subtitleClassName || 'text-slate-400'}`}>
               {subtitle}
             </Text>
           )}
           <Text 
-            className="text-2xl font-black tracking-tight text-slate-900 leading-tight" 
+            className={`text-2xl font-black tracking-tight leading-tight ${titleClassName || 'text-slate-900'}`} 
             numberOfLines={2}
           >
             {title}

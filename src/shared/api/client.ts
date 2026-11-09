@@ -25,6 +25,7 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.baseURL}/${config.url?.replace(/^\//, '')}`);
     return config;
   },
   (error) => Promise.reject(error)
@@ -53,6 +54,7 @@ apiClient.interceptors.response.use(
     const isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.message === 'Network Error';
     if (isNetworkError) {
       error.isNetworkError = true;
+      console.warn(`[API Network Error] Could not connect to: ${error.config?.baseURL}/${error.config?.url?.replace(/^\//, '')}`);
     }
     const method = error.config?.method?.toLowerCase();
     const isMutation = ['post', 'put', 'patch'].includes(method || '');
