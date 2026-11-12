@@ -29,7 +29,7 @@ import {
   Lock,
 } from 'lucide-react-native';
 import { getMyReports, cancelEmergencyReport } from '@/shared/api/incidents';
-import { BrandBackground, CancelConfirmationModal } from '@/shared/components';
+import { BrandBackground, CancelConfirmationModal, CancelSuccessModal } from '@/shared/components';
 
 export default function ReportDetailsScreen() {
   const router = useRouter();
@@ -40,6 +40,7 @@ export default function ReportDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCancelSuccessModal, setShowCancelSuccessModal] = useState(false);
   const [isPhotoModalVisible, setIsPhotoModalVisible] = useState(false);
 
   const handleBack = () => {
@@ -70,15 +71,18 @@ export default function ReportDetailsScreen() {
       setIsCancelling(true);
       await cancelEmergencyReport(report.id);
       setShowCancelModal(false);
-      Alert.alert('Request Cancelled', 'Your emergency request has been cancelled successfully.', [
-        { text: 'OK', onPress: handleBack },
-      ]);
+      setShowCancelSuccessModal(true);
     } catch (err: any) {
       const msg = err.response?.data?.message || 'Could not cancel the report. Please try again or call the hotline.';
       Alert.alert('Error', msg);
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  const handleCloseCancelSuccess = () => {
+    setShowCancelSuccessModal(false);
+    handleBack();
   };
 
   const fetchReport = useCallback(async () => {
@@ -670,6 +674,13 @@ export default function ReportDetailsScreen() {
         incidentCode={incidentIdCode}
         onConfirm={handleConfirmCancel}
         onClose={() => !isCancelling && setShowCancelModal(false)}
+      />
+
+      {/* Premium Cancel Success Notification Modal */}
+      <CancelSuccessModal
+        visible={showCancelSuccessModal}
+        incidentCode={incidentIdCode}
+        onClose={handleCloseCancelSuccess}
       />
     </View>
   );

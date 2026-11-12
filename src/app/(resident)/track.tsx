@@ -20,7 +20,7 @@ import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import MapboxGL from '@rnmapbox/maps';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapView, Avatar, LocationPermissionModal, BrandBackground, Header, CancelConfirmationModal } from '@/shared/components';
+import { MapView, Avatar, LocationPermissionModal, BrandBackground, Header, CancelConfirmationModal, CancelSuccessModal } from '@/shared/components';
 import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
 import {
   Clock,
@@ -43,6 +43,8 @@ import {
   Radio,
   Check,
   Settings,
+  FileText,
+  ChevronRight,
 } from 'lucide-react-native';
 import { getMyReports, callResponderApi, cancelEmergencyReport } from '@/shared/api/incidents';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
@@ -108,7 +110,7 @@ const decodePolyline = (str: string, precision: number = 5) => {
   return coordinates;
 };
 
-// ─── All Clear Screen (Material-Inspired Reassuring Empty State) ──────────────
+// ─── All Clear Screen (Ultra-Professional Command Readiness State) ──────────────
 const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
   const router = useRouter();
   const rippleAnim = useRef(new Animated.Value(0)).current;
@@ -118,12 +120,12 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
       Animated.sequence([
         Animated.timing(rippleAnim, {
           toValue: 1,
-          duration: 3200,
+          duration: 2800,
           useNativeDriver: true,
         }),
         Animated.timing(rippleAnim, {
           toValue: 0,
-          duration: 3200,
+          duration: 2800,
           useNativeDriver: true,
         }),
       ])
@@ -134,51 +136,51 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
 
   const outerScale = rippleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.15],
+    outputRange: [1, 1.14],
   });
 
   const outerOpacity = rippleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.30, 0.16],
+    outputRange: [0.28, 0.12],
   });
 
   const middleScale = rippleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.08],
+    outputRange: [1, 1.07],
   });
 
   const middleOpacity = rippleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.60, 0.42],
+    outputRange: [0.55, 0.35],
   });
+
+  const handleCallHotline = () => {
+    Linking.openURL('tel:911');
+  };
 
   return (
     <View style={styles.allClearRoot}>
-      {/* ── 1. BLUE GRADIENT HEADER (UPPER ~55-58% OF SCREEN) ── */}
+      {/* ── 1. COMPACT SLEEK GRADIENT HERO ── */}
       <View style={styles.gradientHeaderContainer}>
         <LinearGradient
-          colors={['#1E88E5', '#1976D2']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
+          colors={['#0F2B5C', '#15488E', '#1976D2']}
+          start={{ x: 0.3, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Three Subtle Decorative Circles behind content */}
+        {/* Ambient background rings */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {/* Circle 1: Translucent circle in upper-left corner */}
           <View style={styles.decorativeCircleTopLeft} />
-          {/* Circle 2: Larger darker blue circle on the right */}
           <View style={styles.decorativeCircleRight} />
-          {/* Circle 3: Translucent blue circle near lower-left corner */}
-          <View style={styles.decorativeCircleBottomLeft} />
         </View>
 
-        {/* Top App Bar & Settings Button */}
+        {/* Top App Bar & Brand */}
         <SafeAreaView edges={['top']} style={styles.topSafeArea}>
           <View style={styles.topBarRow}>
             <View style={styles.topBrandInfo}>
               <Text style={styles.topBrandTitle}>OPOL RESQ</Text>
-              <Text style={styles.topBrandSubtitle}>CITIZEN DISPATCH</Text>
+              <Text style={styles.topBrandSubtitle}>MUNICIPAL DISPATCH & RESCUE</Text>
             </View>
 
             <TouchableOpacity
@@ -193,10 +195,9 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
           </View>
         </SafeAreaView>
 
-        {/* ── 2. CENTERED HERO ICON (THREE CONCENTRIC RINGS) ── */}
+        {/* Centered Hero Shield Badge */}
         <View style={styles.heroCenterWrapper}>
           <View style={styles.heroContainer}>
-            {/* Outer Ring: White ~30% opacity */}
             <Animated.View
               style={[
                 styles.heroOuterRing,
@@ -206,8 +207,6 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
                 },
               ]}
             />
-
-            {/* Middle Ring: White ~60% opacity */}
             <Animated.View
               style={[
                 styles.heroMiddleRing,
@@ -217,28 +216,118 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
                 },
               ]}
             />
-
-            {/* Inner Circle: Solid White with blue shield-check */}
             <View style={styles.heroInnerCircle}>
-              <ShieldCheck size={42} color="#1E88E5" strokeWidth={2.4} />
+              <ShieldCheck size={38} color="#1565C0" strokeWidth={2.5} />
             </View>
+          </View>
+
+          {/* Realtime Standby Pill */}
+          <View style={styles.heroStatusPill}>
+            <View style={styles.heroStatusDot} />
+            <Text style={styles.heroStatusPillText}>ALL CLEAR • MUNICIPALITY SAFE</Text>
           </View>
         </View>
       </View>
 
-      {/* ── 3. STATUS TITLE AND DESCRIPTION (ON #F5F9FC LIGHT BACKGROUND) ── */}
-      <View style={styles.statusSectionWrapper}>
-        <Text style={styles.emptyStatusTitle}>You're All Clear</Text>
-        <Text style={styles.emptyStatusDescription}>
-          There are no active emergency reports in your area.
-        </Text>
-
-        {/* Subtle Reassurance Badge */}
-        <View style={styles.emptyReadinessBadge}>
-          <View style={styles.emptyReadinessDot} />
-          <Text style={styles.emptyReadinessText}>MDRRMO 24/7 COMMAND STANDBY</Text>
+      {/* ── 2. SCROLLABLE REASSURANCE & QUICK ACTION DASHBOARD ── */}
+      <ScrollView
+        style={styles.allClearScroll}
+        contentContainerStyle={styles.allClearScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Title & Description */}
+        <View style={styles.statusSectionWrapper}>
+          <Text style={styles.emptyStatusTitle}>You're All Clear</Text>
+          <Text style={styles.emptyStatusDescription}>
+            There are currently no active emergency dispatches or pending reports associated with your account.
+          </Text>
         </View>
-      </View>
+
+        {/* ── 3. MDRRMO 24/7 COMMAND READINESS CARD ── */}
+        <View style={styles.readinessCard}>
+          <View style={styles.readinessCardHeader}>
+            <View style={styles.readinessHeaderLeft}>
+              <Radio size={15} color="#2563EB" strokeWidth={2.4} />
+              <Text style={styles.readinessCardTitle}>24/7 COMMAND READINESS</Text>
+            </View>
+            <View style={styles.liveReadyPill}>
+              <Text style={styles.liveReadyPillText}>STANDBY</Text>
+            </View>
+          </View>
+
+          <View style={styles.readinessDivider} />
+
+          <View style={styles.readinessItemRow}>
+            <View style={[styles.readinessIconBox, { backgroundColor: '#EFF6FF' }]}>
+              <Ambulance size={18} color="#2563EB" strokeWidth={2.3} />
+            </View>
+            <View style={styles.readinessItemInfo}>
+              <Text style={styles.readinessItemLabel}>Emergency Fleet</Text>
+              <Text style={styles.readinessItemValue}>Rapid Response Ambulances on Duty</Text>
+            </View>
+          </View>
+
+          <View style={styles.readinessItemRow}>
+            <View style={[styles.readinessIconBox, { backgroundColor: '#F0FDF4' }]}>
+              <MapPin size={18} color="#16A34A" strokeWidth={2.3} />
+            </View>
+            <View style={styles.readinessItemInfo}>
+              <Text style={styles.readinessItemLabel}>Coverage Area</Text>
+              <Text style={styles.readinessItemValue}>14 Barangays • Opol, Misamis Oriental</Text>
+            </View>
+          </View>
+
+          <View style={styles.readinessItemRow}>
+            <View style={[styles.readinessIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <Activity size={18} color="#D97706" strokeWidth={2.3} />
+            </View>
+            <View style={styles.readinessItemInfo}>
+              <Text style={styles.readinessItemLabel}>Field Response Time</Text>
+              <Text style={styles.readinessItemValue}>Average 3–5 min Rapid Triage</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ── 4. PRIMARY ACTIONS (REPORT / HOTLINE / HISTORY) ── */}
+        <View style={styles.actionsContainer}>
+          {/* Primary Red Emergency Button */}
+          <TouchableOpacity
+            style={styles.primaryEmergencyBtn}
+            activeOpacity={0.88}
+            onPress={() => router.push('/(resident)/report')}
+          >
+            <View style={styles.emergencyBtnIconBox}>
+              <AlertTriangle size={18} color="#DC2626" strokeWidth={2.6} />
+            </View>
+            <View style={styles.emergencyBtnTextBox}>
+              <Text style={styles.emergencyBtnTitle}>Report an Emergency</Text>
+              <Text style={styles.emergencyBtnSubtitle}>Immediate GPS location & photo triage</Text>
+            </View>
+            <ChevronRight size={18} color="#FFFFFF" strokeWidth={2.4} />
+          </TouchableOpacity>
+
+          {/* Secondary 911 Hotline Button */}
+          <TouchableOpacity
+            style={styles.hotlineBtn}
+            activeOpacity={0.85}
+            onPress={handleCallHotline}
+          >
+            <Phone size={18} color="#1E3A8A" strokeWidth={2.4} />
+            <Text style={styles.hotlineBtnText}>Call Emergency Hotline (911)</Text>
+          </TouchableOpacity>
+
+          {/* Tertiary History Link */}
+          <TouchableOpacity
+            style={styles.historyLinkRow}
+            activeOpacity={0.7}
+            onPress={() => router.push('/(resident)/my-reports')}
+          >
+            <FileText size={16} color="#64748B" strokeWidth={2.2} />
+            <Text style={styles.historyLinkText}>View Past Emergency Reports</Text>
+            <ChevronRight size={16} color="#94A3B8" strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 };
@@ -268,20 +357,27 @@ const TrackingLockedState = ({
     : 'Response Unit';
 
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCancelSuccessModal, setShowCancelSuccessModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  const incidentCode = `INC-2026-${String(incident.id).padStart(5, '0')}`;
 
   const handleConfirmCancel = async () => {
     try {
       setIsCancelling(true);
       await cancelEmergencyReport(incident.id);
       setShowCancelModal(false);
-      Alert.alert('Request Cancelled', 'Your emergency request was cancelled successfully.');
-      onRefresh();
+      setShowCancelSuccessModal(true);
     } catch (err: any) {
       Alert.alert('Error', err.response?.data?.message || 'Failed to cancel request.');
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  const handleCloseSuccess = () => {
+    setShowCancelSuccessModal(false);
+    onRefresh();
   };
 
   return (
@@ -464,9 +560,15 @@ const TrackingLockedState = ({
       <CancelConfirmationModal
         visible={showCancelModal}
         isLoading={isCancelling}
-        incidentCode={`INC-2026-${String(incident.id).padStart(5, '0')}`}
+        incidentCode={incidentCode}
         onConfirm={handleConfirmCancel}
         onClose={() => !isCancelling && setShowCancelModal(false)}
+      />
+
+      <CancelSuccessModal
+        visible={showCancelSuccessModal}
+        incidentCode={incidentCode}
+        onClose={handleCloseSuccess}
       />
     </View>
   );
@@ -1445,48 +1547,37 @@ const styles = StyleSheet.create({
   // ─── All Clear Empty State Styles ───
   allClearRoot: {
     flex: 1,
-    backgroundColor: '#F5F9FC',
+    backgroundColor: '#F8FAFC',
   },
   gradientHeaderContainer: {
-    height: Math.min(SCREEN_HEIGHT * 0.58, 460),
-    minHeight: 390,
-    borderBottomLeftRadius: 60,
-    borderBottomRightRadius: 60,
+    height: 310,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
     overflow: 'hidden',
     position: 'relative',
-    shadowColor: '#1976D2',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 6,
+    shadowColor: '#0F2B5C',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 8,
   },
   decorativeCircleTopLeft: {
     position: 'absolute',
-    top: -50,
-    left: -50,
+    top: -60,
+    left: -60,
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   decorativeCircleRight: {
     position: 'absolute',
-    top: '16%',
+    top: '10%',
     right: -80,
-    width: 270,
-    height: 270,
-    borderRadius: 135,
-    backgroundColor: '#0D47A1',
-    opacity: 0.28,
-  },
-  decorativeCircleBottomLeft: {
-    position: 'absolute',
-    bottom: -35,
-    left: '6%',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   topSafeArea: {
     zIndex: 10,
@@ -1516,105 +1607,253 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   headerSettingsBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.20)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.32)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   heroCenterWrapper: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   heroContainer: {
-    width: 170,
-    height: 170,
+    width: 140,
+    height: 140,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    marginBottom: 10,
   },
   heroOuterRing: {
     position: 'absolute',
-    width: 144,
-    height: 144,
-    borderRadius: 72,
-    backgroundColor: 'rgba(255, 255, 255, 0.30)',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
   },
   heroMiddleRing: {
     position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: 'rgba(255, 255, 255, 0.60)',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
   heroInnerCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.18,
     shadowRadius: 10,
     elevation: 6,
   },
-  statusSectionWrapper: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 36,
-    alignItems: 'center',
-  },
-  emptyStatusTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#1A2233',
-    textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: -0.3,
-  },
-  emptyStatusDescription: {
-    fontSize: 17.5,
-    fontWeight: '400',
-    color: '#6B7A90',
-    textAlign: 'center',
-    lineHeight: 26,
-    maxWidth: 320,
-  },
-  emptyReadinessBadge: {
+  heroStatusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EDF5FC',
-    paddingHorizontal: 13,
-    paddingVertical: 6.5,
-    borderRadius: 16,
-    marginTop: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#D7E7F6',
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    gap: 6,
   },
-  emptyReadinessDot: {
+  heroStatusDot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#1E88E5',
-    marginRight: 8,
+    backgroundColor: '#10B981',
   },
-  emptyReadinessText: {
-    fontSize: 11,
+  heroStatusPillText: {
+    fontSize: 10,
     fontWeight: '800',
-    color: '#1976D2',
+    color: '#FFFFFF',
     letterSpacing: 0.6,
+  },
+
+  allClearScroll: {
+    flex: 1,
+  },
+  allClearScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
+  statusSectionWrapper: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  emptyStatusTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  emptyStatusDescription: {
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 320,
+  },
+
+  readinessCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 16,
+  },
+  readinessCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  readinessHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  readinessCardTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#1E293B',
+    letterSpacing: 0.8,
+  },
+  liveReadyPill: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  liveReadyPillText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#059669',
+    letterSpacing: 0.5,
+  },
+  readinessDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+  },
+  readinessItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 12,
+  },
+  readinessIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readinessItemInfo: {
+    flex: 1,
+  },
+  readinessItemLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  readinessItemValue: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 1,
+  },
+
+  actionsContainer: {
+    gap: 10,
+  },
+  primaryEmergencyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DC2626',
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+    gap: 12,
+  },
+  emergencyBtnIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emergencyBtnTextBox: {
+    flex: 1,
+  },
+  emergencyBtnTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  emergencyBtnSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 1,
+  },
+  hotlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    borderRadius: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  hotlineBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1D4ED8',
+  },
+  historyLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    gap: 6,
+  },
+  historyLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
   },
 
   // ─── Loading & Error State Styles ───

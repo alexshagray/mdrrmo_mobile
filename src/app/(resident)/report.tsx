@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Header, BrandBackground, CancelConfirmationModal } from '@/shared/components';
+import { Header, BrandBackground, CancelConfirmationModal, CancelSuccessModal } from '@/shared/components';
 import * as Location from 'expo-location';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
 import * as ImagePicker from 'expo-image-picker';
@@ -241,6 +241,8 @@ export default function ReportScreen() {
   const [inputFocused, setInputFocused] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCancelSuccessModal, setShowCancelSuccessModal] = useState(false);
+  const [cancelledIncidentCode, setCancelledIncidentCode] = useState('');
   const [isCancellingReport, setIsCancellingReport] = useState(false);
   const router = useRouter();
   const { user } = useAuth();
@@ -251,16 +253,22 @@ export default function ReportScreen() {
     if (!activeIncident?.id) return;
     try {
       setIsCancellingReport(true);
+      const code = `INC-2026-${String(activeIncident.id).padStart(5, '0')}`;
+      setCancelledIncidentCode(code);
       await cancelEmergencyReport(activeIncident.id);
       setShowCancelModal(false);
-      Alert.alert('Request Cancelled', 'Your emergency request has been cancelled.');
-      setActiveIncident(null);
-      fetchIncidents();
+      setShowCancelSuccessModal(true);
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'Failed to cancel request.');
     } finally {
       setIsCancellingReport(false);
     }
+  };
+
+  const handleCloseCancelSuccess = () => {
+    setShowCancelSuccessModal(false);
+    setActiveIncident(null);
+    fetchIncidents();
   };
 
   const [dismissedRejectedIds, setDismissedRejectedIds] = useState<number[]>([]);
@@ -1215,6 +1223,12 @@ export default function ReportScreen() {
         incidentCode={activeIncident ? `INC-2026-${String(activeIncident.id).padStart(5, '0')}` : undefined}
         onConfirm={handleConfirmCancel}
         onClose={() => !isCancellingReport && setShowCancelModal(false)}
+      />
+
+      <CancelSuccessModal
+        visible={showCancelSuccessModal}
+        incidentCode={cancelledIncidentCode}
+        onClose={handleCloseCancelSuccess}
       />
     </View>
   );

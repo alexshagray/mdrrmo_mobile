@@ -20,3 +20,4 @@ export * from './RingPulse';
 export * from './BrandBackground';
 export * from './CallConfirmationModal';
 export * from './CancelConfirmationModal';
+export * from './CancelSuccessModal';
