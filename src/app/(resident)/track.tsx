@@ -27,6 +27,7 @@ import {
   MapPin,
   Activity,
   Phone,
+  Shield,
   ShieldCheck,
   Lock,
   Navigation,
@@ -902,9 +903,12 @@ export default function TrackScreen() {
     activeDispatch?.ambulance?.plate_number ||
     'MDRRMO Vehicle';
   const driverUser = activeDispatch?.driver;
-  const driverName = driverUser
-    ? `${driverUser.first_name || ''} ${driverUser.last_name || ''}`.trim()
-    : 'Ambulance Driver';
+  const driverBadge =
+    driverUser?.badge_number ||
+    driverUser?.badge_id ||
+    driverUser?.responder_profile?.badge_number ||
+    (driverUser?.id ? `RSP-${String(driverUser.id).padStart(4, '0')}` : null);
+  const driverDisplayId = driverBadge || (driverUser?.id ? `Responder #${driverUser.id}` : 'MDRRMO Responder');
   const driverPhone =
     driverUser?.phone_number ||
     activeDispatch?.ambulance?.driver?.phone_number ||
@@ -1204,12 +1208,19 @@ export default function TrackScreen() {
             {/* 1. ASSIGNED AMBULANCE DRIVER & DIRECT CALL ACTION */}
             <View style={styles.crewCardRow}>
               <View style={styles.crewAvatarBox}>
-                <Avatar name={driverName} size="md" />
+                <View style={styles.responderIdIconBox}>
+                  <Shield size={20} color="#208AEF" strokeWidth={2.4} />
+                </View>
               </View>
               <View style={styles.crewInfoText}>
-                <Text style={styles.crewName} numberOfLines={1}>
-                  {driverName}
-                </Text>
+                <View style={styles.badgeRow}>
+                  <Text style={styles.crewName} numberOfLines={1}>
+                    {driverDisplayId}
+                  </Text>
+                  <View style={styles.badgePill}>
+                    <Text style={styles.badgePillText}>RESPONDER ID</Text>
+                  </View>
+                </View>
                 <Text style={styles.crewRole} numberOfLines={1}>
                   Ambulance Driver • {activeDispatch?.ambulance?.plate_number || unitName}
                 </Text>
@@ -2266,6 +2277,33 @@ const styles = StyleSheet.create({
   crewAvatarBox: {
     borderRadius: 14,
     overflow: 'hidden',
+  },
+  responderIdIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  badgePill: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgePillText: {
+    color: '#1D4ED8',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   crewInfoText: {
     flex: 1,

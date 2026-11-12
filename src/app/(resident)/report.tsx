@@ -852,9 +852,9 @@ export default function ReportScreen() {
 
     const unitName = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
     const vehicleDesc = activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number || 'MDRRMO Vehicle';
-    const crewLeader = activeDispatch?.team_leader 
-      ? `${activeDispatch.team_leader.first_name} ${activeDispatch.team_leader.last_name}`
-      : (activeDispatch?.driver ? `${activeDispatch.driver.first_name} ${activeDispatch.driver.last_name}` : null);
+    const crewLeaderUser = activeDispatch?.team_leader || activeDispatch?.driver;
+    const crewLeaderBadge = crewLeaderUser?.badge_number || crewLeaderUser?.badge_id || crewLeaderUser?.responder_profile?.badge_number || (crewLeaderUser?.id ? `RSP-${String(crewLeaderUser.id).padStart(4, '0')}` : null);
+    const crewLeaderDisplayId = crewLeaderBadge || (crewLeaderUser?.id ? `Responder #${crewLeaderUser.id}` : null);
 
     return (
       <View className="flex-1 bg-slate-50">
@@ -979,9 +979,9 @@ export default function ReportScreen() {
                   </Text>
                 </View>
               </View>
-              {crewLeader && (
+              {crewLeaderDisplayId && (
                 <Text className="text-slate-600 text-xs font-medium">
-                  Team Leader / Crew: <Text className="font-bold text-slate-800">{crewLeader}</Text>
+                  Assigned Responder ID: <Text className="font-bold font-mono text-blue-700">{crewLeaderDisplayId}</Text>
                 </Text>
               )}
             </View>
