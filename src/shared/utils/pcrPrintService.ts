@@ -66,6 +66,22 @@ export function generatePcrHtml({ formData, activeDispatch, pcrPhotos = [] }: Pc
   const parseTimeWithAmPm = (timeVal?: string | null): { time: string; am: boolean; pm: boolean } => {
     if (!timeVal) return { time: '--:--', am: false, pm: false };
     const str = String(timeVal).trim();
+
+    if (/\d{4}-\d{2}-\d{2}/.test(str)) {
+      const parsedDate = new Date(str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str);
+      if (!isNaN(parsedDate.getTime())) {
+        const h24 = parsedDate.getHours();
+        const m = String(parsedDate.getMinutes()).padStart(2, '0');
+        const isPm = h24 >= 12;
+        const h12 = h24 % 12 || 12;
+        return {
+          time: `${h12}:${m}`,
+          am: !isPm,
+          pm: isPm,
+        };
+      }
+    }
+
     const hasPm = /pm/i.test(str);
     const hasAm = /am/i.test(str);
     const cleanDigits = str.replace(/\s*(am|pm)/gi, '').trim();

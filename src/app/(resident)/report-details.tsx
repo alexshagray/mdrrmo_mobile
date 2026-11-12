@@ -26,9 +26,10 @@ import {
   Info,
   Maximize2,
   X,
+  Lock,
 } from 'lucide-react-native';
 import { getMyReports, cancelEmergencyReport } from '@/shared/api/incidents';
-import { BrandBackground } from '@/shared/components';
+import { BrandBackground, CancelConfirmationModal } from '@/shared/components';
 
 export default function ReportDetailsScreen() {
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function ReportDetailsScreen() {
   const [report, setReport] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [isPhotoModalVisible, setIsPhotoModalVisible] = useState(false);
 
   const handleBack = () => {
@@ -50,31 +52,33 @@ export default function ReportDetailsScreen() {
 
   const handleCancelReport = () => {
     if (!report?.id) return;
-    Alert.alert(
-      'Cancel Emergency Request?',
-      'Are you sure you want to cancel this emergency report? This will cancel the triage process.',
-      [
-        { text: 'Keep Report', style: 'cancel' },
-        {
-          text: 'Yes, Cancel Report',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsCancelling(true);
-              await cancelEmergencyReport(report.id);
-              Alert.alert('Report Cancelled', 'Your emergency report has been cancelled successfully.', [
-                { text: 'OK', onPress: handleBack },
-              ]);
-            } catch (err: any) {
-              const msg = err.response?.data?.message || 'Could not cancel the report. Please try again or call the hotline.';
-              Alert.alert('Error', msg);
-            } finally {
-              setIsCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+
+    if (!canCancel) {
+      Alert.alert(
+        'Cancellation Unavailable',
+        'A response team is already assigned or responding. Please contact the MDRRMO hotline immediately if you need assistance.'
+      );
+      return;
+    }
+
+    setShowCancelModal(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!report?.id) return;
+    try {
+      setIsCancelling(true);
+      await cancelEmergencyReport(report.id);
+      setShowCancelModal(false);
+      Alert.alert('Request Cancelled', 'Your emergency request has been cancelled successfully.', [
+        { text: 'OK', onPress: handleBack },
+      ]);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Could not cancel the report. Please try again or call the hotline.';
+      Alert.alert('Error', msg);
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const fetchReport = useCallback(async () => {
@@ -140,15 +144,19 @@ export default function ReportDetailsScreen() {
   const isResolved = status === 'resolved';
   const isPending = status === 'pending';
   const isVerified = status === 'verified';
+  const isCancelled = status === 'cancelled';
   const activeDispatch = report.active_dispatch;
   const dispatchStatus = activeDispatch?.dispatch_status;
 
   // Can track only if verified and responder assigned
   const isAssigned =
     !isRejected &&
+    !isCancelled &&
     (status === 'assigned' ||
       status === 'responding' ||
       (activeDispatch && !['completed', 'cancelled'].includes(dispatchStatus)));
+
+  const canCancel = (isPending || isVerified) && !isAssigned && !isCancelled && !isResolved && !isRejected;
 
   const canTrack = isAssigned && activeDispatch;
 
@@ -197,6 +205,8 @@ export default function ReportDetailsScreen() {
         title: 'Dispatcher Verified',
         description: isRejected
           ? 'Declined by Command Center'
+          : isCancelled
+          ? (isVerified ? 'Approved before cancellation' : 'Cancelled during review')
           : isPending
           ? 'Awaiting Dispatcher Review'
           : 'Approved by Dispatcher',
@@ -208,8 +218,10 @@ export default function ReportDetailsScreen() {
           ? `Unit: ${activeDispatch.ambulance?.plate_number || activeDispatch.ambulance?.vehicle_name || 'Ambulance Assigned'}`
           : isRejected
           ? 'Not Dispatched'
+          : isCancelled
+          ? 'Cancelled - No Dispatch'
           : 'Assigning nearest team...',
-        state: isRejected ? 'skipped' : isAssigned ? 'done' : isPending ? 'upcoming' : 'current',
+        state: isRejected || isCancelled ? 'skipped' : isAssigned ? 'done' : isPending ? 'upcoming' : 'current',
       },
       {
         title: 'Responder En Route',
@@ -344,6 +356,22 @@ export default function ReportDetailsScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          ) : isCancelled ? (
+            <View style={styles.cancelledCard}>
+              <View style={styles.statusHeaderRow}>
+                <View style={styles.cancelledIconBox}>
+                  <XCircle size={20} color="#64748B" strokeWidth={2.4} />
+                </View>
+                <View style={styles.cancelledBadge}>
+                  <Text style={styles.cancelledBadgeText}>REQUEST CANCELLED</Text>
+                </View>
+              </View>
+
+              <Text style={styles.statusTitle}>Emergency Request Cancelled</Text>
+              <Text style={styles.statusDescription}>
+                This emergency report was cancelled by the resident. No emergency response units are dispatched.
+              </Text>
+            </View>
           ) : isResolved ? (
             <View style={styles.resolvedCard}>
               <View style={styles.statusHeaderRow}>
@@ -367,14 +395,45 @@ export default function ReportDetailsScreen() {
                   <ShieldCheck size={20} color="#208AEF" strokeWidth={2.4} />
                 </View>
                 <View style={styles.verifiedBadge}>
-                  <Text style={styles.verifiedBadgeText}>VERIFIED BY DISPATCHER</Text>
+                  <Text style={styles.verifiedBadgeText}>
+                    {isAssigned ? 'RESPONDER MOBILIZED' : 'VERIFIED BY DISPATCHER'}
+                  </Text>
                 </View>
               </View>
 
-              <Text style={styles.statusTitle}>Active Emergency Response</Text>
-              <Text style={styles.statusDescription}>
-                Command center has validated this report. Resources are mobilized to provide assistance.
+              <Text style={styles.statusTitle}>
+                {isAssigned ? 'Emergency Response In Progress' : 'Active Emergency Response'}
               </Text>
+              <Text style={styles.statusDescription}>
+                {isAssigned
+                  ? 'A response team is dispatched and en route to your location. For safety and operational continuity, direct cancellation is locked.'
+                  : 'Command center has validated this report. Resources are mobilized to provide assistance.'}
+              </Text>
+
+              {canCancel ? (
+                <TouchableOpacity
+                  onPress={handleCancelReport}
+                  disabled={isCancelling}
+                  activeOpacity={0.8}
+                  style={styles.cancelButton}
+                >
+                  {isCancelling ? (
+                    <ActivityIndicator size="small" color="#DC2626" />
+                  ) : (
+                    <>
+                      <XCircle size={16} color="#DC2626" strokeWidth={2.2} />
+                      <Text style={styles.cancelButtonText}>Cancel Emergency Request</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : isAssigned ? (
+                <View style={styles.lockedCancelNotice}>
+                  <Lock size={14} color="#64748B" />
+                  <Text style={styles.lockedCancelNoticeText}>
+                    Responders are assigned and en route. Direct cancellation is disabled. Please call the 911 hotline for urgent requests.
+                  </Text>
+                </View>
+              ) : null}
             </View>
           )}
 
@@ -603,6 +662,15 @@ export default function ReportDetailsScreen() {
           </View>
         </Modal>
       ) : null}
+
+      {/* Premium Cancel Request Confirmation Modal */}
+      <CancelConfirmationModal
+        visible={showCancelModal}
+        isLoading={isCancelling}
+        incidentCode={incidentIdCode}
+        onConfirm={handleConfirmCancel}
+        onClose={() => !isCancelling && setShowCancelModal(false)}
+      />
     </View>
   );
 }
@@ -901,6 +969,46 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
+  /* Cancelled Card */
+  cancelledCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cancelledIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  cancelledBadge: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  cancelledBadgeText: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+
   /* Resolved Card */
   resolvedCard: {
     backgroundColor: '#FFFFFF',
@@ -979,6 +1087,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,
+  },
+  lockedCancelNotice: {
+    marginTop: 14,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  lockedCancelNoticeText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
   },
 
   /* Live Tracking Card */

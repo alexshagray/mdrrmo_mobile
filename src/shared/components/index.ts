@@ -19,3 +19,4 @@ export * from './BodyDiagram';
 export * from './RingPulse';
 export * from './BrandBackground';
 export * from './CallConfirmationModal';
+export * from './CancelConfirmationModal';

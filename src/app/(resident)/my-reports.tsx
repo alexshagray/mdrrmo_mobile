@@ -27,7 +27,7 @@ import {
 import { getMyReports, markReportsHistoryViewed } from '@/shared/api/incidents';
 import { BrandBackground } from '@/shared/components';
 
-type StatusFilter = 'all' | 'pending' | 'verified' | 'active' | 'resolved' | 'rejected';
+type StatusFilter = 'all' | 'pending' | 'verified' | 'active' | 'resolved' | 'cancelled' | 'rejected';
 
 export default function MyReportsScreen() {
   const router = useRouter();
@@ -82,6 +82,16 @@ export default function MyReportsScreen() {
         dotColor: 'bg-red-500',
         textColor: 'text-red-600',
         badgeBg: 'bg-red-50 border-red-200',
+        icon: XCircle,
+      };
+    }
+
+    if (status === 'cancelled') {
+      return {
+        label: 'CANCELLED',
+        dotColor: 'bg-slate-400',
+        textColor: 'text-slate-600',
+        badgeBg: 'bg-slate-100 border-slate-200',
         icon: XCircle,
       };
     }
@@ -175,6 +185,7 @@ export default function MyReportsScreen() {
       if (statusFilter === 'active' && !isDispatchActive && !['assigned', 'responding'].includes(st))
         return false;
       if (statusFilter === 'resolved' && st !== 'resolved') return false;
+      if (statusFilter === 'cancelled' && st !== 'cancelled') return false;
       if (statusFilter === 'rejected' && st !== 'rejected') return false;
 
       // Search filter
@@ -251,6 +262,7 @@ export default function MyReportsScreen() {
               { id: 'verified', label: 'Verified' },
               { id: 'active', label: 'Active Dispatch' },
               { id: 'resolved', label: 'Completed' },
+              { id: 'cancelled', label: 'Cancelled' },
               { id: 'rejected', label: 'Rejected' },
             ].map((tab) => {
               const active = statusFilter === tab.id;

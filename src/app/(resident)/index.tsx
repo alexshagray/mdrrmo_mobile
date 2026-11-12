@@ -258,6 +258,14 @@ export default function HomeScreen() {
         dot: 'bg-slate-400',
       };
     }
+    if (status === 'cancelled') {
+      return {
+        label: 'CANCELLED',
+        bg: 'bg-slate-100 border-slate-200/70',
+        text: 'text-slate-600',
+        dot: 'bg-slate-400',
+      };
+    }
     return {
       label: 'PENDING VERIFICATION',
       bg: 'bg-amber-50 border-amber-200/70',

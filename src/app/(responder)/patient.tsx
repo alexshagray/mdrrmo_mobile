@@ -53,18 +53,31 @@ const formatTime12ForVitals = (dateString: string | null) => {
 const normalizeTimeTo24 = (timeStr: string | null | undefined): string | null => {
   if (!timeStr || !timeStr.trim()) return null;
   const trimmed = timeStr.trim();
-  if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
-    const [h, m] = trimmed.split(':');
-    return `${h.padStart(2, '0')}:${m}`;
+  const match24 = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24) {
+    const h = parseInt(match24[1], 10);
+    const m = parseInt(match24[2], 10);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+    return null;
   }
-  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
-  if (match) {
-    let h = parseInt(match[1], 10);
-    const m = match[2];
-    const isPm = match[3].toLowerCase() === 'pm';
+  const match12 = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2], 10);
+    const isPm = match12[3].toLowerCase() === 'pm';
+    if (m < 0 || m > 59) return null;
+    if (h >= 13 && h <= 23) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+    if (h === 0 && !isPm) {
+      return `00:${m.toString().padStart(2, '0')}`;
+    }
+    if (h < 1 || h > 12) return null;
     if (isPm && h < 12) h += 12;
     if (!isPm && h === 12) h = 0;
-    return `${h.toString().padStart(2, '0')}:${m}`;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   }
   return null;
 };
@@ -78,6 +91,78 @@ const formatTimeInput = (text: string) => {
     return `${digits.slice(0, 2)}:${digits.slice(2)}`;
   }
   return digits;
+};
+
+const getTime12Parts = (timeVal: string | null | undefined): { digits: string; period: 'AM' | 'PM' } => {
+  const defaultPeriod: 'AM' | 'PM' = new Date().getHours() >= 12 ? 'PM' : 'AM';
+  if (!timeVal || !timeVal.trim()) {
+    return { digits: '', period: defaultPeriod };
+  }
+  const str = timeVal.trim();
+  const hasPm = /\bPM$/i.test(str);
+  const hasAm = /\bAM$/i.test(str);
+  const cleanDigits = str.replace(/\s*(AM|PM)$/i, '').trim();
+
+  if (!hasAm && !hasPm) {
+    const match24 = cleanDigits.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (match24) {
+      const h24 = parseInt(match24[1], 10);
+      const m = match24[2];
+      if (!isNaN(h24) && h24 >= 0 && h24 <= 23) {
+        const isPm = h24 >= 12;
+        const h12 = h24 % 12 || 12;
+        return {
+          digits: `${h12.toString().padStart(2, '0')}:${m}`,
+          period: isPm ? 'PM' : 'AM',
+        };
+      }
+    }
+  }
+
+  return {
+    digits: cleanDigits,
+    period: hasPm ? 'PM' : hasAm ? 'AM' : defaultPeriod,
+  };
+};
+
+const formatTime12Display = (timeVal: string | null | undefined): string => {
+  const normalized = normalizeTimeTo24(timeVal);
+  if (!normalized) return '--';
+  const { digits, period } = getTime12Parts(normalized);
+  return digits ? `${digits} ${period}` : '--';
+};
+
+const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
+  const t24 = normalizeTimeTo24(timeStr);
+  if (!t24) return null;
+  const [h, m] = t24.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+};
+
+const computeDurationMinutes = (startStr: string | null | undefined, endStr: string | null | undefined): number | null => {
+  const start = parseTimeToMinutes(startStr);
+  const end = parseTimeToMinutes(endStr);
+  if (start === null || end === null) return null;
+  let diff = end - start;
+  if (diff < 0) {
+    if (start >= 12 * 60 && end < 12 * 60) {
+      diff += 24 * 60;
+    } else {
+      return null;
+    }
+  }
+  return diff;
+};
+
+const formatDurationText = (mins: number | null): string => {
+  if (mins === null) return '--';
+  if (mins === 0) return '< 1 min';
+  if (mins < 60) return `${mins} ${mins === 1 ? 'min' : 'mins'}`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (rem === 0) return `${hrs} ${hrs === 1 ? 'hr' : 'hrs'}`;
+  return `${hrs}h ${rem}m`;
 };
 
 const isPlusCode = (text: string | null | undefined): boolean => {
@@ -530,6 +615,9 @@ export default function PatientCareRecordScreen() {
             dispatch_time: normalizeTimeTo24(curForm.dispatch_time),
             en_route_time: normalizeTimeTo24(curForm.en_route_time),
             on_scene_time: normalizeTimeTo24(curForm.on_scene_time),
+            transport_time: normalizeTimeTo24(curForm.transport_time),
+            arrived_hf_time: normalizeTimeTo24(curForm.arrived_hf_time),
+            departed_hf_time: normalizeTimeTo24(curForm.departed_hf_time),
             transported: curForm.transported,
             transported_to: curForm.transported_to,
             received_by: curForm.received_by,
@@ -698,9 +786,12 @@ export default function PatientCareRecordScreen() {
           return {
             ...prev,
             ...(cachedDraft || {}),
-            dispatch_time: formatTime24ForApi(dispatch.created_at),
-            en_route_time: formatTime24ForApi(dispatch.en_route_at),
-            on_scene_time: formatTime24ForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
+            dispatch_time: prev.dispatch_time?.trim() || cachedDraft?.dispatch_time?.trim() || normalizeTimeTo24(pcr?.dispatch_time) || formatTime24ForApi(dispatch.assigned_at || dispatch.created_at),
+            en_route_time: prev.en_route_time?.trim() || cachedDraft?.en_route_time?.trim() || normalizeTimeTo24(pcr?.en_route_time) || formatTime24ForApi(dispatch.en_route_at),
+            on_scene_time: prev.on_scene_time?.trim() || cachedDraft?.on_scene_time?.trim() || normalizeTimeTo24(pcr?.on_scene_time) || formatTime24ForApi(dispatch.arrived_on_scene_at || dispatch.arrived_at),
+            transport_time: prev.transport_time?.trim() || cachedDraft?.transport_time?.trim() || normalizeTimeTo24(pcr?.transport_time) || '',
+            arrived_hf_time: prev.arrived_hf_time?.trim() || cachedDraft?.arrived_hf_time?.trim() || normalizeTimeTo24(pcr?.arrived_hf_time) || '',
+            departed_hf_time: prev.departed_hf_time?.trim() || cachedDraft?.departed_hf_time?.trim() || normalizeTimeTo24(pcr?.departed_hf_time) || '',
             responders: formatUniqueResponders(
               dispatch.team_leader,
               dispatch.driver,
@@ -893,7 +984,7 @@ export default function PatientCareRecordScreen() {
 
       setFormData(prev => ({
         ...prev,
-        dispatch_time: formatTime24ForApi(res.data.created_at),
+        dispatch_time: formatTime24ForApi(res.data.assigned_at || res.data.created_at),
         en_route_time: formatTime24ForApi(res.data.en_route_at),
         on_scene_time: formatTime24ForApi(res.data.arrived_on_scene_at || res.data.arrived_at),
         place_of_incident: realLocationName,
@@ -1054,7 +1145,8 @@ export default function PatientCareRecordScreen() {
       }
     } catch (err: any) {
       console.log('Error creating unidentified patient:', err?.response?.data || err?.message);
-      Alert.alert('Error', 'Failed to create unidentified patient.');
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to create unidentified patient.';
+      Alert.alert('Error', errMsg);
     } finally {
       setIsCreatingUnidentified(false);
     }
@@ -1266,6 +1358,21 @@ export default function PatientCareRecordScreen() {
       }
     } else if (stepNum === 7) {
       // No required signatures by default since waiver is optional
+    } else if (stepNum === 8) {
+      const timeFields: Array<{ key: 'dispatch_time' | 'en_route_time' | 'on_scene_time' | 'transport_time' | 'arrived_hf_time' | 'departed_hf_time'; label: string }> = [
+        { key: 'dispatch_time', label: 'Dispatch Time' },
+        { key: 'en_route_time', label: 'En Route Time' },
+        { key: 'on_scene_time', label: 'Arrived on Scene Time' },
+        { key: 'transport_time', label: 'Transport Time' },
+        { key: 'arrived_hf_time', label: 'Arrived HF Time' },
+        { key: 'departed_hf_time', label: 'Departed HF Time' },
+      ];
+      timeFields.forEach(({ key, label }) => {
+        const val = formData[key];
+        if (val && val.trim() && !normalizeTimeTo24(val)) {
+          newErrors[key] = `Please enter a valid time for ${label} (e.g., 02:30).`;
+        }
+      });
     }
 
     return newErrors;
@@ -2273,6 +2380,179 @@ export default function PatientCareRecordScreen() {
   };
 
   const renderStep8 = () => {
+    type TimeFieldKey =
+      | 'dispatch_time'
+      | 'en_route_time'
+      | 'on_scene_time'
+      | 'transport_time'
+      | 'arrived_hf_time'
+      | 'departed_hf_time';
+
+    const dispatchTimeRows: Array<{
+      key: TimeFieldKey;
+      label: string;
+      description: string;
+      badge: string;
+      badgeBg: string;
+      badgeText: string;
+      accent: string;
+      systemLog?: string | null;
+    }> = [
+      {
+        key: 'dispatch_time',
+        label: 'Dispatch Time',
+        description: 'Unit assigned / mission dispatched',
+        badge: 'Auto-logged',
+        badgeBg: '#EFF6FF',
+        badgeText: '#1D4ED8',
+        accent: '#2563EB',
+        systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.assigned_at || activeDispatch.created_at) : null,
+      },
+      {
+        key: 'en_route_time',
+        label: 'En Route Time',
+        description: 'Departed station / proceeding to scene',
+        badge: 'Auto-logged',
+        badgeBg: '#EFF6FF',
+        badgeText: '#1D4ED8',
+        accent: '#0284C7',
+        systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.en_route_at) : null,
+      },
+      {
+        key: 'on_scene_time',
+        label: 'Arrived on Scene',
+        description: 'Arrived at incident location',
+        badge: 'Auto-logged',
+        badgeBg: '#ECFDF5',
+        badgeText: '#047857',
+        accent: '#10B981',
+        systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.arrived_on_scene_at || activeDispatch.arrived_at) : null,
+      },
+      {
+        key: 'transport_time',
+        label: 'Transport Time',
+        description: 'Left incident scene for hospital',
+        badge: 'Optional',
+        badgeBg: '#F1F5F9',
+        badgeText: '#475569',
+        accent: '#F59E0B',
+      },
+      {
+        key: 'arrived_hf_time',
+        label: 'Arrived Health Facility',
+        description: 'Arrived at receiving hospital / clinic',
+        badge: 'Optional',
+        badgeBg: '#F1F5F9',
+        badgeText: '#475569',
+        accent: '#8B5CF6',
+      },
+      {
+        key: 'departed_hf_time',
+        label: 'Departed Health Facility',
+        description: 'Cleared / departed receiving facility',
+        badge: 'Optional',
+        badgeBg: '#F1F5F9',
+        badgeText: '#475569',
+        accent: '#64748B',
+      },
+    ];
+
+    const handleOpTimeDigitsChange = (key: TimeFieldKey, rawVal: string) => {
+      const { period } = getTime12Parts(formData[key]);
+      const formatted = formatTimeInput(rawVal);
+      setFormData(prev => ({
+        ...prev,
+        [key]: formatted ? `${formatted} ${period}` : '',
+      }));
+      if (errors[key]) {
+        setErrors(prev => ({ ...prev, [key]: '' }));
+      }
+    };
+
+    const handleOpTimeBlur = (key: TimeFieldKey) => {
+      const normalized = normalizeTimeTo24(formData[key]);
+      if (normalized) {
+        const { digits, period } = getTime12Parts(normalized);
+        setFormData(prev => ({ ...prev, [key]: `${digits} ${period}` }));
+      }
+    };
+
+    const handleToggleOpAmPm = (key: TimeFieldKey) => {
+      const { digits, period } = getTime12Parts(formData[key]);
+      const nextPeriod = period === 'AM' ? 'PM' : 'AM';
+      if (!digits) {
+        const nowDigits = formatTime12ForVitals(new Date().toISOString()).split(' ')[0];
+        setFormData(prev => ({ ...prev, [key]: `${nowDigits} ${nextPeriod}` }));
+      } else {
+        setFormData(prev => ({ ...prev, [key]: `${digits} ${nextPeriod}` }));
+      }
+      if (errors[key]) {
+        setErrors(prev => ({ ...prev, [key]: '' }));
+      }
+    };
+
+    const handleSetOpTimeNow = (key: TimeFieldKey) => {
+      const nowStr = formatTime12ForVitals(new Date().toISOString());
+      setFormData(prev => ({ ...prev, [key]: nowStr }));
+      if (errors[key]) {
+        setErrors(prev => ({ ...prev, [key]: '' }));
+      }
+    };
+
+    const handleClearOpTime = (key: TimeFieldKey) => {
+      setFormData(prev => ({ ...prev, [key]: '' }));
+      if (errors[key]) {
+        setErrors(prev => ({ ...prev, [key]: '' }));
+      }
+    };
+
+    const handleSyncFromDispatchLog = () => {
+      if (!activeDispatch) return;
+      const dTime = formatTime24ForApi(activeDispatch.assigned_at || activeDispatch.created_at);
+      const eTime = formatTime24ForApi(activeDispatch.en_route_at);
+      const aTime = formatTime24ForApi(activeDispatch.arrived_on_scene_at || activeDispatch.arrived_at);
+      setFormData(prev => ({
+        ...prev,
+        dispatch_time: dTime || prev.dispatch_time,
+        en_route_time: eTime || prev.en_route_time,
+        on_scene_time: aTime || prev.on_scene_time,
+      }));
+      setErrors(prev => ({ ...prev, dispatch_time: '', en_route_time: '', on_scene_time: '' }));
+    };
+
+    // Computed Elapsed Durations
+    const turnoutMins = computeDurationMinutes(formData.dispatch_time, formData.en_route_time);
+    const responseMins = computeDurationMinutes(formData.en_route_time, formData.on_scene_time);
+    const sceneMins = computeDurationMinutes(formData.on_scene_time, formData.transport_time);
+    const transportMins = computeDurationMinutes(formData.transport_time, formData.arrived_hf_time);
+
+    const orderedKeys: TimeFieldKey[] = [
+      'dispatch_time',
+      'en_route_time',
+      'on_scene_time',
+      'transport_time',
+      'arrived_hf_time',
+      'departed_hf_time',
+    ];
+    const validTimes = orderedKeys.map(k => formData[k]).filter(t => normalizeTimeTo24(t) !== null);
+    const totalMissionMins =
+      validTimes.length >= 2
+        ? computeDurationMinutes(validTimes[0], validTimes[validTimes.length - 1])
+        : null;
+
+    const durationCards = [
+      { label: 'Dispatch → En Route', value: formatDurationText(turnoutMins), color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
+      { label: 'En Route → Arrived', value: formatDurationText(responseMins), color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
+      {
+        label: transportMins !== null ? 'Transport → Arrived HF' : 'Arrived → Transport',
+        value: formatDurationText(transportMins !== null ? transportMins : sceneMins),
+        color: '#D97706',
+        bg: '#FFFBEB',
+        border: '#FDE68A',
+      },
+      { label: 'Total Elapsed Time', value: formatDurationText(totalMissionMins), color: '#0F172A', bg: '#F8FAFC', border: '#CBD5E1' },
+    ];
+
     const uniqueAssessments = Array.from(new Set(formData.assessment_markers.map(m => m.label).filter(Boolean)));
     const firstVital = formData.vital_signs?.[0];
     const isTransported = formData.disposition.some(d => d.includes('Transported'));
@@ -2371,17 +2651,193 @@ export default function PatientCareRecordScreen() {
     );
 
     return (
-      <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#f1f5f9', overflow: 'hidden' }}>
+      <View style={styles.content}>
+        {/* Step 8 Header */}
         <View style={{ alignItems: 'center', marginBottom: 20 }}>
           <View style={{ width: 64, height: 64, backgroundColor: '#f0fdf4', borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 3, borderColor: '#dcfce7' }}>
             <Check size={32} color="#16a34a" />
           </View>
-          <Text style={{ fontSize: 24, fontWeight: '900', color: '#0f172a' }}>Review & Submit</Text>
+          <Text style={{ fontSize: 24, fontWeight: '900', color: '#0f172a' }}>Step 8: Review & Submit</Text>
           <Text style={{ fontSize: 13, color: '#64748b', textAlign: 'center', marginTop: 6, lineHeight: 19, paddingHorizontal: 8 }}>
-            Please review the summary of the Patient Care Record before final submission. Tap "Edit" on any section to make changes.
+            Review mission response times, patient clinical data, and scene photos before final submission. Tap any field to edit.
           </Text>
         </View>
 
+        {/* Operational Response Times (All 6 Times: Dispatch, En Route, Arrived on Scene, Transport, Arrived HF, Departed HF) */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#e2e8f0' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ backgroundColor: '#e0f2fe', width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={18} color="#0284c7" />
+              </View>
+              <View>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>Operational Response Times</Text>
+                <Text style={{ fontSize: 11, color: '#64748b' }}>Dispatch • En Route • Arrived • Transport</Text>
+              </View>
+            </View>
+            {activeDispatch && (
+              <TouchableOpacity
+                onPress={handleSyncFromDispatchLog}
+                activeOpacity={0.7}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f1f5f9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, borderWidth: 1, borderColor: '#cbd5e1' }}
+              >
+                <RefreshCw size={11} color="#334155" />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#334155' }}>Reset Auto</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Elapsed Duration Breakdown Cards */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {durationCards.map((item, idx) => (
+              <View
+                key={idx}
+                style={{
+                  width: '48.5%',
+                  backgroundColor: item.bg,
+                  borderColor: item.border,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.3 }} numberOfLines={1}>
+                  {item.label}
+                </Text>
+                <Text style={{ fontSize: 17, fontWeight: '900', color: item.color, marginTop: 3 }}>
+                  {item.value}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Editable Operational Timestamps */}
+          {dispatchTimeRows.map((row, idx) => {
+            const { digits, period } = getTime12Parts(formData[row.key]);
+            const hasValue = Boolean(formData[row.key] && formData[row.key].trim());
+            const isLastRow = idx === dispatchTimeRows.length - 1;
+            const systemLogDisplay = row.systemLog ? formatTime12Display(row.systemLog) : null;
+
+            return (
+              <View
+                key={row.key}
+                style={{
+                  paddingBottom: isLastRow ? 0 : 16,
+                  marginBottom: isLastRow ? 0 : 16,
+                  borderBottomWidth: isLastRow ? 0 : 1,
+                  borderBottomColor: '#f1f5f9',
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: hasValue ? row.accent : '#cbd5e1', marginRight: 8 }} />
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a' }}>{row.label}</Text>
+                  </View>
+                  <View style={{ backgroundColor: row.badgeBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: row.badgeText, textTransform: 'uppercase' }}>
+                      {row.badge}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={{ fontSize: 12, color: '#64748b', marginLeft: 18, marginBottom: 8 }}>
+                  {row.description}
+                  {systemLogDisplay && systemLogDisplay !== '--' ? ` • Log: ${systemLogDisplay}` : ''}
+                </Text>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 18 }}>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        errors[row.key] ? styles.inputError : null,
+                        {
+                          flex: 1,
+                          marginBottom: 0,
+                          height: 46,
+                          paddingHorizontal: 10,
+                          textAlign: 'center',
+                          fontWeight: '700',
+                          fontSize: 15,
+                          backgroundColor: '#f8fafc',
+                          borderTopRightRadius: 0,
+                          borderBottomRightRadius: 0,
+                          borderRightWidth: 0,
+                        },
+                      ]}
+                      placeholder="hh:mm"
+                      placeholderTextColor="#94a3b8"
+                      keyboardType="numeric"
+                      maxLength={5}
+                      value={digits}
+                      onChangeText={(v) => handleOpTimeDigitsChange(row.key, v)}
+                      onBlur={() => handleOpTimeBlur(row.key)}
+                    />
+                    <TouchableOpacity
+                      onPress={() => handleToggleOpAmPm(row.key)}
+                      activeOpacity={0.75}
+                      style={{
+                        backgroundColor: '#0f172a',
+                        paddingHorizontal: 13,
+                        height: 46,
+                        borderTopRightRadius: 12,
+                        borderBottomRightRadius: 12,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ fontWeight: '800', color: '#fff', fontSize: 13 }}>{period}</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => handleSetOpTimeNow(row.key)}
+                    activeOpacity={0.75}
+                    style={{
+                      height: 46,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor: '#eff6ff',
+                      borderWidth: 1,
+                      borderColor: '#bfdbfe',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: '#2563eb' }}>Now</Text>
+                  </TouchableOpacity>
+
+                  {hasValue && (
+                    <TouchableOpacity
+                      onPress={() => handleClearOpTime(row.key)}
+                      activeOpacity={0.75}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      style={{
+                        height: 46,
+                        width: 40,
+                        borderRadius: 12,
+                        backgroundColor: '#fef2f2',
+                        borderWidth: 1,
+                        borderColor: '#fecaca',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <X size={16} color="#dc2626" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {errors[row.key] ? (
+                  <View style={{ marginLeft: 18, marginTop: 4 }}>{renderError(row.key)}</View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Clinical Summary Card */}
         <View style={{ backgroundColor: '#f8fafc', borderRadius: 16, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#e2e8f0' }}>
           <SummaryRow
             icon={User}

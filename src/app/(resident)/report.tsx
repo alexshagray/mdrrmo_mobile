@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Header, BrandBackground } from '@/shared/components';
+import { Header, BrandBackground, CancelConfirmationModal } from '@/shared/components';
 import * as Location from 'expo-location';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
 import * as ImagePicker from 'expo-image-picker';
@@ -48,6 +48,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   submitEmergencyReport,
   getMyReports,
+  cancelEmergencyReport,
   updateReporterLocation,
   getIncidentTypesApi,
 } from '@/shared/api/incidents';
@@ -239,10 +240,28 @@ export default function ReportScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [inputFocused, setInputFocused] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCancellingReport, setIsCancellingReport] = useState(false);
   const router = useRouter();
   const { user } = useAuth();
   const { residentRefreshTrigger } = useResidentAlert();
   const { echo } = useRealtime() as { echo: any };
+
+  const handleConfirmCancel = async () => {
+    if (!activeIncident?.id) return;
+    try {
+      setIsCancellingReport(true);
+      await cancelEmergencyReport(activeIncident.id);
+      setShowCancelModal(false);
+      Alert.alert('Request Cancelled', 'Your emergency request has been cancelled.');
+      setActiveIncident(null);
+      fetchIncidents();
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Failed to cancel request.');
+    } finally {
+      setIsCancellingReport(false);
+    }
+  };
 
   const [dismissedRejectedIds, setDismissedRejectedIds] = useState<number[]>([]);
   const [isDismissedLoaded, setIsDismissedLoaded] = useState(false);
@@ -824,10 +843,12 @@ export default function ReportScreen() {
 
     const isPending = incidentStatus === 'pending';
     const isVerified = incidentStatus === 'verified';
+    const isCancelled = incidentStatus === 'cancelled';
     const isAssigned = incidentStatus === 'assigned' || dispatchStatus === 'assigned' || dispatchStatus === 'accepted';
     const isArrived = dispatchStatus === 'arrived_on_scene';
     const isEnRoute = dispatchStatus === 'en_route';
     const isRejected = incidentStatus === 'rejected';
+    const canCancel = (isPending || isVerified) && !isAssigned && !isEnRoute && !isArrived && !isCancelled && !isRejected;
 
     const unitName = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
     const vehicleDesc = activeDispatch?.ambulance?.vehicle_name || activeDispatch?.ambulance?.plate_number || 'MDRRMO Vehicle';
@@ -1146,6 +1167,26 @@ export default function ReportScreen() {
               </TouchableOpacity>
             )}
 
+            {canCancel && (
+              <TouchableOpacity
+                style={styles.cancelIncidentBtn}
+                onPress={() => setShowCancelModal(true)}
+                activeOpacity={0.85}
+              >
+                <XCircle size={16} color="#DC2626" strokeWidth={2.2} />
+                <Text style={styles.cancelIncidentBtnText}>Cancel Emergency Request</Text>
+              </TouchableOpacity>
+            )}
+
+            {!isRejected && (isAssigned || isEnRoute || isArrived) && (
+              <View style={styles.lockedCancelNotice}>
+                <Lock size={14} color="#64748B" />
+                <Text style={styles.lockedCancelNoticeText}>
+                  Responders are assigned and en route. Direct cancellation is disabled. Please call the 911 hotline for urgent requests.
+                </Text>
+              </View>
+            )}
+
             {!isRejected && (
               <TouchableOpacity
                 style={styles.dismissBtn}
@@ -1167,6 +1208,14 @@ export default function ReportScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <CancelConfirmationModal
+        visible={showCancelModal}
+        isLoading={isCancellingReport}
+        incidentCode={activeIncident ? `INC-2026-${String(activeIncident.id).padStart(5, '0')}` : undefined}
+        onConfirm={handleConfirmCancel}
+        onClose={() => !isCancellingReport && setShowCancelModal(false)}
+      />
     </View>
   );
 }
@@ -1906,6 +1955,43 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  cancelIncidentBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  cancelIncidentBtnText: {
+    color: '#DC2626',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  lockedCancelNotice: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  lockedCancelNoticeText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
   },
   dismissBtn: {
     marginTop: 4,

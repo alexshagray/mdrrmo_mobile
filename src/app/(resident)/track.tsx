@@ -20,7 +20,7 @@ import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import MapboxGL from '@rnmapbox/maps';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapView, Avatar, LocationPermissionModal, BrandBackground, Header } from '@/shared/components';
+import { MapView, Avatar, LocationPermissionModal, BrandBackground, Header, CancelConfirmationModal } from '@/shared/components';
 import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
 import {
   Clock,
@@ -258,10 +258,30 @@ const TrackingLockedState = ({
   const isRejected = status === 'rejected';
   const isPending = status === 'pending';
   const isVerified = status === 'verified';
+  const isCancelled = status === 'cancelled';
   const isArrived = dispatchStatus === 'arrived_on_scene';
+  const isAssigned = status === 'assigned' || status === 'responding' || (incident.active_dispatch && !['completed', 'cancelled'].includes(dispatchStatus));
+  const canCancel = (isPending || isVerified) && !isAssigned && !isCancelled && !isRejected;
   const unitName = incident.active_dispatch?.team
     ? `Unit ${incident.active_dispatch.team}`
     : 'Response Unit';
+
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const handleConfirmCancel = async () => {
+    try {
+      setIsCancelling(true);
+      await cancelEmergencyReport(incident.id);
+      setShowCancelModal(false);
+      Alert.alert('Request Cancelled', 'Your emergency request was cancelled successfully.');
+      onRefresh();
+    } catch (err: any) {
+      Alert.alert('Error', err.response?.data?.message || 'Failed to cancel request.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   return (
     <View className="flex-1 bg-slate-50">
@@ -416,41 +436,37 @@ const TrackingLockedState = ({
                 <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.4} />
               </TouchableOpacity>
 
-              {isPending && (
+              {canCancel && (
                 <TouchableOpacity
                   style={styles.cancelReportBtn}
-                  onPress={() => {
-                    Alert.alert(
-                      'Cancel Emergency Request?',
-                      'Are you sure you want to cancel this pending emergency request?',
-                      [
-                        { text: 'Keep Report', style: 'cancel' },
-                        {
-                          text: 'Yes, Cancel Report',
-                          style: 'destructive',
-                          onPress: async () => {
-                            try {
-                              await cancelEmergencyReport(incident.id);
-                              Alert.alert('Report Cancelled', 'Your emergency report was cancelled.');
-                              onRefresh();
-                            } catch (err: any) {
-                              Alert.alert('Error', err.response?.data?.message || 'Failed to cancel report.');
-                            }
-                          },
-                        },
-                      ]
-                    );
-                  }}
+                  onPress={() => setShowCancelModal(true)}
                   activeOpacity={0.85}
                 >
                   <XCircle size={16} color="#DC2626" />
-                  <Text style={styles.cancelReportBtnText}>Cancel Emergency Report</Text>
+                  <Text style={styles.cancelReportBtnText}>Cancel Emergency Request</Text>
                 </TouchableOpacity>
+              )}
+
+              {isAssigned && !isArrived && (
+                <View style={styles.lockedCancelNotice}>
+                  <Lock size={14} color="#64748B" />
+                  <Text style={styles.lockedCancelNoticeText}>
+                    Response team has been assigned. Direct cancellation is disabled. Please call the 911 hotline for urgent requests.
+                  </Text>
+                </View>
               )}
             </View>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <CancelConfirmationModal
+        visible={showCancelModal}
+        isLoading={isCancelling}
+        incidentCode={`INC-2026-${String(incident.id).padStart(5, '0')}`}
+        onConfirm={handleConfirmCancel}
+        onClose={() => !isCancelling && setShowCancelModal(false)}
+      />
     </View>
   );
 };
@@ -1820,6 +1836,25 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 13.5,
     fontWeight: '700',
+  },
+  lockedCancelNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 10,
+    marginTop: 4,
+  },
+  lockedCancelNoticeText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
   },
 
   // Incident Marker Styles
