@@ -243,52 +243,7 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
           </Text>
         </View>
 
-        {/* ── 3. MDRRMO 24/7 COMMAND READINESS CARD ── */}
-        <View style={styles.readinessCard}>
-          <View style={styles.readinessCardHeader}>
-            <View style={styles.readinessHeaderLeft}>
-              <Radio size={15} color="#2563EB" strokeWidth={2.4} />
-              <Text style={styles.readinessCardTitle}>24/7 COMMAND READINESS</Text>
-            </View>
-            <View style={styles.liveReadyPill}>
-              <Text style={styles.liveReadyPillText}>STANDBY</Text>
-            </View>
-          </View>
-
-          <View style={styles.readinessDivider} />
-
-          <View style={styles.readinessItemRow}>
-            <View style={[styles.readinessIconBox, { backgroundColor: '#EFF6FF' }]}>
-              <Ambulance size={18} color="#2563EB" strokeWidth={2.3} />
-            </View>
-            <View style={styles.readinessItemInfo}>
-              <Text style={styles.readinessItemLabel}>Emergency Fleet</Text>
-              <Text style={styles.readinessItemValue}>Rapid Response Ambulances on Duty</Text>
-            </View>
-          </View>
-
-          <View style={styles.readinessItemRow}>
-            <View style={[styles.readinessIconBox, { backgroundColor: '#F0FDF4' }]}>
-              <MapPin size={18} color="#16A34A" strokeWidth={2.3} />
-            </View>
-            <View style={styles.readinessItemInfo}>
-              <Text style={styles.readinessItemLabel}>Coverage Area</Text>
-              <Text style={styles.readinessItemValue}>14 Barangays • Opol, Misamis Oriental</Text>
-            </View>
-          </View>
-
-          <View style={styles.readinessItemRow}>
-            <View style={[styles.readinessIconBox, { backgroundColor: '#FEF3C7' }]}>
-              <Activity size={18} color="#D97706" strokeWidth={2.3} />
-            </View>
-            <View style={styles.readinessItemInfo}>
-              <Text style={styles.readinessItemLabel}>Field Response Time</Text>
-              <Text style={styles.readinessItemValue}>Average 3–5 min Rapid Triage</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ── 4. PRIMARY ACTIONS (REPORT / HOTLINE / HISTORY) ── */}
+        {/* ── PRIMARY ACTIONS (REPORT / HISTORY) ── */}
         <View style={styles.actionsContainer}>
           {/* Primary Red Emergency Button */}
           <TouchableOpacity
@@ -304,16 +259,6 @@ const AllClearState = ({ onRefresh }: { onRefresh?: () => void }) => {
               <Text style={styles.emergencyBtnSubtitle}>Immediate GPS location & photo triage</Text>
             </View>
             <ChevronRight size={18} color="#FFFFFF" strokeWidth={2.4} />
-          </TouchableOpacity>
-
-          {/* Secondary 911 Hotline Button */}
-          <TouchableOpacity
-            style={styles.hotlineBtn}
-            activeOpacity={0.85}
-            onPress={handleCallHotline}
-          >
-            <Phone size={18} color="#1E3A8A" strokeWidth={2.4} />
-            <Text style={styles.hotlineBtnText}>Call Emergency Hotline (911)</Text>
           </TouchableOpacity>
 
           {/* Tertiary History Link */}
