@@ -152,6 +152,14 @@ export default function NavigationScreen() {
       });
   };
 
+  const navigateBackSafe = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(responder)/dispatch');
+    }
+  };
+
   const executeArrival = async () => {
     setIsArriving(true);
     try {
@@ -167,10 +175,10 @@ export default function NavigationScreen() {
       setTrackingStatus('arrived_on_scene');
       setRouteCoords([]);
       setRouteInfo(null);
-      router.replace('/(responder)');
+      navigateBackSafe();
     } catch (e: any) {
       console.error('Error updating status to arrived_on_scene:', e);
-      router.replace('/(responder)');
+      navigateBackSafe();
     } finally {
       setIsArriving(false);
     }
@@ -223,7 +231,7 @@ export default function NavigationScreen() {
         [
           {
             text: 'OK',
-            onPress: () => router.replace('/(responder)'),
+            onPress: () => navigateBackSafe(),
           },
         ]
       );

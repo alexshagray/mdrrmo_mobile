@@ -33,7 +33,7 @@ import {
   Settings,
 } from 'lucide-react-native';
 import { useAuth } from '@/shared/hooks';
-import { Avatar, BrandBackground } from '@/shared/components';
+import { Avatar, BrandBackground, PhotoSelectModal } from '@/shared/components';
 import { getResidentProfileApi, uploadResidentPhotoApi, deleteResidentPhotoApi } from '@/shared/api/residents';
 import { getMyReports, markReportsHistoryViewed, getUnviewedReportsCount } from '@/shared/api/incidents';
 import { resolveImageUrl } from '@/shared/utils/imageUrl';
@@ -213,44 +213,28 @@ export default function ResidentProfileScreen() {
     }
   };
 
-  const handleRemovePhoto = () => {
-    Alert.alert('Remove Photo', 'Are you sure you want to remove your profile photo?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setIsUploadingPhoto(true);
-            await deleteResidentPhotoApi();
-            await refreshUser?.();
-            await loadProfile();
-            Toast.show({
-              type: 'success',
-              text1: 'Photo Removed',
-              text2: 'Your profile photo has been removed.',
-            });
-          } catch (e: any) {
-            Alert.alert('Error', 'Failed to remove profile photo.');
-          } finally {
-            setIsUploadingPhoto(false);
-          }
-        },
-      },
-    ]);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+
+  const handleRemovePhoto = async () => {
+    try {
+      setIsUploadingPhoto(true);
+      await deleteResidentPhotoApi();
+      await refreshUser?.();
+      await loadProfile();
+      Toast.show({
+        type: 'success',
+        text1: 'Photo Removed',
+        text2: 'Your profile photo has been removed.',
+      });
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to remove profile photo.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
   };
 
   const handlePhotoAction = () => {
-    const buttons: any[] = [
-      { text: 'Take Photo', onPress: takePhoto },
-      { text: 'Choose from Gallery', onPress: pickFromGallery },
-    ];
-    if (photoUrl) {
-      buttons.push({ text: 'Remove Photo', style: 'destructive', onPress: handleRemovePhoto });
-    }
-    buttons.push({ text: 'Cancel', style: 'cancel' });
-
-    Alert.alert('Change Profile Photo', 'Select an option to update your photo:', buttons);
+    setShowPhotoModal(true);
   };
 
   const handleOpenReportsHistory = async () => {
@@ -544,6 +528,17 @@ export default function ResidentProfileScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         </Modal>
+
+        {/* Custom High-End Profile Photo Selection Modal */}
+        <PhotoSelectModal
+          visible={showPhotoModal}
+          onClose={() => setShowPhotoModal(false)}
+          onTakePhoto={takePhoto}
+          onChooseFromGallery={pickFromGallery}
+          onRemovePhoto={handleRemovePhoto}
+          hasExistingPhoto={Boolean(photoUrl)}
+          isLoading={isUploadingPhoto}
+        />
       </SafeAreaView>
     </View>
   );
