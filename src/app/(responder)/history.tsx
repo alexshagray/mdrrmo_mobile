@@ -5,15 +5,17 @@ import { useRouter } from 'expo-router';
 import { StatusChip, BrandBackground } from '@/shared/components';
 import { MapPin, Calendar, Clock, User, Phone, Filter, X, ArrowLeft, ChevronRight, FileText, Eye } from 'lucide-react-native';
 import { getDispatchHistory } from '@/shared/api/dispatches';
+import { getIncidentTypesApi } from '@/shared/api/incidents';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
 import { DispatchHistoryDetailModal } from '@/responder/components/modals';
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   { id: 'all', label: 'All History' },
-  { id: '1', label: 'Medical' }, // Assuming 1 = Medical
-  { id: '2', label: 'Trauma' },
-  { id: '3', label: 'Fire' },
-  { id: '4', label: 'Rescue' },
+  { id: '1', label: 'Medical Emergency' },
+  { id: '2', label: 'Fire Emergency' },
+  { id: '3', label: 'Vehicular Accident' },
+  { id: '4', label: 'Crime & Violence' },
+  { id: '5', label: 'Search and Rescue' },
 ];
 
 const getRecentDates = () => {
@@ -44,9 +46,34 @@ export default function HistoryScreen() {
   const [isPaginating, setIsPaginating] = useState(false);
   
   const [activeCategory, setActiveCategory] = useState('all');
+  const [categories, setCategories] = useState<Array<{ id: string; label: string }>>(DEFAULT_CATEGORIES);
   const [filterDate, setFilterDate] = useState('');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [selectedDispatch, setSelectedDispatch] = useState<any | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    getIncidentTypesApi()
+      .then((data: any) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          const dynamicList = [
+            { id: 'all', label: 'All History' },
+            ...data.map((item: any) => ({
+              id: String(item.id),
+              label: item.incident_type_name || item.name || `Type ${item.id}`,
+            })),
+          ];
+          setCategories(dynamicList);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load dynamic incident types for history:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -256,7 +283,7 @@ export default function HistoryScreen() {
 
         <View className="mb-3">
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 6 }}>
-            {CATEGORIES.map(cat => {
+            {categories.map(cat => {
               const isSelected = activeCategory === cat.id;
               return (
                 <TouchableOpacity 

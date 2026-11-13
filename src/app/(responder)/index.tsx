@@ -124,7 +124,7 @@ export default function DashboardScreen() {
         setActiveDispatch({
           id: `DSP-${new Date(d.created_at).getFullYear()}-${String(d.id).padStart(3, '0')}`,
           rawId: d.id,
-          type: inc?.incident_type?.name || 'Emergency',
+          type: inc?.incident_type?.incident_type_name || inc?.incident_type?.name || 'Emergency',
           priority: inc?.priority || 'High',
           location: locationName,
           status: d.dispatch_status,

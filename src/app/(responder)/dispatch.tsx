@@ -681,7 +681,7 @@ export default function DispatchScreen() {
           <View className="flex-row justify-between items-start mb-6">
             <View className="flex-1">
               <Text className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Incident ID: DSP-{String(dispatch.id).padStart(3, '0')}</Text>
-              <Text className="text-2xl font-black text-slate-800">{incidentType.name || 'Emergency Incident'}</Text>
+              <Text className="text-2xl font-black text-slate-800">{incidentType.incident_type_name || incidentType.name || 'Emergency Incident'}</Text>
             </View>
             <View className="bg-red-100 px-3 py-1.5 rounded-lg border border-red-200">
               <Text className="text-red-700 font-bold text-xs">High Priority</Text>
