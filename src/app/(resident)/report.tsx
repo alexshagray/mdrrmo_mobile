@@ -201,7 +201,7 @@ function TypeCard({
         </View>
 
         <Text
-          numberOfLines={2}
+          numberOfLines={3}
           style={[
             styles.typeCardLabel,
             { color: selected ? '#FFFFFF' : '#0F172A' },
@@ -332,7 +332,7 @@ export default function ReportScreen() {
             const visual = resolveTypeVisual(t.incident_type_name);
             return {
               id: t.id,
-              label: (t.incident_type_name?.length > 26 ? visual.defaultLabel : t.incident_type_name) || visual.defaultLabel,
+              label: t.incident_type_name || visual.defaultLabel,
               icon: visual.icon,
               color: visual.color,
               bg: visual.bg,
@@ -2218,7 +2218,7 @@ const styles = StyleSheet.create({
   },
   typeGridRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: 10,
   },
   typeCard: {
