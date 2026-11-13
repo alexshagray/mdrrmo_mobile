@@ -3,9 +3,10 @@ import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Sty
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusChip, BrandBackground } from '@/shared/components';
-import { MapPin, Calendar, Clock, User, Phone, Filter, X, ArrowLeft } from 'lucide-react-native';
+import { MapPin, Calendar, Clock, User, Phone, Filter, X, ArrowLeft, ChevronRight, FileText, Eye } from 'lucide-react-native';
 import { getDispatchHistory } from '@/shared/api/dispatches';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
+import { DispatchHistoryDetailModal } from '@/responder/components/modals';
 
 const CATEGORIES = [
   { id: 'all', label: 'All History' },
@@ -45,6 +46,7 @@ export default function HistoryScreen() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [filterDate, setFilterDate] = useState('');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [selectedDispatch, setSelectedDispatch] = useState<any | null>(null);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -132,59 +134,80 @@ export default function HistoryScreen() {
     setIsFilterModalVisible(false);
   };
 
-  const renderHistoryCard = (item: any) => (
-    <View
-      key={item.id}
-      className="bg-white rounded-xl p-5 border border-slate-200 mb-3.5"
-      style={{
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.04,
-        shadowRadius: 10,
-        elevation: 2,
-      }}
-    >
-      <View className="flex-row justify-between items-start mb-3">
-        <View className="flex-1 mr-2">
-          <Text className="text-slate-900 font-bold text-base tracking-tight mb-0.5">{item.type}</Text>
-          <Text className="text-slate-400 text-[10px] font-mono font-bold uppercase tracking-wider">{item.id}</Text>
+  const renderHistoryCard = (item: any) => {
+    const patientCount = Array.isArray(item.patients) ? item.patients.length : (item.patient_name && item.patient_name !== 'No Patient Logged' ? 1 : 0);
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        activeOpacity={0.85}
+        onPress={() => setSelectedDispatch(item)}
+        className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 mb-3.5"
+        style={{
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.05,
+          shadowRadius: 10,
+          elevation: 2,
+        }}
+      >
+        <View className="flex-row justify-between items-start mb-3">
+          <View className="flex-1 mr-2">
+            <Text className="text-slate-900 font-bold text-base tracking-tight mb-0.5">{item.type}</Text>
+            <Text className="text-slate-400 text-[10px] font-mono font-bold uppercase tracking-wider">{item.id}</Text>
+          </View>
+          <StatusChip status={item.status} type="dispatch" />
         </View>
-        <StatusChip status={item.status} type="dispatch" />
-      </View>
-      
-      <View className="bg-slate-50 rounded-lg p-3.5 mb-3.5 border border-slate-100 space-y-2">
-        <View className="flex-row items-center">
-          <User size={13} color="#208AEF" />
-          <Text className="text-slate-700 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
-            <Text className="font-bold text-slate-900">Patient:</Text> {item.patient_name}
-          </Text>
+        
+        <View className="bg-slate-50 rounded-xl p-3.5 mb-3.5 border border-slate-100 space-y-2">
+          <View className="flex-row items-center">
+            <User size={13} color="#208AEF" />
+            <Text className="text-slate-700 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
+              <Text className="font-bold text-slate-900">Patient:</Text> {item.patient_name}
+            </Text>
+          </View>
+          <View className="flex-row items-center">
+            <Phone size={13} color="#7C3AED" />
+            <Text className="text-slate-700 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
+              <Text className="font-bold text-slate-900">Reporter:</Text> {item.reporter_name}
+            </Text>
+          </View>
+          <View className="flex-row items-start">
+            <MapPin size={13} color="#208AEF" className="mt-0.5" />
+            <Text className="text-slate-700 ml-2 text-xs font-medium flex-1 leading-snug" numberOfLines={2}>
+              {item.location || 'Opol, Misamis Oriental'}
+            </Text>
+          </View>
         </View>
-        <View className="flex-row items-center">
-          <Phone size={13} color="#7C3AED" />
-          <Text className="text-slate-700 ml-2 text-xs font-medium flex-1" numberOfLines={1}>
-            <Text className="font-bold text-slate-900">Reporter:</Text> {item.reporter_name}
-          </Text>
+        
+        <View className="flex-row items-center justify-between px-0.5 pt-2 border-t border-slate-100 mb-3">
+          <View className="flex-row items-center">
+            <Calendar size={13} color="#94A3B8" />
+            <Text className="text-slate-400 ml-1.5 text-xs font-medium">{item.date}</Text>
+          </View>
+          <View className="flex-row items-center bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
+            <Clock size={11} color="#208AEF" />
+            <Text className="text-[#208AEF] ml-1.5 text-[11px] font-mono font-bold tracking-wider">{item.time}</Text>
+          </View>
         </View>
-        <View className="flex-row items-start">
-          <MapPin size={13} color="#208AEF" className="mt-0.5" />
-          <Text className="text-slate-700 ml-2 text-xs font-medium flex-1 leading-snug" numberOfLines={2}>
-            {item.location || 'Opol, Misamis Oriental'}
-          </Text>
-        </View>
-      </View>
-      
-      <View className="flex-row items-center justify-between px-0.5 pt-2 border-t border-slate-100">
-        <View className="flex-row items-center">
-          <Calendar size={13} color="#94A3B8" />
-          <Text className="text-slate-400 ml-1.5 text-xs font-medium">{item.date}</Text>
-        </View>
-        <View className="flex-row items-center bg-blue-50 px-2.5 py-0.5 rounded-md border border-blue-100">
-          <Clock size={11} color="#208AEF" />
-          <Text className="text-[#208AEF] ml-1.5 text-[11px] font-mono font-bold tracking-wider">{item.time}</Text>
-        </View>
-      </View>
-    </View>
-  );
+
+        {/* Action Button: View Details & PCR */}
+        <TouchableOpacity
+          onPress={() => setSelectedDispatch(item)}
+          activeOpacity={0.7}
+          className="bg-blue-50/80 border border-blue-200/70 rounded-xl py-2.5 px-3.5 flex-row items-center justify-between"
+        >
+          <View className="flex-row items-center">
+            <FileText size={14} color="#0284C7" />
+            <Text className="text-sky-800 text-xs font-bold ml-2">
+              {patientCount > 0 ? `View Details & Patients (${patientCount})` : 'View Mission Details'}
+            </Text>
+          </View>
+          <ChevronRight size={14} color="#0284C7" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View className="flex-1 bg-slate-50">
@@ -308,40 +331,47 @@ export default function HistoryScreen() {
           </ScrollView>
         )}
 
-      {/* Filter Modal */}
-      <Modal visible={isFilterModalVisible} transparent animationType="slide">
-        <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(15, 23, 42, 0.45)' }}>
-          <View className="bg-white rounded-t-2xl p-6 pb-12" style={{ elevation: 20 }}>
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-slate-900 font-bold text-xl tracking-tight">Filter History</Text>
-              <TouchableOpacity onPress={() => setIsFilterModalVisible(false)} className="bg-slate-100 p-2 rounded-lg">
-                <X size={18} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <Text className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-3">Filter by Date</Text>
-            <View className="space-y-2.5 mb-6">
-              {getRecentDates().map(dateObj => (
-                <TouchableOpacity key={dateObj.value} onPress={() => applyDateFilter(dateObj.value)} className={`p-3.5 rounded-xl border ${filterDate === dateObj.value ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
-                  <Text className={`font-bold text-xs ${filterDate === dateObj.value ? 'text-[#208AEF]' : 'text-slate-700'}`}>{dateObj.label}</Text>
+        {/* Filter Modal */}
+        <Modal visible={isFilterModalVisible} transparent animationType="slide">
+          <View className="flex-1 justify-end" style={{ backgroundColor: 'rgba(15, 23, 42, 0.45)' }}>
+            <View className="bg-white rounded-t-2xl p-6 pb-12" style={{ elevation: 20 }}>
+              <View className="flex-row justify-between items-center mb-6">
+                <Text className="text-slate-900 font-bold text-xl tracking-tight">Filter History</Text>
+                <TouchableOpacity onPress={() => setIsFilterModalVisible(false)} className="bg-slate-100 p-2 rounded-lg">
+                  <X size={18} color="#64748B" />
                 </TouchableOpacity>
-              ))}
-              
-              <TouchableOpacity onPress={() => applyDateFilter('')} className={`p-3.5 rounded-xl border ${filterDate === '' ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
-                <Text className={`font-bold text-xs ${filterDate === '' ? 'text-[#208AEF]' : 'text-slate-700'}`}>Any Date</Text>
+              </View>
+
+              <Text className="text-slate-400 font-bold uppercase tracking-wider text-xs mb-3">Filter by Date</Text>
+              <View className="space-y-2.5 mb-6">
+                {getRecentDates().map(dateObj => (
+                  <TouchableOpacity key={dateObj.value} onPress={() => applyDateFilter(dateObj.value)} className={`p-3.5 rounded-xl border ${filterDate === dateObj.value ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                    <Text className={`font-bold text-xs ${filterDate === dateObj.value ? 'text-[#208AEF]' : 'text-slate-700'}`}>{dateObj.label}</Text>
+                  </TouchableOpacity>
+                ))}
+                
+                <TouchableOpacity onPress={() => applyDateFilter('')} className={`p-3.5 rounded-xl border ${filterDate === '' ? 'border-[#208AEF] bg-blue-50' : 'border-slate-200 bg-white'}`}>
+                  <Text className={`font-bold text-xs ${filterDate === '' ? 'text-[#208AEF]' : 'text-slate-700'}`}>Any Date</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity 
+                onPress={() => setIsFilterModalVisible(false)}
+                style={{ backgroundColor: '#208AEF' }}
+                className="py-3.5 rounded-xl items-center active:opacity-90"
+              >
+                <Text className="text-white font-bold text-sm tracking-wider">APPLY FILTERS</Text>
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity 
-              onPress={() => setIsFilterModalVisible(false)}
-              style={{ backgroundColor: '#208AEF' }}
-              className="py-3.5 rounded-xl items-center active:opacity-90"
-            >
-              <Text className="text-white font-bold text-sm tracking-wider">APPLY FILTERS</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </Modal> 
+        </Modal>
+
+        {/* Detailed Mission & Patient Care Modal */}
+        <DispatchHistoryDetailModal
+          visible={Boolean(selectedDispatch)}
+          dispatch={selectedDispatch}
+          onClose={() => setSelectedDispatch(null)}
+        />
       </SafeAreaView>
     </View>
   );
