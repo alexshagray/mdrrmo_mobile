@@ -201,7 +201,7 @@ function TypeCard({
         </View>
 
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           style={[
             styles.typeCardLabel,
             { color: selected ? '#FFFFFF' : '#0F172A' },
@@ -332,7 +332,7 @@ export default function ReportScreen() {
             const visual = resolveTypeVisual(t.incident_type_name);
             return {
               id: t.id,
-              label: t.incident_type_name?.length > 18 ? visual.defaultLabel : t.incident_type_name,
+              label: (t.incident_type_name?.length > 26 ? visual.defaultLabel : t.incident_type_name) || visual.defaultLabel,
               icon: visual.icon,
               color: visual.color,
               bg: visual.bg,
@@ -2225,35 +2225,40 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderRadius: 16,
     borderWidth: 1.5,
-    minHeight: 56,
+    minHeight: 62,
     shadowOffset: { width: 0, height: 2 },
+    position: 'relative',
   },
   typeCardIconContainer: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
+    flexShrink: 0,
   },
   typeCardLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    lineHeight: 16,
+    letterSpacing: 0.1,
   },
   typeCardCheck: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
   },
   typeRow: {
     marginBottom: 4,
