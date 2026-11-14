@@ -2910,6 +2910,61 @@ export default function PatientCareRecordScreen() {
           </Text>
         </View>
 
+        {/* If multiple patients attended, allow EMT to switch between patients on Step 8 */}
+        {missionPcrs.length > 1 && (
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 12, marginBottom: 18, borderWidth: 1.5, borderColor: '#BFDBFE', shadowColor: '#2563EB', shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Users size={15} color="#2563EB" />
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#1E293B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  Incident Patients ({missionPcrs.length})
+                </Text>
+              </View>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B' }}>
+                Tap to switch patient
+              </Text>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+              {missionPcrs.map((p, idx) => {
+                const isSelected = activePcrIndex === idx;
+                const currentName = idx === activePcrIndex && (formData.first_name || formData.last_name)
+                  ? [formData.first_name, formData.last_name].filter(Boolean).join(' ')
+                  : null;
+                const patientName = currentName
+                  || [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ') 
+                  || (p.patient?.is_unidentified || (idx === activePcrIndex && formData.is_unidentified) ? 'Unidentified' : `Patient #${idx + 1}`);
+                return (
+                  <TouchableOpacity
+                    key={`step8-pcr-tab-${p.id || idx}`}
+                    onPress={() => handleSwitchPatient(idx)}
+                    activeOpacity={0.8}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor: isSelected ? '#2563EB' : '#F8FAFC',
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
+                    }}
+                  >
+                    <User size={14} color={isSelected ? '#FFFFFF' : '#64748B'} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: isSelected ? '#FFFFFF' : '#334155' }}>
+                      {idx + 1}. {patientName}
+                    </Text>
+                    {p.id ? (
+                      <CheckCircle2 size={13} color={isSelected ? '#BFDBFE' : '#10B981'} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
         {/* Operational Response Times (All 6 Times: Dispatch, En Route, Arrived on Scene, Transport, Arrived HF, Departed HF) */}
         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: '#e2e8f0' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -3847,63 +3902,6 @@ export default function PatientCareRecordScreen() {
             subtitleClassName="text-blue-100"
           />
           {renderStepIndicator()}
-
-        {/* Multi-Patient Selector Bar (Only visible when 2 or more patients are recorded) */}
-        {missionPcrs.length > 1 && (
-          <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
-            <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 8, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Users size={14} color="#2563EB" />
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#1E293B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                    Incident Patients ({missionPcrs.length})
-                  </Text>
-                </View>
-                <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>
-                  Tap to switch patient
-                </Text>
-              </View>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
-                {missionPcrs.map((p, idx) => {
-                  const isSelected = activePcrIndex === idx;
-                  const currentName = idx === activePcrIndex && (formData.first_name || formData.last_name)
-                    ? [formData.first_name, formData.last_name].filter(Boolean).join(' ')
-                    : null;
-                  const patientName = currentName
-                    || [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ') 
-                    || (p.patient?.is_unidentified || (idx === activePcrIndex && formData.is_unidentified) ? 'Unidentified' : `Patient #${idx + 1}`);
-                  return (
-                    <TouchableOpacity
-                      key={`pcr-tab-${p.id || idx}`}
-                      onPress={() => handleSwitchPatient(idx)}
-                      activeOpacity={0.8}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                        paddingVertical: 7,
-                        paddingHorizontal: 12,
-                        borderRadius: 12,
-                        backgroundColor: isSelected ? '#2563EB' : '#F8FAFC',
-                        borderWidth: 1.5,
-                        borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
-                      }}
-                    >
-                      <User size={13} color={isSelected ? '#FFFFFF' : '#64748B'} />
-                      <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? '#FFFFFF' : '#334155' }}>
-                        {idx + 1}. {patientName}
-                      </Text>
-                      {p.id ? (
-                        <CheckCircle2 size={12} color={isSelected ? '#BFDBFE' : '#10B981'} />
-                      ) : null}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
-        )}
 
         {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
