@@ -301,14 +301,30 @@ const CHIEF_COMPLAINTS = [
 
 const calculateAge = (birthdate: string): string => {
   if (!birthdate) return '';
-  const birth = new Date(birthdate);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-    age--;
+  try {
+    const clean = birthdate.replace(' ', 'T');
+    let birth = new Date(clean);
+    if (isNaN(birth.getTime())) {
+      const parts = birthdate.split(/[-/]/);
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          birth = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          birth = new Date(parseInt(parts[2], 10), parseInt(parts[0], 10) - 1, parseInt(parts[1], 10));
+        }
+      }
+    }
+    if (isNaN(birth.getTime())) return '';
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age >= 0 ? age.toString() : '';
+  } catch {
+    return '';
   }
-  return age.toString();
 };
 
 export default function PatientCareRecordScreen() {
@@ -721,8 +737,6 @@ export default function PatientCareRecordScreen() {
           pcr?.incident_address ||
           existingPatient?.address ||
           existingPatient?.home_address ||
-          residentHomeAddress ||
-          resident?.address ||
           ''
         );
 
@@ -743,25 +757,23 @@ export default function PatientCareRecordScreen() {
           else defaultNatureOfCall = 'emergency';
         }
 
-        // Comprehensive demographic resolution
-        const resolvedBirthdate = existingPatient?.birthdate || residentProfile?.birthdate || '';
+        // Comprehensive demographic resolution: only resolve from existing patient/PCR, not from reporter
+        const resolvedBirthdate = existingPatient?.birthdate || existingPatient?.patient_birthdate || '';
         const resolvedAge = resolvedBirthdate
-          ? String(calculateAge(resolvedBirthdate))
-          : (existingPatient?.age ? String(existingPatient.age) : (pcr?.age ? String(pcr.age) : ''));
+          ? (calculateAge(resolvedBirthdate) || (existingPatient?.age ? String(existingPatient.age) : ''))
+          : (existingPatient?.age ? String(existingPatient.age) : (pcr?.age ? String(pcr.age) : (pcr?.patient_age ? String(pcr.patient_age) : '')));
 
-        const resolvedGender = existingPatient?.gender || pcr?.gender || residentProfile?.gender || 'male';
+        const resolvedGender = existingPatient?.gender || pcr?.gender || 'male';
 
         const resolvedContact = (
           pcr?.contact_number ||
           existingPatient?.contact_number ||
-          resident?.phone_number ||
-          dispatch.incident?.caller_phone_number ||
           ''
         );
 
         const resolvedPatientId = pcr?.patient_id || existingPatient?.id || null;
-        const resolvedFirstName = existingPatient?.first_name || resident?.first_name || '';
-        const resolvedLastName = existingPatient?.last_name || resident?.last_name || '';
+        const resolvedFirstName = existingPatient?.first_name || existingPatient?.patient_first_name || '';
+        const resolvedLastName = existingPatient?.last_name || existingPatient?.patient_last_name || '';
         const resolvedFullName = `${resolvedFirstName} ${resolvedLastName}`.trim();
 
         // Ensure Barangay is shown in Place of Incident so responders can easily just add Zone/Purok
@@ -1045,7 +1057,9 @@ export default function PatientCareRecordScreen() {
 
   const selectPatient = (patient: any) => {
     setFormData(prev => {
-      const calculatedAge = patient.birthdate ? calculateAge(patient.birthdate) : (patient.age ? String(patient.age) : prev.age);
+      const calculatedAge = patient.birthdate
+        ? (calculateAge(patient.birthdate) || (patient.age !== undefined && patient.age !== null ? String(patient.age) : ''))
+        : (patient.age !== undefined && patient.age !== null ? String(patient.age) : prev.age);
       const homeAddress = (patient.address || patient.incident_address || (patient.barangay?.name ? `Barangay ${patient.barangay.name}` : '')).trim();
       return {
         ...prev,
@@ -1502,7 +1516,9 @@ export default function PatientCareRecordScreen() {
       place_of_incident: defaultPlaceOfIncident,
       civil_status: pcr?.civil_status || patient?.civil_status || 'single',
       incident_address: pcr?.incident_address || patient?.address || '',
-      age: patient?.birthdate ? calculateAge(patient.birthdate) : (pcr?.patient_age || ''),
+      age: patient?.birthdate
+        ? (calculateAge(patient.birthdate) || (patient?.age ? String(patient.age) : ''))
+        : (patient?.age ? String(patient.age) : (pcr?.patient_age ? String(pcr.patient_age) : (pcr?.age ? String(pcr.age) : ''))),
       is_unidentified: Boolean(patient?.is_unidentified),
       assessment_findings: Array.isArray(pcr?.assessment) ? pcr.assessment : [],
       assessment_markers: Array.isArray(pcr?.assessment_markers) ? pcr.assessment_markers : [],
@@ -1865,12 +1881,50 @@ export default function PatientCareRecordScreen() {
         </View>
       )}
 
-      {/* Quick Unidentified Patient Option for Emergency Cases */}
+      {/* Quick Helper Option Buttons for Responders */}
       {!formData.patient_id && (
-        <TouchableOpacity style={styles.unidentifiedQuickBtn} onPress={handlePromptUnidentifiedPatient}>
-          <AlertCircle size={16} color="#d97706" />
-          <Text style={styles.unidentifiedQuickBtnText}>+ Unidentified Patient</Text>
-        </TouchableOpacity>
+        <View style={{ gap: 8, marginBottom: 14 }}>
+          <TouchableOpacity style={[styles.unidentifiedQuickBtn, { marginBottom: 0 }]} onPress={handlePromptUnidentifiedPatient}>
+            <AlertCircle size={16} color="#d97706" />
+            <Text style={styles.unidentifiedQuickBtnText}>+ Unidentified Patient</Text>
+          </TouchableOpacity>
+
+          {!formData.first_name && Boolean(activeDispatch?.incident?.resident?.first_name) && (
+            <TouchableOpacity
+              style={[styles.reporterQuickBtn, { marginBottom: 0 }]}
+              onPress={() => {
+                const r = activeDispatch.incident.resident;
+                const rp = r.resident_profile;
+                const rBirthdate = r.birthdate || '';
+                const rAge = rBirthdate
+                  ? (calculateAge(rBirthdate) || (r.age !== undefined && r.age !== null ? String(r.age) : ''))
+                  : (r.age !== undefined && r.age !== null ? String(r.age) : '');
+                const rBarangay = rp?.barangay?.barangay_name || rp?.barangay?.name || '';
+                const rAddress = r.address || (rBarangay ? `Barangay ${rBarangay}, Opol` : '');
+                setFormData(prev => ({
+                  ...prev,
+                  first_name: r.first_name || '',
+                  last_name: r.last_name || '',
+                  searchQuery: `${r.first_name || ''} ${r.last_name || ''}`.trim(),
+                  birthdate: rBirthdate,
+                  age: rAge,
+                  gender: (r.gender === 'male' || r.gender === 'female') ? r.gender : prev.gender,
+                  contact_number: r.phone_number || prev.contact_number || '',
+                  incident_address: rAddress || prev.incident_address,
+                  address: rAddress || prev.address,
+                  civil_status: prev.civil_status || 'single',
+                  is_unidentified: false,
+                }));
+                triggerToast('Populated with Reporter details');
+              }}
+            >
+              <User size={15} color="#2563eb" />
+              <Text style={styles.reporterQuickBtnText}>
+                👤 Patient is the Reporter ({activeDispatch.incident.resident.first_name} {activeDispatch.incident.resident.last_name})
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       <Text style={[styles.label, { marginTop: 0 }]}>Search Patient</Text>
@@ -4950,6 +5004,8 @@ const styles = StyleSheet.create({
   createBtnText: { color: '#208AEF', fontWeight: 'bold' },
   unidentifiedQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#fffbeb', borderWidth: 1.5, borderColor: '#fcd34d', paddingVertical: 12, borderRadius: 12, marginBottom: 16 },
   unidentifiedQuickBtnText: { color: '#b45309', fontWeight: '800', fontSize: 14 },
+  reporterQuickBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#eff6ff', borderWidth: 1.5, borderColor: '#bfdbfe', paddingVertical: 12, borderRadius: 12, marginBottom: 16 },
+  reporterQuickBtnText: { color: '#1d4ed8', fontWeight: '800', fontSize: 13 },
   unidentifiedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fffbeb', borderWidth: 1.5, borderColor: '#fcd34d', padding: 14, borderRadius: 14, marginBottom: 16, gap: 12 },
   unidentifiedBannerTitle: { fontSize: 15, fontWeight: '800', color: '#92400e' },
   unidentifiedBannerSubtitle: { fontSize: 12, color: '#b45309', marginTop: 2, lineHeight: 16 },
