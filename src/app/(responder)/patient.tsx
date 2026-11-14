@@ -3848,34 +3848,24 @@ export default function PatientCareRecordScreen() {
           />
           {renderStepIndicator()}
 
-        {/* Multi-Patient Selector Bar */}
-        <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
-          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 8, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Users size={14} color="#2563EB" />
-                <Text style={{ fontSize: 11, fontWeight: '800', color: '#1E293B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                  Incident Patients ({Math.max(missionPcrs.length, 1)})
-                </Text>
-              </View>
-              {missionPcrs.length > 1 && (
+        {/* Multi-Patient Selector Bar (Only visible when 2 or more patients are recorded) */}
+        {missionPcrs.length > 1 && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+            <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 8, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Users size={14} color="#2563EB" />
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#1E293B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                    Incident Patients ({missionPcrs.length})
+                  </Text>
+                </View>
                 <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>
                   Tap to switch patient
                 </Text>
-              )}
-            </View>
+              </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
-              {(() => {
-                const list = missionPcrs.length > 0 ? missionPcrs : [{
-                  id: formData.pcr_id || null,
-                  patient: {
-                    patient_first_name: formData.first_name,
-                    patient_last_name: formData.last_name,
-                    is_unidentified: formData.is_unidentified,
-                  }
-                }];
-                return list.map((p, idx) => {
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+                {missionPcrs.map((p, idx) => {
                   const isSelected = activePcrIndex === idx;
                   const currentName = idx === activePcrIndex && (formData.first_name || formData.last_name)
                     ? [formData.first_name, formData.last_name].filter(Boolean).join(' ')
@@ -3909,34 +3899,11 @@ export default function PatientCareRecordScreen() {
                       ) : null}
                     </TouchableOpacity>
                   );
-                });
-              })()}
-
-              {/* Add Patient Pill */}
-              <TouchableOpacity
-                onPress={handleAddAnotherPatient}
-                activeOpacity={0.8}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 5,
-                  paddingVertical: 7,
-                  paddingHorizontal: 12,
-                  borderRadius: 12,
-                  backgroundColor: '#EFF6FF',
-                  borderWidth: 1.5,
-                  borderColor: '#93C5FD',
-                  borderStyle: 'dashed',
-                }}
-              >
-                <Plus size={13} color="#2563EB" strokeWidth={2.5} />
-                <Text style={{ fontSize: 12, fontWeight: '800', color: '#2563EB' }}>
-                  + Add Patient
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
+                })}
+              </ScrollView>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
