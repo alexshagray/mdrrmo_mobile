@@ -3812,37 +3812,51 @@ export default function PatientCareRecordScreen() {
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
-              {missionPcrs.map((p, idx) => {
-                const isSelected = activePcrIndex === idx;
-                const patientName = [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ') 
-                  || (p.patient?.is_unidentified ? 'Unidentified' : `Patient #${idx + 1}`);
-                return (
-                  <TouchableOpacity
-                    key={`pcr-tab-${p.id || idx}`}
-                    onPress={() => handleSwitchPatient(idx)}
-                    activeOpacity={0.8}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                      paddingVertical: 7,
-                      paddingHorizontal: 12,
-                      borderRadius: 12,
-                      backgroundColor: isSelected ? '#2563EB' : '#F8FAFC',
-                      borderWidth: 1.5,
-                      borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
-                    }}
-                  >
-                    <User size={13} color={isSelected ? '#FFFFFF' : '#64748B'} />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? '#FFFFFF' : '#334155' }}>
-                      {idx + 1}. {patientName}
-                    </Text>
-                    {p.id ? (
-                      <CheckCircle2 size={12} color={isSelected ? '#BFDBFE' : '#10B981'} />
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
+              {(() => {
+                const list = missionPcrs.length > 0 ? missionPcrs : [{
+                  id: formData.pcr_id || null,
+                  patient: {
+                    patient_first_name: formData.first_name,
+                    patient_last_name: formData.last_name,
+                    is_unidentified: formData.is_unidentified,
+                  }
+                }];
+                return list.map((p, idx) => {
+                  const isSelected = activePcrIndex === idx;
+                  const currentName = idx === activePcrIndex && (formData.first_name || formData.last_name)
+                    ? [formData.first_name, formData.last_name].filter(Boolean).join(' ')
+                    : null;
+                  const patientName = currentName
+                    || [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ') 
+                    || (p.patient?.is_unidentified || (idx === activePcrIndex && formData.is_unidentified) ? 'Unidentified' : `Patient #${idx + 1}`);
+                  return (
+                    <TouchableOpacity
+                      key={`pcr-tab-${p.id || idx}`}
+                      onPress={() => handleSwitchPatient(idx)}
+                      activeOpacity={0.8}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingVertical: 7,
+                        paddingHorizontal: 12,
+                        borderRadius: 12,
+                        backgroundColor: isSelected ? '#2563EB' : '#F8FAFC',
+                        borderWidth: 1.5,
+                        borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
+                      }}
+                    >
+                      <User size={13} color={isSelected ? '#FFFFFF' : '#64748B'} />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? '#FFFFFF' : '#334155' }}>
+                        {idx + 1}. {patientName}
+                      </Text>
+                      {p.id ? (
+                        <CheckCircle2 size={12} color={isSelected ? '#BFDBFE' : '#10B981'} />
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                });
+              })()}
 
               {/* Add Patient Pill */}
               <TouchableOpacity
