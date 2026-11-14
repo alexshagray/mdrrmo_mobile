@@ -165,20 +165,27 @@ export const updatePcr = async (dispatchId: number | string, pcrData: any) => {
   }
 };
 
-export const submitPcr = async (dispatchId: number | string) => {
+export const submitPcr = async (
+  dispatchId: number | string,
+  options?: { complete_mission?: boolean; pcr_id?: number }
+) => {
   try {
-    const response = await apiClient.post(`/responder/dispatches/${dispatchId}/pcr/submit`);
-    await offlineMissionService.clearActiveMission();
+    const response = await apiClient.post(`/responder/dispatches/${dispatchId}/pcr/submit`, options || {});
+    if (options?.complete_mission !== false) {
+      await offlineMissionService.clearActiveMission();
+    }
     return response.data;
   } catch (err: any) {
     const isNetwork = err.isNetworkError || !err.response || err.code === 'ERR_NETWORK';
     if (isNetwork) {
       console.log(`[submitPcr] Offline mode: queued PCR submission for mission #${dispatchId}`);
-      await offlineMissionService.updateStatusOffline(dispatchId, 'completed');
+      if (options?.complete_mission !== false) {
+        await offlineMissionService.updateStatusOffline(dispatchId, 'completed');
+      }
       await offlineSyncService.enqueue({
         action: 'SUBMIT_PCR',
         dispatchId,
-        payload: {},
+        payload: options || {},
       });
       return {
         message: 'PCR submitted offline. Records will sync when connection returns.',
@@ -187,6 +194,11 @@ export const submitPcr = async (dispatchId: number | string) => {
     }
     throw err;
   }
+};
+
+export const deletePcr = async (dispatchId: number | string, pcrId: number | string) => {
+  const response = await apiClient.delete(`/responder/dispatches/${dispatchId}/pcr/${pcrId}`);
+  return response.data;
 };
 
 export const uploadPcrPhoto = async (dispatchId: number | string, formData: any) => {

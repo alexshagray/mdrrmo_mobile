@@ -8,9 +8,9 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Header, Button } from '@/shared/components';
 import { SignaturePad, BodyDiagram } from '@/shared/components';
 import { WebView } from 'react-native-webview';
-import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2, AlertCircle, UserCheck, UserX, HelpCircle, Edit3, HeartPulse, Printer, Share2, X, CheckCircle2 } from 'lucide-react-native';
+import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2, AlertCircle, UserCheck, UserX, HelpCircle, Edit3, HeartPulse, Printer, Share2, X, CheckCircle2, Users } from 'lucide-react-native';
 import { searchPatients, createPatient, identifyPatient } from '@/shared/api/patients';
-import { getActiveDispatches, updatePcr, submitPcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
+import { getActiveDispatches, updatePcr, submitPcr, deletePcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 import { resolveAddressFromCoords } from '@/shared/utils/location';
 import { offlineMissionService } from '@/shared/services/offlineMissionService';
@@ -227,7 +227,8 @@ export const formatUniqueResponders = (...sources: any[]): string => {
 const TOTAL_STEPS = 8;
 
 const initialFormData = {
-  patient_id: null,
+  pcr_id: null as number | null,
+  patient_id: null as number | null,
   searchQuery: '',
   first_name: '',
   last_name: '',
@@ -315,6 +316,8 @@ export default function PatientCareRecordScreen() {
   const [step, setStep] = useState(1);
   const [reachedReview, setReachedReview] = useState(false);
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
+  const [missionPcrs, setMissionPcrs] = useState<any[]>([]);
+  const [activePcrIndex, setActivePcrIndex] = useState<number>(0);
 
   useEffect(() => {
     if (step === TOTAL_STEPS && !reachedReview) {
@@ -680,6 +683,11 @@ export default function PatientCareRecordScreen() {
           console.log('Error reading cached photos:', e);
         }
 
+        const pcrs = Array.isArray(dispatch.patient_care_records) && dispatch.patient_care_records.length > 0
+          ? dispatch.patient_care_records
+          : (dispatch.patient_care_record ? [dispatch.patient_care_record] : []);
+        setMissionPcrs(pcrs);
+
         const pcr = dispatch.patient_care_record;
         const resident = dispatch.incident?.resident;
         const residentProfile = resident?.resident_profile;
@@ -807,6 +815,7 @@ export default function PatientCareRecordScreen() {
             nature_of_call: prev.nature_of_call?.trim() || cachedDraft?.nature_of_call?.trim() || defaultNatureOfCall || prev.nature_of_call,
 
             // Auto-populated Patient Demographics
+            pcr_id: prev.pcr_id || cachedDraft?.pcr_id || pcr?.id || null,
             patient_id: prev.patient_id || cachedDraft?.patient_id || resolvedPatientId,
             first_name: prev.first_name?.trim() || cachedDraft?.first_name?.trim() || resolvedFirstName,
             last_name: prev.last_name?.trim() || cachedDraft?.last_name?.trim() || resolvedLastName,
@@ -1229,6 +1238,7 @@ export default function PatientCareRecordScreen() {
         patient_id: formData.patient_id,
         gender: formData.gender,
         contact_number: formData.contact_number,
+        pcr_id: formData.pcr_id || undefined,
         nature_of_call: formData.nature_of_call,
         chief_complaint: formData.chief_complaint,
         place_of_incident: formData.place_of_incident,
@@ -1255,7 +1265,13 @@ export default function PatientCareRecordScreen() {
         witness_signature: formData.witness_signature,
         waiver_signature: formData.waiver_signature || formData.patient_signature,
       };
-      await updatePcr(activeDispatch.id, payload);
+      const updateRes = await updatePcr(activeDispatch.id, payload);
+      if (updateRes?.data?.id && !formData.pcr_id) {
+        setFormData(prev => ({ ...prev, pcr_id: updateRes.data.id }));
+      }
+      if (updateRes?.all_pcrs && Array.isArray(updateRes.all_pcrs)) {
+        setMissionPcrs(updateRes.all_pcrs);
+      }
       return true;
     } catch (e: any) {
       console.log('PCR Save Error:', e.response?.data || e.message);
@@ -1444,6 +1460,177 @@ export default function PatientCareRecordScreen() {
     }
   };
 
+  const populatePcrToForm = (pcr: any, dispatch: any) => {
+    const patient = pcr?.patient;
+    const defaultPlaceOfIncident = pcr?.place_of_incident
+      || dispatch?.incident?.place_of_incident
+      || dispatch?.incident?.location
+      || '';
+
+    const defaultChiefComplaint = pcr?.clinical_chief_complaint
+      || pcr?.chief_complaint
+      || dispatch?.incident?.chief_complaint
+      || dispatch?.incident?.incident_type?.name
+      || '';
+
+    const defaultNatureOfCall = pcr?.nature_of_call
+      || dispatch?.incident?.nature_of_call
+      || 'emergency';
+
+    const pcrVitals = pcr?.vital_signs && Array.isArray(pcr.vital_signs) && pcr.vital_signs.length > 0
+      ? pcr.vital_signs
+      : initialFormData.vital_signs;
+
+    const pcrGcs = pcr?.glasgow_coma_scale && typeof pcr.glasgow_coma_scale === 'object'
+      ? pcr.glasgow_coma_scale
+      : initialFormData.glasgow_coma_scale;
+
+    const fullName = [patient?.patient_first_name || patient?.first_name, patient?.patient_last_name || patient?.last_name].filter(Boolean).join(' ');
+
+    return {
+      pcr_id: pcr?.id || null,
+      patient_id: pcr?.patient_id || null,
+      searchQuery: fullName,
+      first_name: patient?.patient_first_name || patient?.first_name || '',
+      last_name: patient?.patient_last_name || patient?.last_name || '',
+      birthdate: patient?.birthdate || '',
+      gender: patient?.gender || pcr?.patient_gender || 'male',
+      contact_number: pcr?.contact_number || patient?.contact_number || '',
+      address: pcr?.incident_address || patient?.address || '',
+      nature_of_call: defaultNatureOfCall,
+      chief_complaint: defaultChiefComplaint,
+      place_of_incident: defaultPlaceOfIncident,
+      civil_status: pcr?.civil_status || patient?.civil_status || 'single',
+      incident_address: pcr?.incident_address || patient?.address || '',
+      age: patient?.birthdate ? calculateAge(patient.birthdate) : (pcr?.patient_age || ''),
+      is_unidentified: Boolean(patient?.is_unidentified),
+      assessment_findings: Array.isArray(pcr?.assessment) ? pcr.assessment : [],
+      assessment_markers: Array.isArray(pcr?.assessment_markers) ? pcr.assessment_markers : [],
+      vital_signs: pcrVitals,
+      glasgow_coma_scale: pcrGcs,
+      dispatch_time: normalizeTimeTo24(pcr?.dispatch_time) || formatTime24ForApi(dispatch?.assigned_at || dispatch?.created_at),
+      en_route_time: normalizeTimeTo24(pcr?.en_route_time) || formatTime24ForApi(dispatch?.en_route_at),
+      on_scene_time: normalizeTimeTo24(pcr?.on_scene_time) || formatTime24ForApi(dispatch?.arrived_on_scene_at || dispatch?.arrived_at),
+      transport_time: normalizeTimeTo24(pcr?.transport_time) || '',
+      arrived_hf_time: normalizeTimeTo24(pcr?.arrived_hf_time) || '',
+      departed_hf_time: normalizeTimeTo24(pcr?.departed_hf_time) || '',
+      transported: Boolean(pcr?.transported),
+      transported_to: pcr?.transported_to || '',
+      received_by: pcr?.received_by || '',
+      disposition: Array.isArray(pcr?.disposition) ? pcr.disposition : (pcr?.disposition ? [pcr.disposition] : []),
+      special_instructions: pcr?.special_instructions || '',
+      patient_signature: pcr?.patient_signature || '',
+      responders: pcr?.responders || '',
+      waiver_signed: Boolean(pcr?.waiver_signed),
+      witness_name: pcr?.witness_name || '',
+      witness_signature: pcr?.witness_signature || '',
+      waiver_signature: pcr?.waiver_signature || '',
+    };
+  };
+
+  const handleAddAnotherPatient = async () => {
+    if (!formData.patient_id) {
+      Alert.alert('Patient Required', 'Please select or identify the current patient first before adding another one.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const saved = await saveCurrentStep();
+      if (!saved) {
+        setIsSaving(false);
+        return;
+      }
+
+      if (activeDispatch?.id) {
+        const subRes = await submitPcr(activeDispatch.id, {
+          complete_mission: false,
+          pcr_id: formData.pcr_id || undefined,
+        });
+        if (subRes?.all_pcrs && Array.isArray(subRes.all_pcrs)) {
+          setMissionPcrs(subRes.all_pcrs);
+        }
+      }
+
+      // Reset form for next patient, retaining scene location and operational timestamps
+      setFormData(prev => ({
+        ...initialFormData,
+        nature_of_call: prev.nature_of_call || 'emergency',
+        place_of_incident: prev.place_of_incident,
+        dispatch_time: prev.dispatch_time,
+        en_route_time: prev.en_route_time,
+        on_scene_time: prev.on_scene_time,
+      }));
+
+      setPcrPhotos([]);
+      setSelectedPhotoIndex(0);
+      setStep(1);
+      setReachedReview(false);
+      setActivePcrIndex(missionPcrs.length);
+
+      triggerToast('Patient record saved! You can now encode Patient #' + (missionPcrs.length + 1));
+    } catch (err: any) {
+      console.log('Add patient error:', err);
+      Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to save patient record.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSwitchPatient = async (targetIdx: number) => {
+    if (targetIdx === activePcrIndex) return;
+
+    if (formData.patient_id && activeDispatch?.id) {
+      await saveCurrentStep().catch(() => {});
+    }
+
+    const targetPcr = missionPcrs[targetIdx];
+    if (targetPcr) {
+      const populated = populatePcrToForm(targetPcr, activeDispatch);
+      setFormData(populated);
+      setActivePcrIndex(targetIdx);
+      setStep(1);
+      triggerToast(`Switched to Patient #${targetIdx + 1}`);
+    }
+  };
+
+  const handleRemovePatient = (pcrId?: number | null) => {
+    Alert.alert(
+      'Remove Patient Record',
+      'Are you sure you want to remove this patient from this incident?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (pcrId && activeDispatch?.id) {
+                const res = await deletePcr(activeDispatch.id, pcrId);
+                if (res?.all_pcrs) {
+                  setMissionPcrs(res.all_pcrs);
+                  if (res.all_pcrs.length > 0) {
+                    setFormData(populatePcrToForm(res.all_pcrs[0], activeDispatch));
+                    setActivePcrIndex(0);
+                  } else {
+                    setFormData(initialFormData);
+                    setActivePcrIndex(0);
+                  }
+                }
+              } else {
+                setFormData(initialFormData);
+                setActivePcrIndex(0);
+              }
+              triggerToast('Patient record removed.');
+            } catch (err: any) {
+              Alert.alert('Error', err.response?.data?.message || err.message || 'Failed to remove patient.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleFinalSubmit = async () => {
     const saved = await saveCurrentStep();
     if (!saved) return;
@@ -1466,6 +1653,7 @@ export default function PatientCareRecordScreen() {
               type,
             } as any);
 
+            if (formData.pcr_id) photoFormData.append('pcr_id', formData.pcr_id.toString());
             if (photo.latitude) photoFormData.append('photo_latitude', photo.latitude.toString());
             if (photo.longitude) photoFormData.append('photo_longitude', photo.longitude.toString());
             if (photo.locationName) photoFormData.append('photo_location_name', photo.locationName);
@@ -1506,14 +1694,17 @@ export default function PatientCareRecordScreen() {
         }
       }
 
-      const submitRes = await submitPcr(activeDispatch.id);
+      const submitRes = await submitPcr(activeDispatch.id, {
+        complete_mission: true,
+        pcr_id: formData.pcr_id || undefined,
+      });
+
       if (activeDispatch?.id) {
         AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
         AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
       }
 
-      const pName = [formData.first_name, formData.last_name].filter(Boolean).join(' ') ||
-        (isWalkIn ? 'Walk-In Patient' : 'Patient');
+      const totalPatients = Math.max(missionPcrs.length, 1);
       const incCode = activeDispatch?.incident?.incident_code ||
         (activeDispatch?.id ? `#DISP-${activeDispatch.id}` : (isWalkIn ? 'Walk-In Record' : 'Incident Ref'));
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1521,10 +1712,10 @@ export default function PatientCareRecordScreen() {
       if (submitRes?.is_offline_queued) {
         setSuccessModalData({
           type: 'offline',
-          title: 'PCR Saved Offline',
-          message: 'Your Patient Care Report and scene photos have been securely preserved on this device. They will automatically synchronize with the MDRRMO server when internet returns.',
+          title: totalPatients > 1 ? `${totalPatients} Patients Saved Offline` : 'PCR Saved Offline',
+          message: 'Your Patient Care Reports and scene photos have been securely preserved on this device. They will automatically synchronize with the MDRRMO server when internet returns.',
           incidentRef: incCode,
-          patientName: pName,
+          patientName: totalPatients > 1 ? `${totalPatients} Patients Recorded` : ([formData.first_name, formData.last_name].filter(Boolean).join(' ') || 'Patient'),
           statusBadge: 'Saved Offline',
           timestamp: timeStr,
         });
@@ -1532,11 +1723,13 @@ export default function PatientCareRecordScreen() {
       } else {
         setSuccessModalData({
           type: 'success',
-          title: 'PCR Submitted Successfully',
-          message: 'Patient Care Report has been officially submitted and recorded in the MDRRMO dispatch system.',
+          title: totalPatients > 1 ? `${totalPatients} Patients Officially Filed` : 'PCR Submitted Successfully',
+          message: totalPatients > 1
+            ? `All ${totalPatients} patient care reports for ${incCode} have been officially submitted and recorded in the MDRRMO emergency system.`
+            : 'Patient Care Report has been officially submitted and recorded in the MDRRMO dispatch system.',
           incidentRef: incCode,
-          patientName: pName,
-          statusBadge: 'Official Record Filed',
+          patientName: totalPatients > 1 ? `${totalPatients} Patients Catered` : ([formData.first_name, formData.last_name].filter(Boolean).join(' ') || 'Patient'),
+          statusBadge: 'Official Records Filed',
           timestamp: timeStr,
         });
         setShowSuccessModal(true);
@@ -3332,20 +3525,87 @@ export default function PatientCareRecordScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          onPress={handleFinalSubmit}
-          disabled={isSaving}
-          style={{ width: '100%', paddingVertical: 16, borderRadius: 14, backgroundColor: isSaving ? '#94a3b8' : '#10b981', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', shadowColor: '#10b981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
-          ) : (
-            <Send size={18} color="#fff" style={{ marginRight: 8 }} />
+        {/* Multi-Patient Actions */}
+        <View style={{ gap: 10, width: '100%', marginTop: 4 }}>
+          <TouchableOpacity
+            onPress={handleAddAnotherPatient}
+            disabled={isSaving}
+            style={{
+              width: '100%',
+              paddingVertical: 14,
+              borderRadius: 14,
+              backgroundColor: '#EFF6FF',
+              borderWidth: 1.5,
+              borderColor: '#3B82F6',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              gap: 8,
+              shadowColor: '#2563EB',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 2,
+            }}
+          >
+            <Plus size={18} color="#2563EB" strokeWidth={2.5} />
+            <Text style={{ color: '#2563EB', fontSize: 14, fontWeight: '800', letterSpacing: 0.3 }}>
+              SAVE & ADD ANOTHER PATIENT
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleFinalSubmit}
+            disabled={isSaving}
+            style={{
+              width: '100%',
+              paddingVertical: 16,
+              borderRadius: 14,
+              backgroundColor: isSaving ? '#94a3b8' : '#10b981',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'row',
+              shadowColor: '#10b981',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 4,
+            }}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+            ) : (
+              <Send size={18} color="#fff" style={{ marginRight: 8 }} />
+            )}
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.5 }}>
+              {isSaving
+                ? 'SUBMITTING...'
+                : (missionPcrs.length > 1
+                    ? `FINALIZE & SUBMIT ALL (${missionPcrs.length} PATIENTS)`
+                    : 'FINALIZE & SUBMIT MISSION')}
+            </Text>
+          </TouchableOpacity>
+
+          {missionPcrs.length > 1 && formData.pcr_id && (
+            <TouchableOpacity
+              onPress={() => handleRemovePatient(formData.pcr_id)}
+              disabled={isSaving}
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 8,
+                marginTop: 2,
+                flexDirection: 'row',
+                gap: 5,
+              }}
+            >
+              <Trash2 size={13} color="#EF4444" />
+              <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: '700' }}>
+                Remove this patient from incident
+              </Text>
+            </TouchableOpacity>
           )}
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 }}>
-            {isSaving ? 'SUBMITTING...' : 'SUBMIT REPORT'}
-          </Text>
-        </TouchableOpacity>
+        </View>
       </View>
     );
   };
@@ -3533,6 +3793,82 @@ export default function PatientCareRecordScreen() {
             subtitleClassName="text-blue-100"
           />
           {renderStepIndicator()}
+
+        {/* Multi-Patient Selector Bar */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 8, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Users size={14} color="#2563EB" />
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#1E293B', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  Incident Patients ({Math.max(missionPcrs.length, 1)})
+                </Text>
+              </View>
+              {missionPcrs.length > 1 && (
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#64748B' }}>
+                  Tap to switch patient
+                </Text>
+              )}
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+              {missionPcrs.map((p, idx) => {
+                const isSelected = activePcrIndex === idx;
+                const patientName = [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ') 
+                  || (p.patient?.is_unidentified ? 'Unidentified' : `Patient #${idx + 1}`);
+                return (
+                  <TouchableOpacity
+                    key={`pcr-tab-${p.id || idx}`}
+                    onPress={() => handleSwitchPatient(idx)}
+                    activeOpacity={0.8}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingVertical: 7,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor: isSelected ? '#2563EB' : '#F8FAFC',
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
+                    }}
+                  >
+                    <User size={13} color={isSelected ? '#FFFFFF' : '#64748B'} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? '#FFFFFF' : '#334155' }}>
+                      {idx + 1}. {patientName}
+                    </Text>
+                    {p.id ? (
+                      <CheckCircle2 size={12} color={isSelected ? '#BFDBFE' : '#10B981'} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Add Patient Pill */}
+              <TouchableOpacity
+                onPress={handleAddAnotherPatient}
+                activeOpacity={0.8}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                  paddingVertical: 7,
+                  paddingHorizontal: 12,
+                  borderRadius: 12,
+                  backgroundColor: '#EFF6FF',
+                  borderWidth: 1.5,
+                  borderColor: '#93C5FD',
+                  borderStyle: 'dashed',
+                }}
+              >
+                <Plus size={13} color="#2563EB" strokeWidth={2.5} />
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#2563EB' }}>
+                  + Add Patient
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
 
         {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
