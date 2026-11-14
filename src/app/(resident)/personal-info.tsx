@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -39,6 +39,7 @@ import { useAuth } from '@/shared/hooks';
 export default function PersonalInfoScreen() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -149,8 +150,11 @@ export default function PersonalInfoScreen() {
 
   const handleBirthdateChange = (text: string) => {
     // Format YYYY-MM-DD
-    const cleaned = text.replace(/[^0-9-]/g, '');
+    const cleaned = text.replace(/[^0-9-]/g, '').slice(0, 10);
     setBirthdate(cleaned);
+    if (errors.birthdate && cleaned.length === 10) {
+      setErrors((prev) => ({ ...prev, birthdate: '' }));
+    }
 
     // Auto-calculate age if valid date
     if (cleaned.length === 10) {
@@ -164,7 +168,7 @@ export default function PersonalInfoScreen() {
           if (m < 0 || (m === 0 && now.getDate() < d.getDate())) {
             calculatedAge--;
           }
-          if (calculatedAge > 0 && calculatedAge < 120) {
+          if (calculatedAge >= 0 && calculatedAge < 120) {
             setAge(calculatedAge);
           }
         }
@@ -177,36 +181,89 @@ export default function PersonalInfoScreen() {
     const cleaned = text.replace(/[^0-9]/g, '').slice(0, 11);
     setPhoneNumber(cleaned);
     if (errors.phoneNumber) {
-      setErrors((prev) => ({ ...prev, phoneNumber: '' }));
+      if (cleaned.length === 11 && cleaned.startsWith('09')) {
+        setErrors((prev) => ({ ...prev, phoneNumber: '' }));
+      }
     }
+  };
+
+  const renderFieldError = (fieldName: string) => {
+    if (!errors[fieldName]) return null;
+    return (
+      <View style={styles.errorBox}>
+        <AlertCircle size={14} color="#DC2626" strokeWidth={2.4} />
+        <Text style={styles.errorText}>{errors[fieldName]}</Text>
+      </View>
+    );
   };
 
   const handleSave = async () => {
     const newErrors: Record<string, string> = {};
 
-    if (!firstName.trim()) newErrors.firstName = 'First name is required';
-    if (!lastName.trim()) newErrors.lastName = 'Last name is required';
-
-    if (birthdate && !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) {
-      newErrors.birthdate = 'Format must be YYYY-MM-DD';
+    // 1. First Name
+    if (!firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+    } else if (firstName.trim().length < 2) {
+      newErrors.firstName = 'First name must be at least 2 characters';
     }
 
+    // 2. Last Name
+    if (!lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+    } else if (lastName.trim().length < 2) {
+      newErrors.lastName = 'Last name must be at least 2 characters';
+    }
+
+    // 3. Date of Birth
+    if (!birthdate.trim()) {
+      newErrors.birthdate = 'Date of birth is required';
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(birthdate.trim())) {
+      newErrors.birthdate = 'Format must be YYYY-MM-DD (e.g. 2000-01-31)';
+    } else {
+      const parts = birthdate.trim().split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      const testDate = new Date(y, m - 1, d);
+      const today = new Date();
+      if (
+        isNaN(testDate.getTime()) ||
+        testDate.getFullYear() !== y ||
+        testDate.getMonth() !== m - 1 ||
+        testDate.getDate() !== d
+      ) {
+        newErrors.birthdate = 'Please enter a valid calendar date';
+      } else if (testDate > today) {
+        newErrors.birthdate = 'Date of birth cannot be in the future';
+      } else if (today.getFullYear() - y > 120) {
+        newErrors.birthdate = 'Please enter a valid birth year';
+      }
+    }
+
+    // 4. Gender
+    if (!gender) {
+      newErrors.gender = 'Please select your gender';
+    }
+
+    // 5. Mobile Number
     const cleanPhone = phoneNumber.trim().replace(/[^0-9]/g, '');
     if (!cleanPhone) {
       newErrors.phoneNumber = 'Mobile number is required';
-    } else if (cleanPhone.length < 11) {
-      newErrors.phoneNumber = 'Mobile number must be 11 digits (e.g. 09123456789)';
+    } else if (cleanPhone.length !== 11) {
+      newErrors.phoneNumber = 'Mobile number must be exactly 11 digits (e.g. 09123456789)';
     } else if (!cleanPhone.startsWith('09')) {
       newErrors.phoneNumber = 'Mobile number must start with 09 (e.g. 09123456789)';
     }
 
+    // 6. Barangay
     if (!barangayId) {
-      newErrors.barangay = 'Please select your barangay';
+      newErrors.barangay = 'Please select your registered barangay in Opol';
     }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      setErrorMessage('Please fix the validation errors before saving.');
+      setErrorMessage('Please fix the highlighted fields below before saving.');
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -220,7 +277,7 @@ export default function PersonalInfoScreen() {
         first_name: firstName.trim(),
         middle_name: middleName.trim() || null,
         last_name: lastName.trim(),
-        birthdate: birthdate || null,
+        birthdate: birthdate.trim() || null,
         phone_number: cleanPhone || null,
         gender: gender || null,
         barangay_id: barangayId,
@@ -242,10 +299,30 @@ export default function PersonalInfoScreen() {
         setSuccessMessage('');
       }, 4000);
     } catch (err: any) {
+      if (err?.response?.data?.errors) {
+        const serverErrors = err.response.data.errors;
+        const mappedErrors: Record<string, string> = {};
+        if (serverErrors.first_name?.[0]) mappedErrors.firstName = serverErrors.first_name[0];
+        if (serverErrors.last_name?.[0]) mappedErrors.lastName = serverErrors.last_name[0];
+        if (serverErrors.middle_name?.[0]) mappedErrors.middleName = serverErrors.middle_name[0];
+        if (serverErrors.birthdate?.[0]) mappedErrors.birthdate = serverErrors.birthdate[0];
+        if (serverErrors.gender?.[0]) mappedErrors.gender = serverErrors.gender[0];
+        if (serverErrors.phone_number?.[0] || serverErrors.phone?.[0]) {
+          mappedErrors.phoneNumber = (serverErrors.phone_number || serverErrors.phone)[0];
+        }
+        if (serverErrors.barangay_id?.[0] || serverErrors.barangay?.[0]) {
+          mappedErrors.barangay = (serverErrors.barangay_id || serverErrors.barangay)[0];
+        }
+        if (serverErrors.address?.[0]) mappedErrors.homeAddress = serverErrors.address[0];
+
+        setErrors(mappedErrors);
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
+
       const msg =
         err?.response?.data?.message ||
         err?.response?.data?.errors?.[Object.keys(err?.response?.data?.errors || {})[0]]?.[0] ||
-        'Failed to save personal information. Please try again.';
+        'Failed to save personal information. Please review the highlighted fields.';
       setErrorMessage(msg);
     } finally {
       setIsSaving(false);
@@ -317,6 +394,7 @@ export default function PersonalInfoScreen() {
             </View>
           ) : (
             <ScrollView
+              ref={scrollViewRef}
               style={styles.scrollView}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
@@ -404,15 +482,20 @@ export default function PersonalInfoScreen() {
                       if (errors.firstName) setErrors((prev) => ({ ...prev, firstName: '' }));
                     }}
                     onFocus={() => setFocusedField('firstName')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      if (!firstName.trim()) {
+                        setErrors((prev) => ({ ...prev, firstName: 'First name is required' }));
+                      } else if (firstName.trim().length < 2) {
+                        setErrors((prev) => ({ ...prev, firstName: 'First name must be at least 2 characters' }));
+                      }
+                    }}
                     placeholder="e.g. Juan"
                     placeholderTextColor="#94A3B8"
                     autoCapitalize="words"
                     style={getInputStyle('firstName')}
                   />
-                  {errors.firstName ? (
-                    <Text style={styles.errorText}>{errors.firstName}</Text>
-                  ) : null}
+                  {renderFieldError('firstName')}
                 </View>
 
                 {/* Middle Name */}
@@ -423,7 +506,10 @@ export default function PersonalInfoScreen() {
                   </View>
                   <TextInput
                     value={middleName}
-                    onChangeText={setMiddleName}
+                    onChangeText={(val) => {
+                      setMiddleName(val);
+                      if (errors.middleName) setErrors((prev) => ({ ...prev, middleName: '' }));
+                    }}
                     onFocus={() => setFocusedField('middleName')}
                     onBlur={() => setFocusedField(null)}
                     placeholder="e.g. Santos"
@@ -431,6 +517,7 @@ export default function PersonalInfoScreen() {
                     autoCapitalize="words"
                     style={getInputStyle('middleName')}
                   />
+                  {renderFieldError('middleName')}
                 </View>
 
                 {/* Last Name */}
@@ -445,15 +532,20 @@ export default function PersonalInfoScreen() {
                       if (errors.lastName) setErrors((prev) => ({ ...prev, lastName: '' }));
                     }}
                     onFocus={() => setFocusedField('lastName')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      if (!lastName.trim()) {
+                        setErrors((prev) => ({ ...prev, lastName: 'Last name is required' }));
+                      } else if (lastName.trim().length < 2) {
+                        setErrors((prev) => ({ ...prev, lastName: 'Last name must be at least 2 characters' }));
+                      }
+                    }}
                     placeholder="e.g. Dela Cruz"
                     placeholderTextColor="#94A3B8"
                     autoCapitalize="words"
                     style={getInputStyle('lastName')}
                   />
-                  {errors.lastName ? (
-                    <Text style={styles.errorText}>{errors.lastName}</Text>
-                  ) : null}
+                  {renderFieldError('lastName')}
                 </View>
 
                 {/* Date of Birth & Age Row */}
@@ -470,7 +562,14 @@ export default function PersonalInfoScreen() {
                           if (errors.birthdate) setErrors((prev) => ({ ...prev, birthdate: '' }));
                         }}
                         onFocus={() => setFocusedField('birthdate')}
-                        onBlur={() => setFocusedField(null)}
+                        onBlur={() => {
+                          setFocusedField(null);
+                          if (!birthdate.trim()) {
+                            setErrors((prev) => ({ ...prev, birthdate: 'Date of birth is required' }));
+                          } else if (!/^\d{4}-\d{2}-\d{2}$/.test(birthdate.trim())) {
+                            setErrors((prev) => ({ ...prev, birthdate: 'Format must be YYYY-MM-DD (e.g. 2000-01-31)' }));
+                          }
+                        }}
                         placeholder="YYYY-MM-DD"
                         placeholderTextColor="#94A3B8"
                         maxLength={10}
@@ -478,9 +577,7 @@ export default function PersonalInfoScreen() {
                         style={getInputStyle('birthdate')}
                       />
                     </View>
-                    {errors.birthdate ? (
-                      <Text style={styles.errorText}>{errors.birthdate}</Text>
-                    ) : null}
+                    {renderFieldError('birthdate')}
                   </View>
 
                   <View style={styles.ageCol}>
@@ -498,16 +595,20 @@ export default function PersonalInfoScreen() {
                   <Text style={styles.label}>
                     Gender <Text style={styles.requiredStar}>*</Text>
                   </Text>
-                  <View style={styles.genderRow}>
+                  <View style={[styles.genderRow, errors.gender ? styles.genderRowError : null]}>
                     {(['male', 'female', 'other'] as const).map((g) => {
                       const isSelected = gender === g;
                       return (
                         <TouchableOpacity
                           key={g}
-                          onPress={() => setGender(g)}
+                          onPress={() => {
+                            setGender(g);
+                            if (errors.gender) setErrors((prev) => ({ ...prev, gender: '' }));
+                          }}
                           style={[
                             styles.genderBtn,
                             isSelected ? styles.genderBtnSelected : styles.genderBtnUnselected,
+                            errors.gender && !isSelected ? styles.genderBtnError : null,
                           ]}
                           activeOpacity={0.75}
                           accessibilityRole="button"
@@ -525,6 +626,7 @@ export default function PersonalInfoScreen() {
                       );
                     })}
                   </View>
+                  {renderFieldError('gender')}
                 </View>
               </View>
 
@@ -546,7 +648,7 @@ export default function PersonalInfoScreen() {
                     <Text style={styles.label}>
                       Mobile Number <Text style={styles.requiredStar}>*</Text>
                     </Text>
-                    <Text style={styles.charCountText}>
+                    <Text style={[styles.charCountText, errors.phoneNumber ? { color: '#EF4444' } : null]}>
                       {phoneNumber.length}/11
                     </Text>
                   </View>
@@ -554,16 +656,25 @@ export default function PersonalInfoScreen() {
                     value={phoneNumber}
                     onChangeText={handlePhoneNumberChange}
                     onFocus={() => setFocusedField('phoneNumber')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      const clean = phoneNumber.trim().replace(/[^0-9]/g, '');
+                      if (!clean) {
+                        setErrors((prev) => ({ ...prev, phoneNumber: 'Mobile number is required' }));
+                      } else if (clean.length !== 11) {
+                        setErrors((prev) => ({ ...prev, phoneNumber: 'Mobile number must be exactly 11 digits (e.g. 09123456789)' }));
+                      } else if (!clean.startsWith('09')) {
+                        setErrors((prev) => ({ ...prev, phoneNumber: 'Mobile number must start with 09 (e.g. 09123456789)' }));
+                      }
+                    }}
                     placeholder="09123456789"
                     placeholderTextColor="#94A3B8"
                     keyboardType="phone-pad"
                     maxLength={11}
                     style={getInputStyle('phoneNumber')}
                   />
-                  {errors.phoneNumber ? (
-                    <Text style={styles.errorText}>{errors.phoneNumber}</Text>
-                  ) : (
+                  {renderFieldError('phoneNumber')}
+                  {!errors.phoneNumber && (
                     <Text style={styles.fieldHelperText}>
                       Must be an 11-digit mobile number (e.g. 09123456789)
                     </Text>
@@ -620,7 +731,7 @@ export default function PersonalInfoScreen() {
                     activeOpacity={0.7}
                   >
                     <View style={styles.dropdownTriggerLeft}>
-                      <MapPin size={18} color={selectedBarangay ? '#1E88E5' : '#94A3B8'} />
+                      <MapPin size={18} color={errors.barangay ? '#EF4444' : selectedBarangay ? '#1E88E5' : '#94A3B8'} />
                       <Text
                         style={[
                           styles.dropdownTriggerText,
@@ -631,11 +742,10 @@ export default function PersonalInfoScreen() {
                         {selectedBarangay ? selectedBarangay.barangay_name : 'Select Barangay...'}
                       </Text>
                     </View>
-                    <ChevronDown size={20} color="#64748B" />
+                    <ChevronDown size={20} color={errors.barangay ? '#EF4444' : '#64748B'} />
                   </TouchableOpacity>
-                  {errors.barangay ? (
-                    <Text style={styles.errorText}>{errors.barangay}</Text>
-                  ) : (
+                  {renderFieldError('barangay')}
+                  {!errors.barangay && (
                     <Text style={styles.fieldHelperText}>
                       Official registered barangay in Opol for dispatch locality assignment.
                     </Text>
@@ -657,6 +767,7 @@ export default function PersonalInfoScreen() {
                     placeholderTextColor="#94A3B8"
                     style={getInputStyle('homeAddress')}
                   />
+                  {renderFieldError('homeAddress')}
                   <Text style={styles.fieldHelperText}>
                     Specific zone, purok, or street address saved to your profile.
                   </Text>
@@ -1136,14 +1247,36 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: '#EF4444',
     backgroundColor: '#FEF2F2',
-    borderWidth: 1.5,
+    borderWidth: 2,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1.2,
+    borderColor: '#FCA5A5',
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginTop: 6,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 1,
   },
   errorText: {
-    color: '#EF4444',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 6,
-    marginLeft: 4,
+    color: '#B91C1C',
+    fontSize: 12.5,
+    fontWeight: '700',
+    flex: 1,
+    lineHeight: 16,
   },
   fieldHelperText: {
     color: '#94A3B8',
@@ -1189,6 +1322,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  genderRowError: {
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    padding: 3,
+    backgroundColor: '#FEF2F2',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
   genderBtn: {
     flex: 1,
     height: 50,
@@ -1200,6 +1345,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  genderBtnError: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FFF5F5',
   },
   genderBtnSelected: {
     backgroundColor: '#1E88E5',
@@ -1283,7 +1432,12 @@ const styles = StyleSheet.create({
   dropdownTriggerError: {
     borderColor: '#EF4444',
     backgroundColor: '#FEF2F2',
-    borderWidth: 1.5,
+    borderWidth: 2,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
   dropdownTriggerLeft: {
     flexDirection: 'row',
