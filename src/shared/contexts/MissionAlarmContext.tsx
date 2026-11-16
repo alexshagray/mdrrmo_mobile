@@ -84,10 +84,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
               if (prev && (prev.dispatch_id === latest.id || prev.dispatch?.id === latest.id)) {
                 return prev;
               }
+              const inc = latest.incident;
+              const typeName = inc?.incident_type?.name || inc?.incidentType?.name || 'Emergency Incident';
+              const rawBarangay = inc?.barangay || inc?.resident?.resident_profile?.barangay?.barangay_name || 'Opol';
+              const cleanBarangay = String(rawBarangay).replace(/^barangay\s+/i, '');
+              const cleanLocation = inc?.place_of_incident || inc?.incident_address || `Barangay ${cleanBarangay}, Opol`;
+
               return {
                 dispatch_id: latest.id,
                 dispatch: latest,
-                type: 'new_mission',
+                type: 'dispatch_assigned',
+                event_type: 'dispatch_assigned',
+                title: 'Emergency Dispatch Assigned',
+                message: `You have been assigned to respond to a ${typeName} in Barangay ${cleanBarangay}, Opol.`,
+                incident_type: typeName,
+                barangay: cleanBarangay,
+                location: cleanLocation,
               };
             });
             setMissionRefreshTrigger(prev => prev + 1);
@@ -161,10 +173,10 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     // Cold-start notification handling when opened by tapping an emergency notification
     notificationService.checkInitialNotification((response: any) => {
       const data = response?.notification?.request?.content?.data;
-      if ((data?.type === 'dispatch_assigned' || data?.type === 'new_mission') && data?.dispatch_id) {
+      if ((data?.type === 'dispatch_assigned' || data?.type === 'dispatch_reassigned' || data?.type === 'new_mission' || data?.event_type === 'dispatch_assigned') && data?.dispatch_id) {
         setIncomingMission(data);
         setMissionRefreshTrigger(prev => prev + 1);
-        router.navigate('/(responder)');
+        router.navigate('/(responder)/dispatch');
       }
     });
 
@@ -176,12 +188,38 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   // Handle Foreground Notifications and User Taps
   useEffect(() => {
     const handleNotificationPayload = (data: any, isTap: boolean = false) => {
-      if ((data?.type === 'dispatch_assigned' || data?.type === 'new_mission') && data?.dispatch_id) {
+      if ((data?.type === 'dispatch_assigned' || data?.type === 'dispatch_reassigned' || data?.type === 'new_mission' || data?.event_type === 'dispatch_assigned' || data?.event_type === 'dispatch_reassigned') && data?.dispatch_id) {
         setIncomingMission(data);
         setMissionRefreshTrigger(prev => prev + 1);
         if (isTap) {
-          router.navigate('/(responder)');
+          router.navigate('/(responder)/dispatch');
         }
+      } else if (data?.type === 'dispatch_cancelled' || data?.event_type === 'dispatch_cancelled') {
+        clearMission();
+        Toast.show({
+          type: 'info',
+          text1: data?.title || 'Incident Cancelled',
+          text2: data?.message || 'The emergency incident assigned to you has been cancelled.',
+          visibilityTime: 6000,
+        });
+        setMissionRefreshTrigger(prev => prev + 1);
+      } else if (data?.type === 'incident_updated' || data?.event_type === 'incident_updated') {
+        Toast.show({
+          type: 'info',
+          text1: data?.title || 'Incident Information Updated',
+          text2: data?.message || 'New information is available for your assigned incident.',
+          visibilityTime: 6000,
+        });
+        setMissionRefreshTrigger(prev => prev + 1);
+      } else if (data?.type === 'dispatch_accepted' || data?.event_type === 'dispatch_accepted') {
+        clearMission();
+        Toast.show({
+          type: 'success',
+          text1: data?.title || 'Dispatch Accepted',
+          text2: data?.message || 'Your emergency dispatch has been successfully accepted.',
+          visibilityTime: 5000,
+        });
+        setMissionRefreshTrigger(prev => prev + 1);
       } else if (data?.type === 'verified_incident_available') {
         handleVerifiedIncidentNotification(data);
         if (isTap) {
@@ -236,10 +274,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
       if (isForUser && dispatchId) {
         if (!dismissedMissionIds.current.has(dispatchId)) {
+          const inc = d?.incident;
+          const typeName = e.incident_type || inc?.incident_type?.name || inc?.incidentType?.name || 'Emergency Incident';
+          const rawBarangay = e.barangay || inc?.barangay || inc?.resident?.resident_profile?.barangay?.barangay_name || 'Opol';
+          const cleanBarangay = String(rawBarangay).replace(/^barangay\s+/i, '');
+          const cleanLocation = e.location || inc?.clean_place_of_incident || inc?.place_of_incident || inc?.incident_address || `Barangay ${cleanBarangay}, Opol`;
+
           setIncomingMission({
             dispatch_id: dispatchId,
             dispatch: d,
-            type: 'new_mission',
+            type: e.event_type || e.type || 'dispatch_assigned',
+            event_type: e.event_type || e.type || 'dispatch_assigned',
+            title: e.title || 'Emergency Dispatch Assigned',
+            message: e.message || `You have been assigned to respond to a ${typeName} in Barangay ${cleanBarangay}, Opol.`,
+            incident_type: typeName,
+            barangay: cleanBarangay,
+            location: cleanLocation,
           });
         }
         setMissionRefreshTrigger(prev => prev + 1);
@@ -248,6 +298,37 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
     const handleStatusEvent = (e: any) => {
       console.log('Realtime dispatch status updated:', e);
+      const d = e.dispatch || e;
+      const status = d?.dispatch_status || e.status;
+      const dispatchId = d?.id || e.dispatch_id;
+
+      if (status === 'cancelled' || e.event_type === 'dispatch_cancelled') {
+        // If current alarm is active for this dispatch, dismiss immediately
+        setIncomingMission((curr: any) => {
+          if (curr && (curr.dispatch_id === dispatchId || curr.dispatch?.id === dispatchId)) {
+            Vibration.cancel();
+            return null;
+          }
+          return curr;
+        });
+
+        Toast.show({
+          type: 'info',
+          text1: e.title || 'Incident Cancelled',
+          text2: e.message || 'The incident assigned to you has been cancelled.',
+          visibilityTime: 6000,
+        });
+      } else if (status === 'accepted' || e.event_type === 'dispatch_accepted') {
+        // Mission accepted - clear alarm modal
+        setIncomingMission((curr: any) => {
+          if (curr && (curr.dispatch_id === dispatchId || curr.dispatch?.id === dispatchId)) {
+            Vibration.cancel();
+            return null;
+          }
+          return curr;
+        });
+      }
+
       setMissionRefreshTrigger(prev => prev + 1);
     };
 
@@ -387,12 +468,10 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     setIncomingMission(null);
   };
 
-  // Alarm should continue ringing even when user backgrounds the app (goes to Facebook, etc.)
-  // We removed the pause logic here so responders don't miss missions while outside the app.
+  // Alarm should continue ringing even when user backgrounds the app
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if ((nextAppState === 'background' || nextAppState === 'inactive') && (sound || incomingMission)) {
-        // Alarm sound or alert modal is currently active
         console.log('App in background - Mission alarm is still active!');
       }
     };
@@ -408,15 +487,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
   const dispatchInfo = incomingMission?.dispatch;
   const inc = dispatchInfo?.incident;
+  const rawBarangay = incomingMission?.barangay || inc?.barangay || inc?.resident?.resident_profile?.barangay?.barangay_name || 'Opol';
+  const cleanBarangay = String(rawBarangay).replace(/^barangay\s+/i, '');
   const incidentLocation =
+    incomingMission?.location ||
+    inc?.clean_place_of_incident ||
     inc?.place_of_incident ||
     inc?.incident_address ||
     (inc?.location_code ? `Marker ${inc.location_code}` : null) ||
-    inc?.location ||
-    inc?.barangay ||
-    inc?.resident?.resident_profile?.barangay?.barangay_name ||
-    'Emergency Location';
-  const incidentType = inc?.incident_type?.name || 'Emergency Dispatch';
+    `Barangay ${cleanBarangay}, Opol`;
+  const incidentType = incomingMission?.incident_type || inc?.incident_type?.name || inc?.incidentType?.name || 'Emergency Incident';
+
+  // Synchronized Event-Specific Notification Title & Message from Backend
+  const displayTitle = incomingMission?.title || 'Emergency Dispatch Assigned';
+  const displaySubtitle =
+    incomingMission?.message ||
+    `You have been assigned to respond to a ${incidentType} in Barangay ${cleanBarangay}, Opol.`;
 
   return (
     <MissionAlarmContext.Provider
@@ -440,8 +526,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
             <View style={styles.iconContainer}>
               <AlertTriangle size={48} color="#EF4444" />
             </View>
-            <Text style={styles.title}>NEW MISSION ASSIGNED</Text>
-            <Text style={styles.subtitle}>You have been assigned to a new emergency dispatch.</Text>
+            <Text style={styles.title}>{displayTitle}</Text>
+            <Text style={styles.subtitle}>{displaySubtitle}</Text>
 
             <View style={styles.infoCard}>
               <View style={styles.infoRow}>
@@ -512,7 +598,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: '#0F172A',
     marginBottom: 8,

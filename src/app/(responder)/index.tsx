@@ -7,7 +7,9 @@ import { ShieldCheck, Radio, CheckCircle2, Bell, MapPin, Clock, X, AlertTriangle
 import { DispatchSummaryCard } from '@/responder/components/cards/DispatchSummaryCard';
 import { CrewCard } from '@/responder/components/cards/CrewCard';
 import { DispatchCard } from '@/responder/components/cards/DispatchCard';
+import { ResponderNotificationsModal } from '@/responder/components/modals';
 import { getActiveDispatches, getAvailableIncidents } from '@/shared/api/dispatches';
+import { getResponderNotificationsApi } from '@/shared/api/responderNotifications';
 import { getCrewMembers } from '@/shared/api/crew';
 import { useAuth } from '@/shared/auth/authContext';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
@@ -72,8 +74,20 @@ export default function DashboardScreen() {
   const [selectedVerifiedIncident, setSelectedVerifiedIncident] = useState<any | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [crewData, setCrewData] = useState<any>(null);
+  const [isNotificationsModalVisible, setIsNotificationsModalVisible] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+
+  const fetchNotificationsCount = async () => {
+    try {
+      const res = await getResponderNotificationsApi();
+      if (res && typeof res.unread_count === 'number') {
+        setUnreadNotificationsCount(res.unread_count);
+      }
+    } catch (_) {}
+  };
 
   const fetchDispatches = async () => {
+    fetchNotificationsCount();
     try {
       const res = await getActiveDispatches();
       if (res?.today_stats) {
@@ -211,6 +225,18 @@ export default function DashboardScreen() {
           className="bg-transparent"
           titleClassName="text-white font-black"
           subtitleClassName="text-blue-100 font-bold"
+          rightElement={
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setIsNotificationsModalVisible(true)}
+              className="w-10 h-10 rounded-full bg-white/20 border border-white/30 items-center justify-center relative shadow-sm"
+            >
+              <Bell size={20} color="#FFFFFF" />
+              {unreadNotificationsCount > 0 && (
+                <View className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 border border-white" />
+              )}
+            </TouchableOpacity>
+          }
         />
 
         <ScrollView
@@ -503,6 +529,12 @@ export default function DashboardScreen() {
           </View>
         )}
       </Modal>
+
+      <ResponderNotificationsModal
+        visible={isNotificationsModalVisible}
+        onClose={() => setIsNotificationsModalVisible(false)}
+        onUnreadCountChange={setUnreadNotificationsCount}
+      />
     </View>
   );
 }

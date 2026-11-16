@@ -91,7 +91,7 @@ class NotificationService {
           device_name: Device.modelName || Device.deviceName || 'Android Device',
         });
       }
-    } catch (e: any) {
+    } catch (e) {
       const msg = e?.message || String(e);
       if (msg.includes('FirebaseApp is not initialized') || msg.includes('googleServicesFile')) {
         console.log('[NotificationService] google-services.json not configured in dev client yet.');
@@ -115,7 +115,7 @@ class NotificationService {
         expoPushToken = expoTokenResult.data;
         await updatePushTokenApi(expoPushToken);
       }
-    } catch (e: any) {
+    } catch (e) {
       // Quiet fallback
     }
 
