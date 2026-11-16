@@ -25,6 +25,16 @@ export const updatePushTokenApi = async (token) => {
   return response.data;
 };
 
+export const registerDeviceTokenApi = async (tokenData) => {
+  const response = await apiClient.post('/responder/device-token', tokenData);
+  return response.data;
+};
+
+export const deactivateDeviceTokenApi = async (token) => {
+  const response = await apiClient.delete('/responder/device-token', { data: { token } });
+  return response.data;
+};
+
 export const forgotPasswordApi = async (email) => {
   const response = await apiClient.post('/auth/forgot-password', { email });
   return response.data;

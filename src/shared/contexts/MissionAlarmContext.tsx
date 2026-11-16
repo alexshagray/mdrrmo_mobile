@@ -142,81 +142,65 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     setVerifiedIncidentsTrigger(prev => prev + 1);
   };
 
-  // Register for Push Notifications
+  // Register for Native FCM & Push Notifications
   useEffect(() => {
     if (!isAuthenticated) return;
 
     let isMounted = true;
 
-    async function registerForPushNotificationsAsync() {
-      let token;
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-      if (finalStatus !== 'granted') {
-        console.log('Failed to get push token for push notification!');
-        return;
-      }
-      
+    async function registerTokens() {
       try {
-        const projectId =
-          process.env.EXPO_PUBLIC_PROJECT_ID ||
-          Constants?.expoConfig?.extra?.eas?.projectId ||
-          Constants?.easConfig?.projectId;
-
-        const tokenResponse = await Notifications.getExpoPushTokenAsync(
-          projectId ? { projectId } : undefined
-        );
-        token = tokenResponse.data;
-        if (isMounted) {
-          await updatePushTokenApi(token);
-        }
-      } catch (e: any) {
-        const msg = e?.message || String(e);
-        if (msg.includes('FirebaseApp is not initialized') || msg.includes('googleServicesFile')) {
-          console.log('[PushNotifications] Dev client running without google-services.json; push notifications disabled for this test session.');
-        } else {
-          console.log('Error getting push token:', e);
-        }
+        await notificationService.registerForPushNotificationsAsync();
+      } catch (err) {
+        console.warn('[MissionAlarmContext] Token registration error:', err);
       }
     }
 
-    registerForPushNotificationsAsync();
+    registerTokens();
+
+    // Cold-start notification handling when opened by tapping an emergency notification
+    notificationService.checkInitialNotification((response: any) => {
+      const data = response?.notification?.request?.content?.data;
+      if ((data?.type === 'dispatch_assigned' || data?.type === 'new_mission') && data?.dispatch_id) {
+        setIncomingMission(data);
+        setMissionRefreshTrigger(prev => prev + 1);
+        router.navigate('/(responder)');
+      }
+    });
 
     return () => {
       isMounted = false;
     };
   }, [isAuthenticated]);
 
-  // Handle Foreground Notifications
+  // Handle Foreground Notifications and User Taps
   useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener(notification => {
-      const data = notification.request.content.data;
-      if (data?.type === 'new_mission' && data?.dispatch_id) {
+    const handleNotificationPayload = (data: any, isTap: boolean = false) => {
+      if ((data?.type === 'dispatch_assigned' || data?.type === 'new_mission') && data?.dispatch_id) {
         setIncomingMission(data);
         setMissionRefreshTrigger(prev => prev + 1);
+        if (isTap) {
+          router.navigate('/(responder)');
+        }
       } else if (data?.type === 'verified_incident_available') {
         handleVerifiedIncidentNotification(data);
+        if (isTap) {
+          router.navigate('/(responder)');
+        }
       }
-    });
+    };
 
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      if (data?.type === 'new_mission' && data?.dispatch_id) {
-        setIncomingMission(data);
-        setMissionRefreshTrigger(prev => prev + 1);
-      } else if (data?.type === 'verified_incident_available') {
-        handleVerifiedIncidentNotification(data);
-        router.navigate('/(responder)');
+    const cleanup = notificationService.setupNotificationListeners(
+      (notification: any) => {
+        handleNotificationPayload(notification.request.content.data, false);
+      },
+      (response: any) => {
+        handleNotificationPayload(response.notification.request.content.data, true);
       }
-    });
+    );
 
     return () => {
-      subscription.remove();
-      responseSubscription.remove();
+      if (typeof cleanup === 'function') cleanup();
     };
   }, []);
 

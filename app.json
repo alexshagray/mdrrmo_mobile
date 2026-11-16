@@ -19,13 +19,18 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.wedemboysz13.mdrrmo_mobile",
+      "googleServicesFile": "./google-services.json",
       "usesCleartextTraffic": true,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "RECEIVE_BOOT_COMPLETED"
       ],
       "config": {
         "googleMaps": {
@@ -57,6 +62,8 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/images/icon.png",
+          "color": "#DC2626",
           "sounds": [
             "./assets/sounds/alarm.mp3"
           ]
