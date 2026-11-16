@@ -8,6 +8,7 @@ import '../../global.css';
 
 import { MissionAlarmProvider } from '@/shared/contexts/MissionAlarmContext';
 import { ResidentAlertProvider } from '@/shared/contexts/ResidentAlertContext';
+import { CustomAlertProvider } from '@/shared/components/CustomAlert';
 import Toast from 'react-native-toast-message';
 
 function RootLayoutNav() {
@@ -47,18 +48,20 @@ function RootLayoutNav() {
   return (
     <MissionAlarmProvider>
       <ResidentAlertProvider>
-        {/* Real-time Connection & Sync Banner */}
-        <ConnectionBanner />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" />
-          <Stack.Screen name="register" />
-          <Stack.Screen name="forgot-password" />
-          <Stack.Screen name="reset-password" />
-          <Stack.Screen name="force-change-password" />
-          <Stack.Screen name="(responder)" />
-          <Stack.Screen name="(resident)" />
-        </Stack>
+        <CustomAlertProvider>
+          {/* Real-time Connection & Sync Banner */}
+          <ConnectionBanner />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="register" />
+            <Stack.Screen name="forgot-password" />
+            <Stack.Screen name="reset-password" />
+            <Stack.Screen name="force-change-password" />
+            <Stack.Screen name="(responder)" />
+            <Stack.Screen name="(resident)" />
+          </Stack>
+        </CustomAlertProvider>
       </ResidentAlertProvider>
       <Toast />
     </MissionAlarmProvider>

@@ -22,3 +22,4 @@ export * from './CallConfirmationModal';
 export * from './CancelConfirmationModal';
 export * from './CancelSuccessModal';
 export * from './PhotoSelectModal';
+export * from './CustomAlert';
