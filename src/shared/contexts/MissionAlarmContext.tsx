@@ -56,6 +56,32 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   const notifiedIncidentIds = useRef<Set<number>>(new Set());
   // Dismissed tracker: prevent re-alerting for the same mission once acknowledged
   const dismissedMissionIds = useRef<Set<number>>(new Set());
+  // Active sound and alarm timeout refs
+  const soundRef = useRef<AudioPlayer | null>(null);
+  const alarmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopSirenAndVibration = () => {
+    try {
+      Vibration.cancel();
+    } catch (e) {}
+
+    if (alarmTimeoutRef.current) {
+      clearTimeout(alarmTimeoutRef.current);
+      alarmTimeoutRef.current = null;
+    }
+
+    if (soundRef.current) {
+      try {
+        soundRef.current.pause();
+        if (typeof soundRef.current.remove === 'function') {
+          soundRef.current.remove();
+        }
+      } catch (e) {}
+      soundRef.current = null;
+    }
+
+    setSound(null);
+  };
 
   // Setup Android notification channels on mount (mission_alarm channel plays alarm.mp3)
   useEffect(() => {
@@ -233,6 +259,15 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         handleNotificationPayload(notification.request.content.data, false);
       },
       (response: any) => {
+        const actionIdentifier = response?.actionIdentifier;
+        if (actionIdentifier === 'DISMISS_ALARM') {
+          // Responder tapped "🔕 Silence Alarm" directly on the lock screen / notification banner
+          stopSirenAndVibration();
+          return;
+        }
+
+        // Tapping the notification itself or "🚨 View Mission"
+        stopSirenAndVibration();
         handleNotificationPayload(response.notification.request.content.data, true);
       }
     );
@@ -389,6 +424,9 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     async function playAlarm() {
       if (incomingMission) {
         try {
+          // Stop any existing vibration and audio before starting
+          stopSirenAndVibration();
+
           // Vibrate phone continuously in emergency pulse pattern
           Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
 
@@ -400,7 +438,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
           if (!isCancelled) {
             // Small delay to let audio session settle before playing
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
             if (!isCancelled) {
               const player = createAudioPlayer(
@@ -410,25 +448,30 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
               player.volume = 1.0;
               player.play();
               activePlayer = player;
+              soundRef.current = player;
               setSound(player);
+
+              // SAFETY TIMEOUT (25 seconds):
+              // Automatically stops continuous vibration & siren so the phone doesn't ring/vibrate forever
+              // when the responder is outside the app or phone screen is locked/off!
+              alarmTimeoutRef.current = setTimeout(() => {
+                console.log('[MissionAlarmContext] Auto-silencing alarm after 25s timeout limit.');
+                try {
+                  Vibration.cancel();
+                } catch (e) {}
+                if (soundRef.current) {
+                  try {
+                    soundRef.current.pause();
+                  } catch (e) {}
+                }
+              }, 25000);
             }
           }
         } catch (e) {
           console.log('Error playing alarm:', e);
         }
       } else {
-        Vibration.cancel();
-        if (sound) {
-          try {
-            sound.pause();
-            if (typeof sound.remove === 'function') {
-              sound.remove();
-            }
-          } catch (e) {
-            console.log('Error stopping sound:', e);
-          }
-          setSound(null);
-        }
+        stopSirenAndVibration();
       }
     }
 
@@ -436,29 +479,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
     return () => {
       isCancelled = true;
-      Vibration.cancel();
-      if (activePlayer) {
-        try {
-          activePlayer.pause();
-          if (typeof activePlayer.remove === 'function') {
-            activePlayer.remove();
-          }
-        } catch (e) {}
-      }
+      stopSirenAndVibration();
     };
   }, [incomingMission]);
 
   const clearMission = () => {
-    Vibration.cancel();
-    if (sound) {
-      try {
-        sound.pause();
-        if (typeof sound.remove === 'function') {
-          sound.remove();
-        }
-      } catch (e) {}
-      setSound(null);
-    }
+    stopSirenAndVibration();
     if (incomingMission?.dispatch_id) {
       dismissedMissionIds.current.add(incomingMission.dispatch_id);
     }

@@ -44,6 +44,30 @@ class NotificationService {
     } catch (e) {
       console.warn('[NotificationService] Failed to set emergency_dispatch channel:', e);
     }
+
+    // Register interactive notification category with Silence and View Mission actions
+    try {
+      const emergencyActions = [
+        {
+          identifier: 'DISMISS_ALARM',
+          buttonTitle: '🔕 Silence Alarm',
+          options: {
+            opensAppToForeground: false,
+          },
+        },
+        {
+          identifier: 'OPEN_DISPATCH',
+          buttonTitle: '🚨 View Mission',
+          options: {
+            opensAppToForeground: true,
+          },
+        },
+      ];
+      await Notifications.setNotificationCategoryAsync('emergency_dispatch', emergencyActions);
+      await Notifications.setNotificationCategoryAsync('mission_alarm_v2', emergencyActions);
+    } catch (e) {
+      console.warn('[NotificationService] Failed to set emergency_dispatch category:', e);
+    }
   }
 
   /**
