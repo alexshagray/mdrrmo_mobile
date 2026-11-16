@@ -7,7 +7,7 @@ const ID_MAPPINGS_KEY = '@mdrrmo_sync_id_mappings';
 export interface SyncOperation {
   id: string; // Internal queue ID
   operationId: string; // Unique idempotency UUID
-  action: 'ACCEPT_DISPATCH' | 'UPDATE_STATUS' | 'CREATE_PATIENT' | 'UPDATE_PCR' | 'SUBMIT_PCR' | 'UPLOAD_PHOTO' | 'UNFOUNDED' | 'HTTP';
+  action: 'ACKNOWLEDGE_DISPATCH' | 'ACCEPT_DISPATCH' | 'UPDATE_STATUS' | 'CREATE_PATIENT' | 'UPDATE_PCR' | 'SUBMIT_PCR' | 'UPLOAD_PHOTO' | 'UNFOUNDED' | 'HTTP';
   dispatchId?: number | string;
   url?: string;
   method?: string;

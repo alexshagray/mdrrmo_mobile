@@ -8,6 +8,9 @@ export interface CachedMission {
   id: number | string;
   incident_id: number | string;
   dispatch_status: string;
+  acknowledgment_status?: string;
+  acknowledged_at?: string | null;
+  acknowledged_by?: number | null;
   driver_id?: number | null;
   emt_id?: number | null;
   ambulance?: any;

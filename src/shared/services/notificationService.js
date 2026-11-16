@@ -45,19 +45,12 @@ class NotificationService {
       console.warn('[NotificationService] Failed to set emergency_dispatch channel:', e);
     }
 
-    // Register interactive notification category with Silence and View Mission actions
+    // Register interactive notification category with View Mission action
     try {
       const emergencyActions = [
         {
-          identifier: 'DISMISS_ALARM',
-          buttonTitle: '🔕 Silence Alarm',
-          options: {
-            opensAppToForeground: false,
-          },
-        },
-        {
           identifier: 'OPEN_DISPATCH',
-          buttonTitle: '🚨 View Mission',
+          buttonTitle: '🚨 View Mission Details',
           options: {
             opensAppToForeground: true,
           },

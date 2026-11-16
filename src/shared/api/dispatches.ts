@@ -86,6 +86,62 @@ export const acceptDispatch = async (dispatchId: number | string) => {
   }
 };
 
+export const acknowledgeDispatch = async (dispatchId: number | string) => {
+  try {
+    const response = await apiClient.post(`/responder/dispatches/${dispatchId}/acknowledge`);
+    if (response?.data?.data) {
+      const cached = await offlineMissionService.getActiveMission();
+      if (cached && String(cached.id) === String(dispatchId)) {
+        await offlineMissionService.saveActiveMission({
+          ...cached,
+          acknowledgment_status: 'acknowledged',
+          acknowledged_at: response.data.data.acknowledged_at,
+        });
+      }
+    }
+    return response.data;
+  } catch (err: any) {
+    const isNetwork = err.isNetworkError || !err.response || err.code === 'ERR_NETWORK';
+    if (isNetwork) {
+      console.log(`[acknowledgeDispatch] Offline mode: queued acknowledgment for mission #${dispatchId}`);
+      await offlineSyncService.enqueue({
+        action: 'ACKNOWLEDGE_DISPATCH',
+        dispatchId: Number(dispatchId),
+        payload: {},
+      });
+      return {
+        success: true,
+        message: 'Dispatch acknowledged (offline queued)',
+        data: {
+          dispatch_id: dispatchId,
+          acknowledgment_status: 'acknowledged',
+        },
+        is_offline_queued: true,
+      };
+    }
+    throw err;
+  }
+};
+
+export const getDispatchById = async (dispatchId: number | string) => {
+  try {
+    const response = await apiClient.get(`/responder/dispatches/${dispatchId}`);
+    if (response?.data?.data) {
+      await offlineMissionService.saveActiveMission(response.data.data);
+    }
+    return response.data;
+  } catch (err: any) {
+    const isNetwork = err.isNetworkError || !err.response || err.code === 'ERR_NETWORK';
+    if (isNetwork) {
+      const cached = await offlineMissionService.getActiveMission();
+      if (cached && String(cached.id) === String(dispatchId)) {
+        return { data: cached, is_offline: true };
+      }
+    }
+    throw err;
+  }
+};
+
 /**
  * @param {string|number} dispatchId
  * @param {string} status

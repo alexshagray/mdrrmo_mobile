@@ -157,8 +157,9 @@ export default function DispatchScreen() {
     }
   }, [dispatch, isLoading]);
 
-  const { missionRefreshTrigger, clearMission } = useMissionAlarm();
+  const { missionRefreshTrigger, clearMission, acknowledgeMission, stopAlarm } = useMissionAlarm();
   const hasLoadedRef = useRef(false);
+  const autoAcknowledgedIdsRef = useRef<Set<number>>(new Set());
 
   const fetchDispatch = useCallback(async (isSilent = false) => {
     if (!hasLoadedRef.current && !isSilent) {
@@ -167,7 +168,39 @@ export default function DispatchScreen() {
     try {
       const data = await getActiveDispatches();
       if (data?.data && data.data.length > 0) {
-        setDispatch(data.data[0]);
+        const activeItem = data.data[0];
+        setDispatch(activeItem);
+
+        // Auto-acknowledgment handshake (Requirements 2, 3, & 6):
+        // Automatically acknowledge the incident once the Mission Details screen has successfully loaded.
+        // Stop the looping alarm ONLY after the backend confirms that the assigned incident has been acknowledged.
+        const activeId = Number(activeItem.id);
+        if (
+          activeId &&
+          activeItem.dispatch_status === 'assigned' &&
+          activeItem.acknowledgment_status !== 'acknowledged' &&
+          !autoAcknowledgedIdsRef.current.has(activeId)
+        ) {
+          autoAcknowledgedIdsRef.current.add(activeId);
+          console.log(`[DispatchScreen] Mission Details loaded. Acknowledging dispatch #${activeId} with backend...`);
+          acknowledgeMission(activeId).then((success) => {
+            if (success) {
+              console.log(`[DispatchScreen] Dispatch #${activeId} successfully acknowledged. Alarm stopped.`);
+              setDispatch((prev: any) =>
+                prev && Number(prev.id) === activeId
+                  ? {
+                      ...prev,
+                      acknowledgment_status: 'acknowledged',
+                      acknowledged_at: new Date().toISOString(),
+                    }
+                  : prev
+              );
+            } else {
+              // If backend acknowledgment failed, permit retry and keep alarm active
+              autoAcknowledgedIdsRef.current.delete(activeId);
+            }
+          });
+        }
       } else if (!data?.is_offline) {
         setDispatch(null);
       }
@@ -176,12 +209,36 @@ export default function DispatchScreen() {
       const cached = await offlineMissionService.getActiveMission();
       if (cached) {
         setDispatch(cached);
+        const cachedId = Number(cached.id);
+        if (
+          cachedId &&
+          cached.dispatch_status === 'assigned' &&
+          cached.acknowledgment_status !== 'acknowledged' &&
+          !autoAcknowledgedIdsRef.current.has(cachedId)
+        ) {
+          autoAcknowledgedIdsRef.current.add(cachedId);
+          acknowledgeMission(cachedId).then((success) => {
+            if (success) {
+              setDispatch((prev: any) =>
+                prev && Number(prev.id) === cachedId
+                  ? {
+                      ...prev,
+                      acknowledgment_status: 'acknowledged',
+                      acknowledged_at: new Date().toISOString(),
+                    }
+                  : prev
+              );
+            } else {
+              autoAcknowledgedIdsRef.current.delete(cachedId);
+            }
+          });
+        }
       }
     } finally {
       hasLoadedRef.current = true;
       setIsLoading(false);
     }
-  }, []);
+  }, [acknowledgeMission]);
 
   useFocusEffect(
     useCallback(() => {
@@ -346,6 +403,9 @@ export default function DispatchScreen() {
     if (!dispatch || isDeclining) return;
     setIsDeclining(true);
     try {
+      if (typeof stopAlarm === 'function') {
+        stopAlarm();
+      }
       await updateDispatchStatus(dispatch.id, 'cancelled');
       if (typeof clearMission === 'function') {
         clearMission();
@@ -378,6 +438,9 @@ export default function DispatchScreen() {
   const handleAccept = async () => {
     if (!dispatch || isAccepting) return;
     setIsAccepting(true);
+    if (typeof stopAlarm === 'function') {
+      stopAlarm();
+    }
 
     const previousStatus = dispatch.dispatch_status;
     const acceptedTimestamp = new Date().toISOString();
