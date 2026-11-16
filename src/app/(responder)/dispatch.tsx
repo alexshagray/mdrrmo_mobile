@@ -11,6 +11,7 @@ import * as Location from 'expo-location';
 import { StatusChip } from '@/shared/components';
 import { ArrowLeft, Navigation, AlertTriangle, MapPin, Clock, User, Phone, PhoneCall, Ambulance, FileText, Crosshair, CheckCircle, Settings } from 'lucide-react-native';
 import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
+import { SmoothResponderMarker } from '@/shared/components/Map/SmoothResponderMarker';
 
 import { getActiveDispatches, acceptDispatch, updateDispatchStatus } from '@/shared/api/dispatches';
 import { useGpsStatusTransition, useLiveDispatchTracking, useRealtime } from '@/shared/hooks';
@@ -617,15 +618,15 @@ export default function DispatchScreen() {
             </MapboxGL.PointAnnotation>
           ) : null}
 
-          {/* Clean Directional Responder Arrow (Arrow Only, No Circular Container) */}
+          {/* Clean Directional Responder Arrow with Smooth Position & Heading Interpolation */}
           {userLocation ? (
-            <MapboxGL.PointAnnotation 
-              id="responderPuck" 
-              coordinate={[userLocation.longitude, userLocation.latitude]}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
-              <ResponderNavigationArrow heading={userLocation.heading || 0} size={36} />
-            </MapboxGL.PointAnnotation>
+            <SmoothResponderMarker
+              targetLocation={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
+              targetHeading={userLocation.heading || 0}
+              speed={userLocation.speed || 0}
+              accuracy={userLocation.accuracy}
+              size={36}
+            />
           ) : null}
 
         </MapView>

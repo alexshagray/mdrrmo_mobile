@@ -42,6 +42,9 @@ import {
   getDistance,
   calculateBearing,
   smoothAngle,
+  getShortestAngleDiff,
+  getLookaheadRouteBearing,
+  isGpsJumpUnrealistic,
   trimRouteProgress,
   LatLng,
 } from '@/shared/utils/navigationMath';
@@ -109,6 +112,7 @@ export default function NavigationScreen() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRouteRef = useRef<LatLng[]>([]);
   const latestSnappedLocationRef = useRef<LatLng | null>(null);
+  const currentSpeedRef = useRef<number>(0);
 
   useEffect(() => {
     isFpvModeRef.current = isFpvMode;
@@ -368,11 +372,12 @@ export default function NavigationScreen() {
             const now = Date.now();
             const currentAccuracy = loc.coords.accuracy ?? 15;
             const currentSpeed = loc.coords.speed ?? 0;
+            currentSpeedRef.current = currentSpeed;
 
             // 1. ACCURACY & OUTLIER FILTERING
             if (currentAccuracy > MAX_ACCURACY_THRESHOLD_METERS) {
               setGpsAccuracyWarning(Math.round(currentAccuracy));
-              // If accuracy is very poor and we have a previous location, treat as low-confidence
+              // If accuracy is poor (>40m) and we have a previous reliable position, ignore noisy jump
               if (lastRawLocationRef.current) {
                 return;
               }
@@ -388,23 +393,15 @@ export default function NavigationScreen() {
             // Teleport jump rejection (unrealistic speed spikes > 162 km/h)
             if (lastRawLocationRef.current && lastRawTimestampRef.current > 0) {
               const dtSeconds = Math.max((now - lastRawTimestampRef.current) / 1000, 0.2);
-              const distJump = getDistance(
-                lastRawLocationRef.current.latitude,
-                lastRawLocationRef.current.longitude,
-                currentRaw.latitude,
-                currentRaw.longitude
-              );
-              const speedJump = distJump / dtSeconds;
-
-              if (speedJump > MAX_REALISTIC_SPEED_MPS && distJump > 60) {
-                console.warn(`[Navigation] Rejected GPS coordinate jump of ${Math.round(distJump)}m (${Math.round(speedJump * 3.6)} km/h)`);
+              if (isGpsJumpUnrealistic(lastRawLocationRef.current, currentRaw, dtSeconds, MAX_REALISTIC_SPEED_MPS, 50)) {
+                console.warn(`[Navigation] Rejected unrealistic GPS coordinate jump (${Math.round(getDistance(lastRawLocationRef.current.latitude, lastRawLocationRef.current.longitude, currentRaw.latitude, currentRaw.longitude))}m)`);
                 return;
               }
             }
 
-            // 2. STABLE BEARING & ROTATION SMOOTHING
+            // 2. STABLE BEARING & ROTATION SMOOTHING WITH SPEED DEADBAND
             let targetHeading = lastReliableHeadingRef.current;
-            const isMoving = currentSpeed > 0.6; // ~2.1 km/h threshold for movement
+            const isMoving = currentSpeed > 0.6; // ~2.1 km/h threshold: prevents rotation flickering when stationary
             const hasGpsHeading =
               typeof loc.coords.heading === 'number' &&
               loc.coords.heading >= 0 &&
@@ -421,8 +418,8 @@ export default function NavigationScreen() {
                 currentRaw.longitude
               );
 
-              // Update bearing from vector if vehicle moved at least 2 meters
-              if (distMoved >= 2.0) {
+              // Update bearing from vector if vehicle moved at least 1.8 meters
+              if (distMoved >= 1.8) {
                 targetHeading = calculateBearing(
                   lastRawLocationRef.current.latitude,
                   lastRawLocationRef.current.longitude,
@@ -433,7 +430,7 @@ export default function NavigationScreen() {
               }
             }
 
-            // 3. DYNAMIC ROAD SNAPPING & PROGRESS TRIMMING
+            // 3. DYNAMIC ROAD SNAPPING, PROGRESS TRIMMING & ROUTE LOOKAHEAD
             const currentActiveRoute = activeRouteRef.current;
             let finalLocation = currentRaw;
 
@@ -446,10 +443,19 @@ export default function NavigationScreen() {
                 latestSnappedLocationRef.current = trimResult.displayLocation;
                 setDisplayedLocation(trimResult.displayLocation);
 
-                // Smoothly align vehicle heading with the road segment bearing if aligned within 40°
-                const angleDiffToRoad = Math.abs(((trimResult.segmentBearing - targetHeading + 540) % 360) - 180);
-                if (angleDiffToRoad < 40) {
-                  targetHeading = smoothAngle(targetHeading, trimResult.segmentBearing, 0.45);
+                // Compute anticipatory lookahead bearing along the road ahead (~22 meters)
+                // This enables the arrow to smoothly curve into turns ahead of time
+                const lookaheadBearing = getLookaheadRouteBearing(
+                  currentActiveRoute,
+                  trimResult.segmentIndex,
+                  trimResult.displayLocation,
+                  22
+                );
+
+                const angleDiffToRoad = Math.abs(getShortestAngleDiff(targetHeading, lookaheadBearing));
+                if (angleDiffToRoad < 50) {
+                  // Blend road curvature into arrow heading with a deadband of 1.5°
+                  targetHeading = smoothAngle(targetHeading, lookaheadBearing, 0.55, 1.5);
                   lastReliableHeadingRef.current = targetHeading;
                 }
 
@@ -511,8 +517,11 @@ export default function NavigationScreen() {
               }
             }
 
-            // Update smooth heading state
-            setHeading(targetHeading);
+            // Update smooth heading state with deadband to prevent flickering
+            const headingDelta = Math.abs(getShortestAngleDiff(heading, targetHeading));
+            if (headingDelta >= 1.5 || heading === 0) {
+              setHeading(targetHeading);
+            }
             lastRawLocationRef.current = currentRaw;
             lastRawTimestampRef.current = now;
 
@@ -674,6 +683,9 @@ export default function NavigationScreen() {
             <SmoothResponderMarker
               targetLocation={displayedLocation}
               targetHeading={heading}
+              speed={currentSpeedRef.current}
+              accuracy={gpsAccuracyWarning ?? undefined}
+              timestamp={lastRawTimestampRef.current}
               size={36}
             />
           )}

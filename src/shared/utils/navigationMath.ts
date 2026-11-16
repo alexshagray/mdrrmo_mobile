@@ -35,13 +35,82 @@ export const calculateBearing = (lat1: number, lon1: number, lat2: number, lon2:
 };
 
 /**
- * Smoothly interpolates an angle towards a target angle along the shortest circular path.
- * Avoids 0° <-> 360° boundary snap jitter.
+ * Calculates shortest signed angular difference from angle A to angle B in degrees [-180, +180].
+ * Correctly handles wrap-around transitions such as 350° to 10° (+20°) and 10° to 350° (-20°).
  */
-export const smoothAngle = (current: number, target: number, smoothingFactor: number = 0.28): number => {
-  let diff = (target - current + 180) % 360 - 180;
-  if (diff < -180) diff += 360;
+export const getShortestAngleDiff = (from: number, to: number): number => {
+  return ((to - from + 540) % 360) - 180;
+};
+
+/**
+ * Smoothly interpolates an angle towards a target angle along the shortest circular path.
+ * Avoids 0° <-> 360° boundary snap jitter and respects an optional deadband threshold.
+ */
+export const smoothAngle = (
+  current: number,
+  target: number,
+  smoothingFactor: number = 0.28,
+  deadbandDegrees: number = 0
+): number => {
+  const diff = getShortestAngleDiff(current, target);
+  if (Math.abs(diff) < deadbandDegrees) {
+    return current;
+  }
   return (current + diff * smoothingFactor + 360) % 360;
+};
+
+/**
+ * Determines whether a GPS coordinate jump is physically unrealistic (teleport artifact).
+ */
+export const isGpsJumpUnrealistic = (
+  prevPos: LatLng,
+  newPos: LatLng,
+  dtSeconds: number,
+  maxSpeedMps: number = 45, // ~162 km/h
+  minJumpMeters: number = 50
+): boolean => {
+  if (dtSeconds <= 0) return true;
+  const dist = getDistance(prevPos.latitude, prevPos.longitude, newPos.latitude, newPos.longitude);
+  const speed = dist / dtSeconds;
+  return dist > minJumpMeters && speed > maxSpeedMps;
+};
+
+/**
+ * Looks ahead along the active route by `lookaheadMeters` to compute an anticipatory road bearing.
+ * Enables gradual steering rotation when entering turns and curves, rather than abrupt snaps.
+ */
+export const getLookaheadRouteBearing = (
+  routeCoordinates: LatLng[],
+  currentSnappedIndex: number,
+  currentPosition: LatLng,
+  lookaheadMeters: number = 20
+): number => {
+  if (routeCoordinates.length < 2) return 0;
+
+  const startIdx = Math.max(0, Math.min(currentSnappedIndex, routeCoordinates.length - 2));
+  let accumulatedDist = 0;
+  let prevPoint = currentPosition;
+  let targetPoint: LatLng = routeCoordinates[startIdx + 1] || routeCoordinates[startIdx];
+
+  for (let i = startIdx + 1; i < routeCoordinates.length; i++) {
+    const pt = routeCoordinates[i];
+    const segDist = getDistance(prevPoint.latitude, prevPoint.longitude, pt.latitude, pt.longitude);
+    accumulatedDist += segDist;
+    prevPoint = pt;
+
+    if (accumulatedDist >= lookaheadMeters) {
+      targetPoint = pt;
+      break;
+    }
+    targetPoint = pt;
+  }
+
+  return calculateBearing(
+    currentPosition.latitude,
+    currentPosition.longitude,
+    targetPoint.latitude,
+    targetPoint.longitude
+  );
 };
 
 /**
