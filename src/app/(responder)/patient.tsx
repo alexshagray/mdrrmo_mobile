@@ -826,7 +826,7 @@ export default function PatientCareRecordScreen() {
               pcr?.responders,
               cachedDraft?.responders
             ),
-            place_of_incident: prev.place_of_incident?.trim() || cachedDraft?.place_of_incident?.trim() || defaultPlaceOfIncident || prev.place_of_incident,
+            place_of_incident: formatPlaceOfIncident(prev.place_of_incident?.trim() || cachedDraft?.place_of_incident?.trim() || defaultPlaceOfIncident || prev.place_of_incident, incBarangay),
             incident_address: resolvedIncidentAddress,
             address: resolvedIncidentAddress,
             chief_complaint: prev.chief_complaint?.trim() || cachedDraft?.chief_complaint?.trim() || defaultChiefComplaint || prev.chief_complaint,
@@ -1275,6 +1275,13 @@ export default function PatientCareRecordScreen() {
       // Auto-extract unique injury types from markers to keep the legacy `assessment` array populated
       const uniqueAssessments = Array.from(new Set(formData.assessment_markers.map(m => m.label).filter(Boolean)));
 
+      const incB = activeDispatch?.incident?.barangay || activeDispatch?.incident?.barangay_name;
+      const cleanPlace = formatPlaceOfIncident(formData.place_of_incident, incB);
+
+      if (cleanPlace && cleanPlace !== formData.place_of_incident) {
+        setFormData(prev => ({ ...prev, place_of_incident: cleanPlace }));
+      }
+
       const payload = {
         patient_id: formData.patient_id,
         gender: formData.gender,
@@ -1282,7 +1289,7 @@ export default function PatientCareRecordScreen() {
         pcr_id: formData.pcr_id || undefined,
         nature_of_call: formData.nature_of_call,
         chief_complaint: formData.chief_complaint,
-        place_of_incident: formData.place_of_incident,
+        place_of_incident: cleanPlace || formData.place_of_incident,
         civil_status: formData.civil_status,
         incident_address: formData.incident_address,
         age: formData.age,
@@ -1436,6 +1443,15 @@ export default function PatientCareRecordScreen() {
   };
 
   const handleNext = async () => {
+    if (step === 1 && formData.place_of_incident) {
+      const incB = activeDispatch?.incident?.barangay || activeDispatch?.incident?.barangay_name;
+      const cleanPlace = formatPlaceOfIncident(formData.place_of_incident, incB);
+      if (cleanPlace && cleanPlace !== formData.place_of_incident) {
+        setFormData(prev => ({ ...prev, place_of_incident: cleanPlace }));
+        formData.place_of_incident = cleanPlace;
+      }
+    }
+
     const newErrors = validateStep(step);
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -1454,6 +1470,15 @@ export default function PatientCareRecordScreen() {
   };
 
   const handleReturnToReview = async () => {
+    if (step === 1 && formData.place_of_incident) {
+      const incB = activeDispatch?.incident?.barangay || activeDispatch?.incident?.barangay_name;
+      const cleanPlace = formatPlaceOfIncident(formData.place_of_incident, incB);
+      if (cleanPlace && cleanPlace !== formData.place_of_incident) {
+        setFormData(prev => ({ ...prev, place_of_incident: cleanPlace }));
+        formData.place_of_incident = cleanPlace;
+      }
+    }
+
     const newErrors = validateStep(step);
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
