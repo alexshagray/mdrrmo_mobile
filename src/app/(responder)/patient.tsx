@@ -12,7 +12,7 @@ import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, 
 import { searchPatients, createPatient, identifyPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, deletePcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
-import { resolveAddressFromCoords } from '@/shared/utils/location';
+import { resolveAddressFromCoords, formatPlaceOfIncident } from '@/shared/utils/location';
 import { offlineMissionService } from '@/shared/services/offlineMissionService';
 import { offlineSyncService } from '@/shared/services/offlineSyncService';
 import { printPcrDocument, sharePcrPdf } from '@/shared/utils/pcrPrintService';
@@ -710,35 +710,56 @@ export default function PatientCareRecordScreen() {
         const existingPatient = pcr?.patient;
 
         // Auto-populate incident location from place of incident, report coordinates, or existing PCR
-        let defaultPlaceOfIncident = pcr?.place_of_incident
+        const rawPlaceOfIncident = pcr?.place_of_incident
           || dispatch.incident?.place_of_incident
           || dispatch.incident?.location
           || '';
+        const incBarangay = dispatch.incident?.barangay || dispatch.incident?.barangay_name || '';
 
-        if ((!defaultPlaceOfIncident || defaultPlaceOfIncident.includes('MDRRMO Station')) && dispatch.incident) {
+        // If the location has a pole, code, or coordinates, clean to "Barangay [Name], Opol, Misamis Oriental"
+        let defaultPlaceOfIncident = formatPlaceOfIncident(rawPlaceOfIncident, incBarangay);
+
+        if ((!defaultPlaceOfIncident || defaultPlaceOfIncident.includes('MDRRMO Station') || defaultPlaceOfIncident === 'Opol, Misamis Oriental') && dispatch.incident) {
           const incLat = parseFloat(dispatch.incident.incident_latitude ?? dispatch.incident.latitude);
           const incLng = parseFloat(dispatch.incident.incident_longitude ?? dispatch.incident.longitude);
           if (!isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
             setIsResolvingLocation(true);
-            defaultPlaceOfIncident = await resolveAddressFromCoords(incLat, incLng);
+            const resolvedAddr = await resolveAddressFromCoords(incLat, incLng);
+            defaultPlaceOfIncident = formatPlaceOfIncident(resolvedAddr, incBarangay, incLat, incLng);
             setIsResolvingLocation(false);
-          } else if (dispatch.incident.barangay) {
-            defaultPlaceOfIncident = `Brgy. ${dispatch.incident.barangay}, Opol, Misamis Oriental`;
+          } else if (incBarangay) {
+            defaultPlaceOfIncident = `Barangay ${incBarangay}, Opol, Misamis Oriental`;
           } else if (dispatch.incident.description && !dispatch.incident.description.includes('Station Assistance')) {
-            defaultPlaceOfIncident = dispatch.incident.description;
+            defaultPlaceOfIncident = formatPlaceOfIncident(dispatch.incident.description, incBarangay);
           }
         }
 
-        // Comprehensive address resolution (from existing patient record, PCR, or resident profile)
-        const residentBarangay = residentProfile?.barangay?.barangay_name || residentProfile?.barangay?.name || '';
-        const residentHomeAddress = residentBarangay ? `Barangay ${residentBarangay}, Opol` : '';
+        // Comprehensive address resolution for PATIENT (from existing patient record, latest PCR, or resident profile)
+        const patientBarangay = existingPatient?.barangay?.barangay_name
+          || existingPatient?.barangay?.name
+          || (typeof existingPatient?.barangay === 'string' ? existingPatient.barangay : '')
+          || residentProfile?.barangay?.barangay_name
+          || residentProfile?.barangay?.name
+          || '';
 
-        const defaultHomeAddress = (
-          pcr?.incident_address ||
+        let rawDefaultHome = (
           existingPatient?.address ||
           existingPatient?.home_address ||
+          existingPatient?.street ||
+          pcr?.incident_address ||
           ''
-        );
+        ).trim();
+
+        // If rawDefaultHome is just "Opol" or "Opol, Misamis Oriental" without street/barangay, don't use it as complete address
+        if (rawDefaultHome.toLowerCase() === 'opol' || rawDefaultHome.toLowerCase() === 'opol, misamis oriental') {
+          rawDefaultHome = patientBarangay ? `Barangay ${patientBarangay}, Opol` : '';
+        } else if (patientBarangay && !rawDefaultHome.toLowerCase().includes(patientBarangay.toLowerCase())) {
+          rawDefaultHome = rawDefaultHome ? `${rawDefaultHome}, Barangay ${patientBarangay}, Opol` : `Barangay ${patientBarangay}, Opol`;
+        }
+
+        const defaultHomeAddress = (rawDefaultHome && !rawDefaultHome.includes('Pending Identification') && !rawDefaultHome.includes('Direct Scene Response'))
+          ? rawDefaultHome
+          : '';
 
         // Auto-fill Chief Complaint from what the dispatcher entered (or incident type)
         const defaultChiefComplaint = pcr?.chief_complaint
@@ -776,31 +797,16 @@ export default function PatientCareRecordScreen() {
         const resolvedLastName = existingPatient?.last_name || existingPatient?.patient_last_name || '';
         const resolvedFullName = `${resolvedFirstName} ${resolvedLastName}`.trim();
 
-        // Ensure Barangay is shown in Place of Incident so responders can easily just add Zone/Purok
-        if (!pcr?.place_of_incident && dispatch.incident?.barangay && defaultPlaceOfIncident && !defaultPlaceOfIncident.toLowerCase().includes(dispatch.incident.barangay.toLowerCase())) {
-          defaultPlaceOfIncident = `Brgy. ${dispatch.incident.barangay}, ${defaultPlaceOfIncident}`;
-        }
-
         setFormData(prev => {
           // Check if user already typed an address in memory or in cached draft
-          const userEnteredAddress = (prev.incident_address && !prev.incident_address.includes('Pending Identification'))
+          const userEnteredAddress = (prev.incident_address && !prev.incident_address.includes('Pending Identification') && !prev.incident_address.includes('Direct Scene Response') && prev.incident_address.toLowerCase() !== 'opol')
             ? prev.incident_address
-            : (cachedDraft?.incident_address && !cachedDraft.incident_address.includes('Pending Identification') ? cachedDraft.incident_address : null);
+            : (cachedDraft?.incident_address && !cachedDraft.incident_address.includes('Pending Identification') && !cachedDraft.incident_address.includes('Direct Scene Response') && cachedDraft.incident_address.toLowerCase() !== 'opol' ? cachedDraft.incident_address : null);
 
-          const cleanDefaultHome = (defaultHomeAddress && !defaultHomeAddress.includes('Pending Identification'))
-            ? defaultHomeAddress
-            : null;
-
-          const cleanIncidentAddress = (dispatch.incident?.incident_address && !dispatch.incident.incident_address.includes('Pending Identification'))
-            ? dispatch.incident.incident_address
-            : null;
-
+          // NOTICE: Do NOT fallback to dispatch.incident.incident_address because that is the scene location, NOT patient home!
           const resolvedIncidentAddress = userEnteredAddress
-            || pcr?.incident_address
-            || cleanDefaultHome
-            || cleanIncidentAddress
-            || prev.incident_address
-            || cachedDraft?.incident_address
+            || defaultHomeAddress
+            || (pcr?.incident_address && pcr.incident_address.toLowerCase() !== 'opol' ? pcr.incident_address : '')
             || '';
 
           return {
@@ -884,7 +890,8 @@ export default function PatientCareRecordScreen() {
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const address = await resolveAddressFromCoords(loc.coords.latitude, loc.coords.longitude);
-      const resolved = address || 'Opol, Misamis Oriental';
+      const incBarangay = activeDispatch?.incident?.barangay || activeDispatch?.incident?.barangay_name || '';
+      const resolved = formatPlaceOfIncident(address, incBarangay, loc.coords.latitude, loc.coords.longitude);
       setFormData(prev => ({ ...prev, place_of_incident: resolved }));
       setErrors(prev => ({ ...prev, place_of_incident: '' }));
     } catch (e) {
@@ -900,22 +907,21 @@ export default function PatientCareRecordScreen() {
       Alert.alert('Notice', 'No incident details available for this dispatch.');
       return;
     }
+    const incBarangay = activeDispatch.incident.barangay || activeDispatch.incident.barangay_name || '';
     const incLat = parseFloat(activeDispatch.incident.incident_latitude ?? activeDispatch.incident.latitude);
     const incLng = parseFloat(activeDispatch.incident.incident_longitude ?? activeDispatch.incident.longitude);
     if (!isNaN(incLat) && !isNaN(incLng) && (incLat !== 0 || incLng !== 0)) {
       setIsResolvingLocation(true);
-      let address = await resolveAddressFromCoords(incLat, incLng) || 'Opol, Misamis Oriental';
-      if (activeDispatch.incident.barangay && !address.toLowerCase().includes(activeDispatch.incident.barangay.toLowerCase())) {
-        address = `Brgy. ${activeDispatch.incident.barangay}, ${address}`;
-      }
-      setFormData(prev => ({ ...prev, place_of_incident: address }));
+      const address = await resolveAddressFromCoords(incLat, incLng);
+      const cleanAddress = formatPlaceOfIncident(address, incBarangay, incLat, incLng);
+      setFormData(prev => ({ ...prev, place_of_incident: cleanAddress }));
       setErrors(prev => ({ ...prev, place_of_incident: '' }));
       setIsResolvingLocation(false);
-    } else if (activeDispatch.incident.description) {
-      setFormData(prev => ({ ...prev, place_of_incident: activeDispatch.incident.description }));
-      setErrors(prev => ({ ...prev, place_of_incident: '' }));
     } else {
-      Alert.alert('Notice', 'No GPS coordinates found in incident report.');
+      const rawPlace = activeDispatch.incident.place_of_incident || activeDispatch.incident.description || activeDispatch.incident.location || '';
+      const cleanAddress = formatPlaceOfIncident(rawPlace, incBarangay);
+      setFormData(prev => ({ ...prev, place_of_incident: cleanAddress }));
+      setErrors(prev => ({ ...prev, place_of_incident: '' }));
     }
   };
 
@@ -1060,7 +1066,25 @@ export default function PatientCareRecordScreen() {
       const calculatedAge = patient.birthdate
         ? (calculateAge(patient.birthdate) || (patient.age !== undefined && patient.age !== null ? String(patient.age) : ''))
         : (patient.age !== undefined && patient.age !== null ? String(patient.age) : prev.age);
-      const homeAddress = (patient.address || patient.incident_address || (patient.barangay?.name ? `Barangay ${patient.barangay.name}` : '')).trim();
+
+      const bName = typeof patient.barangay === 'string'
+        ? patient.barangay
+        : (patient.barangay?.name || patient.barangay?.barangay_name || patient.barangay_name || '');
+
+      let homeAddress = (
+        patient.address ||
+        patient.home_address ||
+        patient.street ||
+        patient.incident_address ||
+        ''
+      ).trim();
+
+      if (!homeAddress || homeAddress.toLowerCase() === 'opol' || homeAddress.toLowerCase() === 'opol, misamis oriental') {
+        homeAddress = bName ? `Barangay ${bName}, Opol` : '';
+      } else if (bName && !homeAddress.toLowerCase().includes(bName.toLowerCase())) {
+        homeAddress = `${homeAddress}, Barangay ${bName}, Opol`;
+      }
+
       return {
         ...prev,
         patient_id: patient.id || patient.patient_id, // Handle API response variation
@@ -1070,7 +1094,7 @@ export default function PatientCareRecordScreen() {
         gender: patient.gender || prev.gender || 'male',
         contact_number: patient.contact_number || prev.contact_number || '',
         address: homeAddress,
-        incident_address: homeAddress || prev.incident_address, // Resident Home Address
+        incident_address: homeAddress || (prev.incident_address && prev.incident_address.toLowerCase() !== 'opol' ? prev.incident_address : ''), // Resident Home Address
         civil_status: patient.civil_status || prev.civil_status || 'single',
         age: calculatedAge,
         searchQuery: `${patient.first_name} ${patient.last_name}`,
@@ -1096,7 +1120,10 @@ export default function PatientCareRecordScreen() {
 
       if (formData.gender) payload.gender = formData.gender;
       if (formData.age) payload.age = parseInt(formData.age, 10);
-      if (formData.incident_address) payload.address = formData.incident_address;
+      if (formData.incident_address && formData.incident_address.toLowerCase() !== 'opol') {
+        payload.address = formData.incident_address;
+        payload.incident_address = formData.incident_address;
+      }
       if (formData.contact_number) payload.contact_number = formData.contact_number;
 
       const res = await createPatient(payload);
@@ -1476,10 +1503,12 @@ export default function PatientCareRecordScreen() {
 
   const populatePcrToForm = (pcr: any, dispatch: any) => {
     const patient = pcr?.patient;
-    const defaultPlaceOfIncident = pcr?.place_of_incident
+    const incBarangay = dispatch?.incident?.barangay || dispatch?.incident?.barangay_name || '';
+    const rawPlace = pcr?.place_of_incident
       || dispatch?.incident?.place_of_incident
       || dispatch?.incident?.location
       || '';
+    const defaultPlaceOfIncident = formatPlaceOfIncident(rawPlace, incBarangay);
 
     const defaultChiefComplaint = pcr?.clinical_chief_complaint
       || pcr?.chief_complaint
@@ -1501,6 +1530,22 @@ export default function PatientCareRecordScreen() {
 
     const fullName = [patient?.patient_first_name || patient?.first_name, patient?.patient_last_name || patient?.last_name].filter(Boolean).join(' ');
 
+    const patientBName = typeof patient?.barangay === 'string'
+      ? patient.barangay
+      : (patient?.barangay?.name || patient?.barangay?.barangay_name || patient?.barangay_name || '');
+
+    let resolvedPatientHome = (
+      patient?.address ||
+      patient?.home_address ||
+      patient?.street ||
+      pcr?.incident_address ||
+      ''
+    ).trim();
+
+    if (!resolvedPatientHome || resolvedPatientHome.toLowerCase() === 'opol' || resolvedPatientHome.toLowerCase() === 'opol, misamis oriental') {
+      resolvedPatientHome = patientBName ? `Barangay ${patientBName}, Opol` : '';
+    }
+
     return {
       pcr_id: pcr?.id || null,
       patient_id: pcr?.patient_id || null,
@@ -1510,12 +1555,12 @@ export default function PatientCareRecordScreen() {
       birthdate: patient?.birthdate || '',
       gender: patient?.gender || pcr?.patient_gender || 'male',
       contact_number: pcr?.contact_number || patient?.contact_number || '',
-      address: pcr?.incident_address || patient?.address || '',
+      address: resolvedPatientHome,
       nature_of_call: defaultNatureOfCall,
       chief_complaint: defaultChiefComplaint,
       place_of_incident: defaultPlaceOfIncident,
       civil_status: pcr?.civil_status || patient?.civil_status || 'single',
-      incident_address: pcr?.incident_address || patient?.address || '',
+      incident_address: resolvedPatientHome,
       age: patient?.birthdate
         ? (calculateAge(patient.birthdate) || (patient?.age ? String(patient.age) : ''))
         : (patient?.age ? String(patient.age) : (pcr?.patient_age ? String(pcr.patient_age) : (pcr?.age ? String(pcr.age) : ''))),
@@ -1569,10 +1614,11 @@ export default function PatientCareRecordScreen() {
       }
 
       // Reset form for next patient, retaining scene location and operational timestamps
+      const incB = activeDispatch?.incident?.barangay || activeDispatch?.incident?.barangay_name || '';
       setFormData(prev => ({
         ...initialFormData,
         nature_of_call: prev.nature_of_call || 'emergency',
-        place_of_incident: prev.place_of_incident,
+        place_of_incident: formatPlaceOfIncident(prev.place_of_incident, incB),
         dispatch_time: prev.dispatch_time,
         en_route_time: prev.en_route_time,
         on_scene_time: prev.on_scene_time,

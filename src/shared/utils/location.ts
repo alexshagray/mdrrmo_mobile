@@ -161,3 +161,81 @@ export const resolveAddressFromCoords = async (
 
   return 'Opol, Misamis Oriental';
 };
+
+export const OPOL_BARANGAYS = [
+  'Awang',
+  'Bagocboc',
+  'Barra',
+  'Bonbon',
+  'Cauyonan',
+  'Igpit',
+  'Limonda',
+  'Luyongbonbon',
+  'Luyongbon',
+  'Malanang',
+  'Nangcaon',
+  'Patag',
+  'Poblacion',
+  'Taboc',
+  'Tingalan',
+];
+
+/**
+ * Formats Place of Incident for PCRs:
+ * If the location contains an electric post code, location code, or raw coordinates,
+ * removes the code/coords and returns strictly "Barangay [Barangay], Opol, Misamis Oriental".
+ */
+export const formatPlaceOfIncident = (
+  rawLocation?: string | null,
+  fallbackBarangay?: string | null,
+  latitude?: number | null,
+  longitude?: number | null
+): string => {
+  const text = (rawLocation || '').trim();
+
+  // Check if text has codes, poles, posts, markers or coordinates
+  const hasCodeOrPole = /\b(pole|post|streetlight|marker|code|sl-|mkr-|brg-|jcb|lr\d|ir\d)\b/i.test(text)
+    || /#[0-9]+/i.test(text)
+    || /\b\d{2,4}-\d{3,6}\b/i.test(text); // e.g. 302-01385
+  const hasCoordinates = /\b-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}\b/.test(text);
+  const isCodeOnly = text.length > 0 && text.length <= 15 && /^[A-Z0-9@#_-]+$/i.test(text);
+
+  let detectedBarangay = (fallbackBarangay || '').trim();
+
+  // Try to find known Opol barangay in text or fallback
+  for (const b of OPOL_BARANGAYS) {
+    const regex = new RegExp(`\\b${b}\\b`, 'i');
+    if (regex.test(text) || (detectedBarangay && regex.test(detectedBarangay))) {
+      detectedBarangay = b === 'Luyongbon' ? 'Luyongbonbon' : b;
+      break;
+    }
+  }
+
+  // If it was a code, pole, or coordinates:
+  if (hasCodeOrPole || hasCoordinates || isCodeOnly) {
+    if (detectedBarangay) {
+      return `Barangay ${detectedBarangay}, Opol, Misamis Oriental`;
+    }
+    return 'Opol, Misamis Oriental';
+  }
+
+  // If text is a normal address (e.g. "Zone 2, Barangay Igpit" or "Purok 3"):
+  if (text) {
+    let clean = text.replace(/Northern Mindanao/gi, 'Misamis Oriental').replace(/,\s*Philippines/gi, '').trim();
+    if (detectedBarangay && !clean.toLowerCase().includes(detectedBarangay.toLowerCase())) {
+      clean = `Barangay ${detectedBarangay}, ${clean}`;
+    }
+    if (!clean.toLowerCase().includes('opol')) {
+      clean = `${clean}, Opol, Misamis Oriental`;
+    } else if (!clean.toLowerCase().includes('misamis oriental')) {
+      clean = `${clean}, Misamis Oriental`;
+    }
+    return clean;
+  }
+
+  if (detectedBarangay) {
+    return `Barangay ${detectedBarangay}, Opol, Misamis Oriental`;
+  }
+
+  return 'Opol, Misamis Oriental';
+};

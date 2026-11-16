@@ -1,6 +1,7 @@
 import { Alert, Platform, Share } from 'react-native';
 import { OPOL_LOGO_BASE64, DRRM_LOGO_BASE64 } from './pcrLogosBase64';
 import { BODY_DIAGRAM_BASE64 } from './bodyDiagramBase64';
+import { formatPlaceOfIncident } from './location';
 
 // Safe dynamic loaders to prevent crashing when ExpoPrint is not compiled in the running APK
 export function getExpoPrint(): any {
@@ -149,8 +150,14 @@ export function generatePcrHtml({ formData, activeDispatch, pcrPhotos = [] }: Pc
   const patientFullName = [formData.first_name, formData.last_name].filter(Boolean).join(' ').trim()
     || (formData.is_unidentified ? 'Unidentified Patient' : '__________________________________________');
 
-  const patientAddress = formData.address || incident.incident_address || incident.location || '__________________________________________';
-  const incidentPlace = formData.place_of_incident || incident.place_of_incident || incident.location || '__________________________________________';
+  const rawPatientAddr = (formData.incident_address || formData.address || '').trim();
+  const cleanPatientAddr = (rawPatientAddr && rawPatientAddr.toLowerCase() !== 'opol' && rawPatientAddr.toLowerCase() !== 'opol, misamis oriental')
+    ? rawPatientAddr
+    : '';
+  const patientAddress = cleanPatientAddr || '__________________________________________';
+
+  const rawPlace = formData.place_of_incident || incident.place_of_incident || incident.location || '';
+  const incidentPlace = formatPlaceOfIncident(rawPlace, incident.barangay || incident.barangay_name) || '__________________________________________';
 
   const gender = (formData.gender || '').toLowerCase();
   const isMale = gender === 'male';
