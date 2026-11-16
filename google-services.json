@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789000",
-    "project_id": "mdrrmo-opol-rescue",
-    "storage_bucket": "mdrrmo-opol-rescue.appspot.com"
+    "project_number": "472293875250",
+    "project_id": "my-mdrrmo-mobile",
+    "storage_bucket": "my-mdrrmo-mobile.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789000:android:0123456789abcdef",
+        "mobilesdk_app_id": "1:472293875250:android:b2e0041c46992674d6a62b",
         "android_client_info": {
           "package_name": "com.wedemboysz13.mdrrmo_mobile"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDummyKeyReplaceWithYourOwnFromFirebase"
+          "current_key": "AIzaSyBUFi717H7SnQoRr0C2A2qerbjwJvVy5OU"
         }
       ],
       "services": {
