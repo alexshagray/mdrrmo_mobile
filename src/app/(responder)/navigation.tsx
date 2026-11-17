@@ -528,7 +528,7 @@ export default function NavigationScreen() {
                 heading: isFpvModeRef.current ? targetHeading : 0,
                 zoomLevel: isFpvModeRef.current ? 18.5 : 17,
                 pitch: isFpvModeRef.current ? 58 : 28,
-                animationDuration: 1200,
+                animationDuration: 900,
                 animationMode: 'easeTo',
               });
             }
