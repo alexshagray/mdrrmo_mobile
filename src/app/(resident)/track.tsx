@@ -20,8 +20,22 @@ import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import MapboxGL from '@rnmapbox/maps';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MapView, Avatar, LocationPermissionModal, BrandBackground, Header, CancelConfirmationModal, CancelSuccessModal } from '@/shared/components';
+import {
+  MapView,
+  Avatar,
+  LocationPermissionModal,
+  BrandBackground,
+  Header,
+  CancelConfirmationModal,
+  CancelSuccessModal,
+  SmoothResponderMarker,
+} from '@/shared/components';
 import { IncidentLocationPin, ResponderNavigationArrow } from '@/shared/components/Map/NavigationMarkers';
+import {
+  trimRouteProgress,
+  calculateSmoothRouteBearing,
+  getVisuallyOffsetRemainingRoute,
+} from '@/shared/utils/navigationMath';
 import {
   Clock,
   MapPin,
@@ -541,6 +555,13 @@ export default function TrackScreen() {
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [cameraHeading, setCameraHeading] = useState<number>(0);
+
+  const handleCameraChanged = useCallback((e: any) => {
+    if (typeof e?.properties?.heading === 'number' && !isNaN(e.properties.heading)) {
+      setCameraHeading(e.properties.heading);
+    }
+  }, []);
 
   // Arrival Alarm & Notification State
   const [showArrivalModal, setShowArrivalModal] = useState(false);
@@ -1027,6 +1048,34 @@ export default function TrackScreen() {
     dialDriverNumber();
   };
 
+  // Dynamic Route Trimming & Road-Aligned Smooth Bearing
+  const { visibleRouteCoords, effectiveAmbulanceHeading } = React.useMemo(() => {
+    if (!hasAmbulanceCoords || !routeCoords || routeCoords.length < 2) {
+      return {
+        visibleRouteCoords: routeCoords,
+        effectiveAmbulanceHeading: ambulanceCoords?.heading || 0,
+      };
+    }
+
+    const currentLoc = { latitude: ambLat!, longitude: ambLng! };
+    const trimResult = trimRouteProgress(routeCoords, currentLoc, 0, 40);
+    const smoothBearing = calculateSmoothRouteBearing(
+      currentLoc,
+      routeCoords,
+      trimResult.segmentIndex,
+      ambulanceCoords?.heading ?? null,
+      0,
+      ambulanceCoords?.heading || 0
+    );
+
+    const offsetRoute = getVisuallyOffsetRemainingRoute(trimResult.remainingRoute, 5.5);
+
+    return {
+      visibleRouteCoords: offsetRoute,
+      effectiveAmbulanceHeading: smoothBearing,
+    };
+  }, [hasAmbulanceCoords, ambLat, ambLng, routeCoords, ambulanceCoords?.heading]);
+
   return (
     <View style={styles.container}>
       {/* ─── 1. FULLSCREEN MAP (PRIMARY FOCUS) ─── */}
@@ -1034,14 +1083,15 @@ export default function TrackScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={hasIncidentCoords ? { latitude: incidentLat, longitude: incidentLng } : undefined}
+        onCameraChanged={handleCameraChanged}
       >
         {/* Dual-Layer Navigation Route Line */}
-        {routeCoords.length > 0 && (
+        {visibleRouteCoords.length > 0 && (
           <MapboxGL.ShapeSource
             id="routeSource"
             shape={{
               type: 'LineString',
-              coordinates: routeCoords.map((c) => [c.longitude, c.latitude]),
+              coordinates: visibleRouteCoords.map((c) => [c.longitude, c.latitude]),
             }}
           >
             {/* Ambient Glow Route Layer */}
@@ -1092,23 +1142,16 @@ export default function TrackScreen() {
           </MapboxGL.PointAnnotation>
         )}
 
-        {/* ─── 3. CLEAN RESPONDER NAVIGATION ARROW (NO CIRCLE, ARROW ONLY) ─── */}
+        {/* ─── 3. CLEAN RESPONDER NAVIGATION ARROW (SMOOTH 60FPS INTERPOLATION + CAMERA SYNC) ─── */}
         {hasAmbulanceCoords && (
-          <MapboxGL.PointAnnotation
-            id="responder-marker"
-            coordinate={[ambLng!, ambLat!]}
-            title={unitName}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-              <ResponderNavigationArrow heading={ambulanceCoords?.heading || 0} size={36} />
-              {/* Floating Unit Name Label */}
-              <View style={[styles.responderLabelPill, { marginTop: 4 }]}>
-                <View style={styles.responderLiveDot} />
-                <Text style={styles.responderLabelText}>{unitName}</Text>
-              </View>
-            </View>
-          </MapboxGL.PointAnnotation>
+          <SmoothResponderMarker
+            id="residentTrackAmbulancePuck"
+            targetLocation={{ latitude: ambLat!, longitude: ambLng! }}
+            targetHeading={effectiveAmbulanceHeading}
+            cameraHeading={cameraHeading}
+            size={36}
+            label={unitName}
+          />
         )}
       </MapView>
 

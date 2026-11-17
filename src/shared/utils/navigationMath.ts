@@ -243,6 +243,104 @@ export const findNearestRoadSegment = (
 };
 
 /**
+ * Calculates the exact road-aligned navigation bearing along the active route.
+ * - Aligns precisely with current road segment when traveling straight.
+ * - Anticipates upcoming turns and curves as vehicle approaches intersections (16m window).
+ * - Follows natural curvature on curved roads, sharp 90-degree turns, and U-turns.
+ * - Uses shortest-angle math to prevent unnecessary full 360-degree spins.
+ * - Remains rock-solid stable when stopped or moving slowly.
+ */
+export const calculateSmoothRouteBearing = (
+  currentPosition: LatLng,
+  routeCoordinates: LatLng[],
+  segmentIndex: number,
+  rawHeading: number | null,
+  speedMps: number = 0,
+  lastReliableHeading: number = 0
+): number => {
+  if (!routeCoordinates || routeCoordinates.length < 2) {
+    return typeof rawHeading === 'number' && rawHeading >= 0 ? rawHeading : lastReliableHeading;
+  }
+
+  const clampedIdx = Math.max(0, Math.min(segmentIndex, routeCoordinates.length - 2));
+  const p1 = routeCoordinates[clampedIdx];
+  const p2 = routeCoordinates[clampedIdx + 1];
+
+  // Base bearing of current road segment
+  const currentSegBearing = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+
+  // Distance from vehicle's current position to the end of this segment (vertex/turn)
+  const distToEndOfSegment = getDistance(
+    currentPosition.latitude,
+    currentPosition.longitude,
+    p2.latitude,
+    p2.longitude
+  );
+
+  // If there is an upcoming segment after p2
+  if (clampedIdx + 2 < routeCoordinates.length) {
+    const p3 = routeCoordinates[clampedIdx + 2];
+    const nextSegBearing = calculateBearing(p2.latitude, p2.longitude, p3.latitude, p3.longitude);
+    const turnAngleDiff = getShortestAngleDiff(currentSegBearing, nextSegBearing);
+
+    // Anticipation window: start blending 16 meters before the turn/curve
+    const anticipationDistance = 16;
+    if (distToEndOfSegment < anticipationDistance && Math.abs(turnAngleDiff) > 1.5) {
+      // Progressive turning factor: 0 when far, reaching up to 0.70 at the turn vertex
+      const progress = Math.max(0, Math.min(1 - distToEndOfSegment / anticipationDistance, 1));
+      // Smooth Hermite easing (smoothstep)
+      const ease = progress * progress * (3 - 2 * progress);
+      const blendedBearing = (currentSegBearing + turnAngleDiff * (ease * 0.7) + 360) % 360;
+      return blendedBearing;
+    }
+  }
+
+  return currentSegBearing;
+};
+
+/**
+ * Offsets the start of the visible route line by `leadMeters` ahead of the vehicle
+ * along the active route line. This prevents the route line from overlapping or
+ * passing through the center, body, or front tip of the navigation arrow.
+ */
+export const getVisuallyOffsetRemainingRoute = (
+  remainingRoute: LatLng[],
+  leadMeters: number = 5.5
+): LatLng[] => {
+  if (!remainingRoute || remainingRoute.length <= 1) return remainingRoute || [];
+
+  const start = remainingRoute[0];
+  const next = remainingRoute[1];
+  const segDist = getDistance(start.latitude, start.longitude, next.latitude, next.longitude);
+
+  if (segDist > leadMeters) {
+    const fraction = leadMeters / segDist;
+    const offsetStart: LatLng = {
+      latitude: start.latitude + (next.latitude - start.latitude) * fraction,
+      longitude: start.longitude + (next.longitude - start.longitude) * fraction,
+    };
+    return [offsetStart, ...remainingRoute.slice(1)];
+  } else if (remainingRoute.length > 2) {
+    // If first segment is shorter than leadMeters, skip to second segment
+    return remainingRoute.slice(1);
+  }
+
+  return remainingRoute;
+};
+
+/**
+ * Computes visual screen rotation by synchronizing geographic travel heading with map camera bearing.
+ * Formula: (geographicHeading - cameraBearing)
+ * Correctly accounts for 2D vs 3D FPV perspective and user-rotated map cameras.
+ */
+export const computeVisualScreenRotation = (
+  geographicHeading: number,
+  cameraBearing: number = 0
+): number => {
+  return ((geographicHeading - cameraBearing) % 360 + 360) % 360;
+};
+
+/**
  * Trims completed road segments behind the vehicle and returns the active remaining route.
  */
 export const trimRouteProgress = (

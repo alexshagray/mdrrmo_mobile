@@ -126,12 +126,13 @@ const styles = StyleSheet.create({
   arrowWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    // Soft shadow for elevation above map
+    // Strong shadow and high z-index to always render prominently above all route layers
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
-    elevation: 8,
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    elevation: 20,
+    zIndex: 9999,
   },
   pinWrapper: {
     alignItems: 'center',

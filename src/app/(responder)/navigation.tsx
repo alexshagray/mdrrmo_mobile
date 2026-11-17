@@ -44,6 +44,8 @@ import {
   smoothAngle,
   getShortestAngleDiff,
   getLookaheadRouteBearing,
+  calculateSmoothRouteBearing,
+  getVisuallyOffsetRemainingRoute,
   isGpsJumpUnrealistic,
   trimRouteProgress,
   LatLng,
@@ -90,6 +92,7 @@ export default function NavigationScreen() {
   // Navigation State
   const [displayedLocation, setDisplayedLocation] = useState<LatLng | null>(null);
   const [heading, setHeading] = useState<number>(0);
+  const [cameraHeading, setCameraHeading] = useState<number>(0);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -104,6 +107,7 @@ export default function NavigationScreen() {
   const isCalculatingRef = useRef(false);
   const lastRecalcTimeRef = useRef(0);
   const lastReliableHeadingRef = useRef(0);
+  const cameraHeadingRef = useRef(0);
   const lastRawLocationRef = useRef<LatLng | null>(null);
   const lastRawTimestampRef = useRef<number>(0);
   const deviationCounterRef = useRef(0);
@@ -318,6 +322,15 @@ export default function NavigationScreen() {
     }
   }, []);
 
+  // Synchronize live map camera heading for arrow rotation compensation
+  const handleCameraChanged = useCallback((state: any) => {
+    const h = state?.properties?.heading;
+    if (typeof h === 'number' && !isNaN(h)) {
+      cameraHeadingRef.current = h;
+      setCameraHeading(h);
+    }
+  }, []);
+
   // Location Tracking & High-Performance Dynamic Navigation Engine
   useEffect(() => {
     let locationSubscription: Location.LocationSubscription | null = null;
@@ -443,25 +456,23 @@ export default function NavigationScreen() {
                 latestSnappedLocationRef.current = trimResult.displayLocation;
                 setDisplayedLocation(trimResult.displayLocation);
 
-                // Compute anticipatory lookahead bearing along the road ahead (~22 meters)
-                // This enables the arrow to smoothly curve into turns ahead of time
-                const lookaheadBearing = getLookaheadRouteBearing(
+                // 1. CALCULATE ROAD-ALIGNED BEARING (Smooth turns, curves, intersections, and U-turns)
+                const roadAlignedBearing = calculateSmoothRouteBearing(
+                  finalLocation,
                   currentActiveRoute,
                   trimResult.segmentIndex,
-                  trimResult.displayLocation,
-                  22
+                  loc.coords.heading,
+                  currentSpeed,
+                  lastReliableHeadingRef.current
                 );
+                targetHeading = roadAlignedBearing;
+                lastReliableHeadingRef.current = roadAlignedBearing;
 
-                const angleDiffToRoad = Math.abs(getShortestAngleDiff(targetHeading, lookaheadBearing));
-                if (angleDiffToRoad < 50) {
-                  // Blend road curvature into arrow heading with a deadband of 1.5°
-                  targetHeading = smoothAngle(targetHeading, lookaheadBearing, 0.55, 1.5);
-                  lastReliableHeadingRef.current = targetHeading;
-                }
-
-                // Trim route behind the vehicle
-                setRouteCoords(trimResult.remainingRoute);
+                // 2. TRIM COMPLETED ROUTE BEHIND VEHICLE & OFFSET VISIBLE LINE FORWARD
+                // Offset start by 5.5m so line never overlaps or runs through arrow center or tip!
                 activeRouteRef.current = trimResult.remainingRoute;
+                const visibleRoute = getVisuallyOffsetRemainingRoute(trimResult.remainingRoute, 5.5);
+                setRouteCoords(visibleRoute);
                 deviationCounterRef.current = 0;
 
                 // Update remaining route distance and ETA along road path
@@ -635,6 +646,7 @@ export default function NavigationScreen() {
           scaleBarPosition={{ top: -9999, left: -9999 }}
           attributionEnabled={false}
           compassEnabled={false}
+          onCameraChanged={handleCameraChanged}
           styleURL={mapStyle === 'satellite' ? MapboxGL.StyleURL.SatelliteStreet : MapboxGL.StyleURL.Dark}
         >
           {/* Active Navigation Route Line matching Screenshot 2 */}
@@ -678,11 +690,13 @@ export default function NavigationScreen() {
             <IncidentLocationPin size={38} />
           </MapboxGL.PointAnnotation>
 
-          {/* 60 FPS Smoothly Interpolated Responder Navigation Marker */}
+          {/* 60 FPS Smoothly Interpolated Responder Navigation Marker with Camera Heading Sync */}
           {displayedLocation && (
             <SmoothResponderMarker
+              id="navigationPuck"
               targetLocation={displayedLocation}
               targetHeading={heading}
+              cameraHeading={cameraHeading}
               speed={currentSpeedRef.current}
               accuracy={gpsAccuracyWarning ?? undefined}
               timestamp={lastRawTimestampRef.current}
