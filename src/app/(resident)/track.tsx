@@ -556,6 +556,7 @@ export default function TrackScreen() {
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [cameraHeading, setCameraHeading] = useState<number>(0);
+  const lastSegmentIndexRef = useRef<number>(0);
 
   const handleCameraChanged = useCallback((e: any) => {
     if (typeof e?.properties?.heading === 'number' && !isNaN(e.properties.heading)) {
@@ -737,6 +738,7 @@ export default function TrackScreen() {
           const route = data.routes[0];
           const coords = decodePolyline(route.geometry);
           setRouteCoords(coords);
+          lastSegmentIndexRef.current = 0;
           setRouteInfo({
             distance: (route.distance / 1000).toFixed(1) + ' km',
             duration: Math.ceil(route.duration / 60) + ' min',
@@ -985,8 +987,22 @@ export default function TrackScreen() {
   const etaDuration = routeInfo?.duration || (isArrived ? 'On Scene' : 'Calculating...');
   const etaDistance = routeInfo?.distance || '';
 
-  // Camera Actions
+  // Camera Actions & Active Responder Auto-Tracking
+  const [isFollowingAmbulance, setIsFollowingAmbulance] = useState(true);
+
+  // Smooth camera tracking: keep ambulance smoothly centered as it drives
+  useEffect(() => {
+    if (isFollowingAmbulance && mapRef.current && hasAmbulanceCoords) {
+      mapRef.current.setCamera({
+        centerCoordinate: [ambLng!, ambLat!],
+        zoomLevel: 16.2,
+        animationDuration: 850,
+      });
+    }
+  }, [ambLat, ambLng, isFollowingAmbulance, hasAmbulanceCoords]);
+
   const handleRecenterOnResponder = () => {
+    setIsFollowingAmbulance(true);
     if (mapRef.current && hasAmbulanceCoords) {
       mapRef.current.setCamera({
         centerCoordinate: [ambLng!, ambLat!],
@@ -997,6 +1013,7 @@ export default function TrackScreen() {
   };
 
   const handleFitRouteOverview = () => {
+    setIsFollowingAmbulance(false);
     if (mapRef.current && hasIncidentCoords && hasAmbulanceCoords) {
       const lats = [incidentLat, ambLat!];
       const lngs = [incidentLng, ambLng!];
@@ -1058,7 +1075,17 @@ export default function TrackScreen() {
     }
 
     const currentLoc = { latitude: ambLat!, longitude: ambLng! };
-    const trimResult = trimRouteProgress(routeCoords, currentLoc, 0, 40);
+    const trimResult = trimRouteProgress(
+      routeCoords,
+      currentLoc,
+      lastSegmentIndexRef.current,
+      40
+    );
+
+    if (trimResult.segmentIndex >= lastSegmentIndexRef.current) {
+      lastSegmentIndexRef.current = trimResult.segmentIndex;
+    }
+
     const smoothBearing = calculateSmoothRouteBearing(
       currentLoc,
       routeCoords,
@@ -1084,6 +1111,11 @@ export default function TrackScreen() {
         style={StyleSheet.absoluteFill}
         initialRegion={hasIncidentCoords ? { latitude: incidentLat, longitude: incidentLng } : undefined}
         onCameraChanged={handleCameraChanged}
+        onTouchStart={() => {
+          if (isFollowingAmbulance) {
+            setIsFollowingAmbulance(false);
+          }
+        }}
       >
         {/* Dual-Layer Navigation Route Line */}
         {visibleRouteCoords.length > 0 && (
@@ -1216,13 +1248,20 @@ export default function TrackScreen() {
           <Maximize2 size={18} color="#1E293B" strokeWidth={2.2} />
         </TouchableOpacity>
 
-        {/* Re-center on Responder */}
+        {/* Re-center / Auto-Follow Responder */}
         <TouchableOpacity
-          style={[styles.floatingActionBtn, styles.floatingActionBtnPrimary]}
+          style={[
+            styles.floatingActionBtn,
+            isFollowingAmbulance ? styles.floatingActionBtnActive : styles.floatingActionBtnPrimary,
+          ]}
           onPress={handleRecenterOnResponder}
           activeOpacity={0.85}
         >
-          <Crosshair size={19} color="#208AEF" strokeWidth={2.4} />
+          <Crosshair
+            size={19}
+            color={isFollowingAmbulance ? '#FFFFFF' : '#208AEF'}
+            strokeWidth={2.4}
+          />
         </TouchableOpacity>
       </View>
 
@@ -2337,6 +2376,15 @@ const styles = StyleSheet.create({
   floatingActionBtnPrimary: {
     backgroundColor: '#F8FAFC',
     borderColor: '#BFDBFE',
+  },
+  floatingActionBtnActive: {
+    backgroundColor: '#208AEF',
+    borderColor: '#1D4ED8',
+    shadowColor: '#208AEF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
   },
 
   // Draggable Bottom Sheet

@@ -158,10 +158,13 @@ export const projectPointOnSegment = (
 
 /**
  * Calculates the exact minimum perpendicular distance from a location to any segment along the route.
+ * Supports optional startIndex and forward window to prioritize the advancing travel direction.
  */
 export const getMinDistanceToRoute = (
   currentLocation: LatLng,
-  routeCoordinates: LatLng[]
+  routeCoordinates: LatLng[],
+  startIndex: number = 0,
+  windowSize: number = 0
 ): { minDistance: number; nearestSegmentIndex: number; nearestPoint: LatLng } => {
   if (routeCoordinates.length < 2) {
     if (routeCoordinates.length === 1) {
@@ -176,16 +179,37 @@ export const getMinDistanceToRoute = (
     return { minDistance: Infinity, nearestSegmentIndex: -1, nearestPoint: currentLocation };
   }
 
-  let minDistance = Infinity;
-  let nearestSegmentIndex = 0;
-  let nearestPoint: LatLng = routeCoordinates[0];
+  // If startIndex > 0 and windowSize > 0, search in a local forward window around startIndex
+  let searchStart = 0;
+  let searchEnd = routeCoordinates.length - 1;
 
-  for (let i = 0; i < routeCoordinates.length - 1; i++) {
+  if (windowSize > 0 && startIndex > 0) {
+    searchStart = Math.max(0, startIndex - 2);
+    searchEnd = Math.min(routeCoordinates.length - 1, startIndex + windowSize);
+  }
+
+  let minDistance = Infinity;
+  let nearestSegmentIndex = searchStart;
+  let nearestPoint: LatLng = routeCoordinates[searchStart];
+
+  for (let i = searchStart; i < searchEnd; i++) {
     const proj = projectPointOnSegment(currentLocation, routeCoordinates[i], routeCoordinates[i + 1]);
     if (proj.distance < minDistance) {
       minDistance = proj.distance;
       nearestSegmentIndex = i;
       nearestPoint = proj.point;
+    }
+  }
+
+  // If local window search yielded an excessive distance (> 70m), expand to full route
+  if (windowSize > 0 && minDistance > 70 && (searchStart > 0 || searchEnd < routeCoordinates.length - 1)) {
+    for (let i = 0; i < routeCoordinates.length - 1; i++) {
+      const proj = projectPointOnSegment(currentLocation, routeCoordinates[i], routeCoordinates[i + 1]);
+      if (proj.distance < minDistance) {
+        minDistance = proj.distance;
+        nearestSegmentIndex = i;
+        nearestPoint = proj.point;
+      }
     }
   }
 
@@ -244,9 +268,8 @@ export const findNearestRoadSegment = (
 
 /**
  * Calculates the exact road-aligned navigation bearing along the active route.
- * - Aligns precisely with current road segment when traveling straight.
- * - Anticipates upcoming turns and curves as vehicle approaches intersections (16m window).
- * - Follows natural curvature on curved roads, sharp 90-degree turns, and U-turns.
+ * - Samples ahead along the route for a stable forward window (16m), eliminating micro-segment noise.
+ * - Blends with raw GPS heading when vehicle is moving to accurately follow corners, roundabouts, and U-turns.
  * - Uses shortest-angle math to prevent unnecessary full 360-degree spins.
  * - Remains rock-solid stable when stopped or moving slowly.
  */
@@ -263,39 +286,55 @@ export const calculateSmoothRouteBearing = (
   }
 
   const clampedIdx = Math.max(0, Math.min(segmentIndex, routeCoordinates.length - 2));
-  const p1 = routeCoordinates[clampedIdx];
-  const p2 = routeCoordinates[clampedIdx + 1];
 
-  // Base bearing of current road segment
-  const currentSegBearing = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
-
-  // Distance from vehicle's current position to the end of this segment (vertex/turn)
-  const distToEndOfSegment = getDistance(
+  // Look ahead along route vertices for a cumulative 16-meter forward distance
+  // This avoids erratic angles from tiny 1-meter polyline curve segments
+  let lookAheadPoint: LatLng = routeCoordinates[clampedIdx + 1];
+  let accumulatedDist = getDistance(
     currentPosition.latitude,
     currentPosition.longitude,
-    p2.latitude,
-    p2.longitude
+    lookAheadPoint.latitude,
+    lookAheadPoint.longitude
   );
 
-  // If there is an upcoming segment after p2
-  if (clampedIdx + 2 < routeCoordinates.length) {
-    const p3 = routeCoordinates[clampedIdx + 2];
-    const nextSegBearing = calculateBearing(p2.latitude, p2.longitude, p3.latitude, p3.longitude);
-    const turnAngleDiff = getShortestAngleDiff(currentSegBearing, nextSegBearing);
+  let forwardIdx = clampedIdx + 1;
+  while (accumulatedDist < 16 && forwardIdx < routeCoordinates.length - 1) {
+    const nextPt = routeCoordinates[forwardIdx + 1];
+    accumulatedDist += getDistance(
+      routeCoordinates[forwardIdx].latitude,
+      routeCoordinates[forwardIdx].longitude,
+      nextPt.latitude,
+      nextPt.longitude
+    );
+    lookAheadPoint = nextPt;
+    forwardIdx++;
+  }
 
-    // Anticipation window: start blending 16 meters before the turn/curve
-    const anticipationDistance = 16;
-    if (distToEndOfSegment < anticipationDistance && Math.abs(turnAngleDiff) > 1.5) {
-      // Progressive turning factor: 0 when far, reaching up to 0.70 at the turn vertex
-      const progress = Math.max(0, Math.min(1 - distToEndOfSegment / anticipationDistance, 1));
-      // Smooth Hermite easing (smoothstep)
-      const ease = progress * progress * (3 - 2 * progress);
-      const blendedBearing = (currentSegBearing + turnAngleDiff * (ease * 0.7) + 360) % 360;
-      return blendedBearing;
+  // Calculate stable forward road bearing
+  const roadBearing = calculateBearing(
+    currentPosition.latitude,
+    currentPosition.longitude,
+    lookAheadPoint.latitude,
+    lookAheadPoint.longitude
+  );
+
+  // If raw GPS heading is available from the responder's device
+  if (typeof rawHeading === 'number' && rawHeading >= 0) {
+    const angleDiff = getShortestAngleDiff(roadBearing, rawHeading);
+
+    // If roughly following the road direction (within 55 degrees)
+    if (Math.abs(angleDiff) <= 55) {
+      // Blend 80% road tangent with 20% vehicle steering orientation
+      return (roadBearing + angleDiff * 0.2 + 360) % 360;
+    }
+
+    // If making a sharp corner or U-turn and vehicle is moving
+    if (Math.abs(angleDiff) > 55 && (speedMps > 0.8 || rawHeading > 0)) {
+      return rawHeading;
     }
   }
 
-  return currentSegBearing;
+  return roadBearing;
 };
 
 /**
@@ -342,12 +381,14 @@ export const computeVisualScreenRotation = (
 
 /**
  * Trims completed road segments behind the vehicle and returns the active remaining route.
+ * Guarantees that segments already traveled behind the vehicle are never drawn,
+ * keeping the route cleanly ahead of the vehicle at all times.
  */
 export const trimRouteProgress = (
   routeCoordinates: LatLng[],
   currentLocation: LatLng,
   lastSegmentIndex: number = 0,
-  snapThresholdMeters: number = 25
+  snapThresholdMeters: number = 35
 ): {
   remainingRoute: LatLng[];
   displayLocation: LatLng;
@@ -384,20 +425,27 @@ export const trimRouteProgress = (
     };
   }
 
-  const { minDistance, nearestSegmentIndex, nearestPoint } = getMinDistanceToRoute(currentLocation, routeCoordinates);
+  // Prioritize forward search starting from lastSegmentIndex
+  const { minDistance, nearestSegmentIndex, nearestPoint } = getMinDistanceToRoute(
+    currentLocation,
+    routeCoordinates,
+    lastSegmentIndex,
+    35
+  );
 
   const isSnapped = minDistance <= snapThresholdMeters;
-  // If within snap threshold, map-match the displayed location to the road
   const displayLocation = isSnapped ? nearestPoint : currentLocation;
 
   const p1 = routeCoordinates[nearestSegmentIndex];
   const p2 = routeCoordinates[nearestSegmentIndex + 1] || p1;
   const segmentBearing = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
 
-  // Build remaining forward route: if snapped, starts at snapped point and continues forward
-  const remainingRoute: LatLng[] = isSnapped
-    ? [displayLocation, ...routeCoordinates.slice(nearestSegmentIndex + 1)]
-    : routeCoordinates;
+  // ALWAYS TRIM COMPLETED SEGMENTS BEHIND THE VEHICLE!
+  // The forward active route starts cleanly from the vehicle projection to destination.
+  const remainingRoute: LatLng[] = [
+    nearestPoint,
+    ...routeCoordinates.slice(nearestSegmentIndex + 1),
+  ];
 
   return {
     remainingRoute,

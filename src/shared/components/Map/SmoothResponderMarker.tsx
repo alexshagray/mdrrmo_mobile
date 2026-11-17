@@ -211,12 +211,14 @@ export const SmoothResponderMarker: React.FC<SmoothResponderMarkerProps> = React
         anchor={{ x: 0.5, y: 0.5 }}
         selected={true}
       >
-        <View style={styles.markerContainer} pointerEvents="none">
+        <View style={[styles.markerContainer, { width: size, height: size }]} pointerEvents="none">
           <ResponderNavigationArrow heading={renderHeading} size={size} />
           {label ? (
-            <View style={styles.labelPill}>
-              <View style={styles.liveDot} />
-              <Text style={styles.labelText}>{label}</Text>
+            <View style={styles.labelWrapper} pointerEvents="none">
+              <View style={styles.labelPill}>
+                <View style={styles.liveDot} />
+                <Text style={styles.labelText}>{label}</Text>
+              </View>
             </View>
           ) : null}
         </View>
@@ -232,8 +234,16 @@ const styles = StyleSheet.create({
     zIndex: 9999,
     elevation: 20,
   },
-  labelPill: {
+  labelWrapper: {
+    position: 'absolute',
+    top: '100%',
     marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 140,
+    zIndex: 10000,
+  },
+  labelPill: {
     backgroundColor: 'rgba(15, 23, 42, 0.92)',
     paddingVertical: 3,
     paddingHorizontal: 8,
