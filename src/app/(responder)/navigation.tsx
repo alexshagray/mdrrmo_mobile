@@ -113,6 +113,7 @@ export default function NavigationScreen() {
   const isFollowingRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeRouteRef = useRef<LatLng[]>([]);
+  const currentSegmentIndexRef = useRef<number>(0);
   const latestSnappedLocationRef = useRef<LatLng | null>(null);
   const currentSpeedRef = useRef<number>(0);
 
@@ -263,6 +264,7 @@ export default function NavigationScreen() {
 
         if (result && result.coordinates.length >= 2) {
           activeRouteRef.current = result.coordinates;
+          currentSegmentIndexRef.current = 0;
           setRouteCoords(result.coordinates);
           setRouteInfo({
             distance: result.distanceFormatted,
@@ -429,14 +431,21 @@ export default function NavigationScreen() {
             }
 
             // 3. DYNAMIC ROAD SNAPPING, PROGRESS TRIMMING & ROUTE LOOKAHEAD
-            const currentActiveRoute = activeRouteRef.current;
+            const masterRoute = activeRouteRef.current;
             let finalLocation = currentRaw;
 
-            if (currentActiveRoute.length >= 2) {
-              // Project onto route with 25m threshold
-              const trimResult = trimRouteProgress(currentActiveRoute, currentRaw, 0, 25);
+            if (masterRoute.length >= 2) {
+              // Project onto master route with search window around current progress index
+              const trimResult = trimRouteProgress(
+                masterRoute,
+                currentRaw,
+                currentSegmentIndexRef.current,
+                30
+              );
 
               if (trimResult.isSnapped) {
+                // Update progress index (allows stepping back smoothly if reversing or walking backwards)
+                currentSegmentIndexRef.current = trimResult.segmentIndex;
                 finalLocation = trimResult.displayLocation;
                 latestSnappedLocationRef.current = trimResult.displayLocation;
                 setDisplayedLocation(trimResult.displayLocation);
@@ -444,7 +453,7 @@ export default function NavigationScreen() {
                 // 1. CALCULATE ROAD-ALIGNED BEARING (Smooth turns, curves, intersections, and U-turns)
                 const roadAlignedBearing = calculateSmoothRouteBearing(
                   finalLocation,
-                  currentActiveRoute,
+                  masterRoute,
                   trimResult.segmentIndex,
                   loc.coords.heading,
                   currentSpeed,
@@ -453,11 +462,11 @@ export default function NavigationScreen() {
                 targetHeading = roadAlignedBearing;
                 lastReliableHeadingRef.current = roadAlignedBearing;
 
-                // 2. TRIM COMPLETED ROUTE BEHIND VEHICLE & OFFSET VISIBLE LINE FORWARD
-                // Offset start by 5.5m so line never overlaps or runs through arrow center or tip!
-                activeRouteRef.current = trimResult.remainingRoute;
+                // 2. OFFSET VISIBLE LINE FORWARD FOR DISPLAY ONLY (NEVER MUTATE OR TRUNCATE MASTER ROUTE!)
                 const visibleRoute = getVisuallyOffsetRemainingRoute(trimResult.remainingRoute, 5.5);
-                setRouteCoords(visibleRoute);
+                if (visibleRoute.length >= 2) {
+                  setRouteCoords(visibleRoute);
+                }
                 deviationCounterRef.current = 0;
 
                 // Update remaining route distance and ETA along road path
@@ -485,14 +494,14 @@ export default function NavigationScreen() {
                 setDisplayedLocation(currentRaw);
 
                 // 4. INTELLIGENT REROUTING HYSTERESIS
-                const isOffRoute = trimResult.crossTrackDistance > 32;
-                const canRecalculate = now - lastRecalcTimeRef.current > 4000 && !isCalculatingRef.current;
+                const isOffRoute = trimResult.crossTrackDistance > 40;
+                const canRecalculate = now - lastRecalcTimeRef.current > 5000 && !isCalculatingRef.current;
 
                 if (isOffRoute) {
                   deviationCounterRef.current += 1;
 
-                  // Trigger recalculation if off-route for 2 fixes (>32m) or immediately if far off (>50m)
-                  if ((deviationCounterRef.current >= 2 || trimResult.crossTrackDistance > 50) && canRecalculate) {
+                  // Trigger recalculation if off-route for at least 3 consecutive fixes (>40m) or immediately if far off (>65m)
+                  if ((deviationCounterRef.current >= 3 || trimResult.crossTrackDistance > 65) && canRecalculate) {
                     console.log(`[Navigation] Off-route by ${Math.round(trimResult.crossTrackDistance)}m. Recalculating path...`);
                     lastRecalcTimeRef.current = now;
                     deviationCounterRef.current = 0;
@@ -507,7 +516,7 @@ export default function NavigationScreen() {
               latestSnappedLocationRef.current = currentRaw;
               setDisplayedLocation(currentRaw);
 
-              if (!isCalculatingRef.current && now - lastRecalcTimeRef.current > 4000) {
+              if (!isCalculatingRef.current && now - lastRecalcTimeRef.current > 5000) {
                 lastRecalcTimeRef.current = now;
                 calculateRoute(currentRaw.latitude, currentRaw.longitude, destination.latitude, destination.longitude);
               }
