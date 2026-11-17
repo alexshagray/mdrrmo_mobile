@@ -42,6 +42,7 @@ import {
   Settings,
   Check,
   LifeBuoy,
+  CloudRain,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -71,64 +72,122 @@ export interface EmergencyTypeItem {
 const DEFAULT_TYPES: EmergencyTypeItem[] = [
   {
     id: 1,
-    label: 'Medical',
+    label: 'Medical Emergency',
     icon: Stethoscope,
     color: '#059669',
     bg: '#ECFDF5',
     activeBg: '#059669',
+    description: 'Acute illness, cardiac arrest, difficulty breathing, injury',
   },
   {
     id: 2,
-    label: 'Fire',
+    label: 'Fire Emergency',
     icon: Flame,
-    color: '#EA580C',
-    bg: '#FFF7ED',
-    activeBg: '#EA580C',
+    color: '#DC2626',
+    bg: '#FEF2F2',
+    activeBg: '#DC2626',
+    description: 'Structural, residential, electrical, or chemical fire',
   },
   {
     id: 3,
-    label: 'Accident',
-    icon: Car,
-    color: '#D97706',
-    bg: '#FFFBEB',
-    activeBg: '#D97706',
+    label: 'Severe Weather / Flood',
+    icon: CloudRain,
+    color: '#0284C7',
+    bg: '#F0F9FF',
+    activeBg: '#0284C7',
+    description: 'Flash flood, storm surge, typhoon, river overflow, landslide',
   },
   {
     id: 4,
-    label: 'Crime',
+    label: 'Crime & Security',
     icon: ShieldAlert,
     color: '#7C3AED',
     bg: '#F5F3FF',
     activeBg: '#7C3AED',
+    description: 'Assault, robbery, civil disturbance, security threat',
   },
   {
     id: 5,
     label: 'Search & Rescue',
     icon: LifeBuoy,
-    color: '#2563EB',
-    bg: '#EFF6FF',
-    activeBg: '#2563EB',
+    color: '#D97706',
+    bg: '#FFFBEB',
+    activeBg: '#D97706',
+    description: 'Drowning, trapped persons, collapsed structure, wilderness retrieval',
   },
 ];
 
 const resolveTypeVisual = (name: string) => {
   const lower = (name || '').toLowerCase();
   if (lower.includes('medic') || lower.includes('health') || lower.includes('trauma')) {
-    return { icon: Stethoscope, color: '#059669', bg: '#ECFDF5', activeBg: '#059669', defaultLabel: 'Medical' };
+    return {
+      icon: Stethoscope,
+      color: '#059669',
+      bg: '#ECFDF5',
+      activeBg: '#059669',
+      defaultLabel: 'Medical Emergency',
+      description: 'Acute illness, cardiac, trauma, or injury',
+    };
   }
   if (lower.includes('fire')) {
-    return { icon: Flame, color: '#EA580C', bg: '#FFF7ED', activeBg: '#EA580C', defaultLabel: 'Fire' };
+    return {
+      icon: Flame,
+      color: '#DC2626',
+      bg: '#FEF2F2',
+      activeBg: '#DC2626',
+      defaultLabel: 'Fire Emergency',
+      description: 'Structural, residential, or brush fire',
+    };
   }
+  if (lower.includes('weather') || lower.includes('flood') || lower.includes('storm') || lower.includes('rain') || lower.includes('typhoon') || lower.includes('landslide')) {
+    return {
+      icon: CloudRain,
+      color: '#0284C7',
+      bg: '#F0F9FF',
+      activeBg: '#0284C7',
+      defaultLabel: 'Severe Weather / Flood',
+      description: 'Flash flood, storm surge, or landslide danger',
+    };
+  }
+  if (lower.includes('crime') || lower.includes('secur') || lower.includes('violen') || lower.includes('assault') || lower.includes('threat')) {
+    return {
+      icon: ShieldAlert,
+      color: '#7C3AED',
+      bg: '#F5F3FF',
+      activeBg: '#7C3AED',
+      defaultLabel: 'Crime & Security',
+      description: 'Assault, robbery, civil threat, or disturbance',
+    };
+  }
+  if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water') || lower.includes('retriev') || lower.includes('lost') || lower.includes('trap')) {
+    return {
+      icon: LifeBuoy,
+      color: '#D97706',
+      bg: '#FFFBEB',
+      activeBg: '#D97706',
+      defaultLabel: 'Search & Rescue',
+      description: 'Water rescue, trapped persons, or lost hikers',
+    };
+  }
+  // Fallback if older database record still says "Vehicular Accident"
   if (lower.includes('accident') || lower.includes('vehic') || lower.includes('crash') || lower.includes('traffic')) {
-    return { icon: Car, color: '#D97706', bg: '#FFFBEB', activeBg: '#D97706', defaultLabel: 'Accident' };
+    return {
+      icon: LifeBuoy,
+      color: '#D97706',
+      bg: '#FFFBEB',
+      activeBg: '#D97706',
+      defaultLabel: 'Search & Rescue',
+      description: 'Trapped individuals, road extraction, and rescue',
+    };
   }
-  if (lower.includes('crime') || lower.includes('violen') || lower.includes('assault')) {
-    return { icon: ShieldAlert, color: '#7C3AED', bg: '#F5F3FF', activeBg: '#7C3AED', defaultLabel: 'Crime' };
-  }
-  if (lower.includes('search') || lower.includes('rescue') || lower.includes('drown') || lower.includes('water')) {
-    return { icon: LifeBuoy, color: '#2563EB', bg: '#EFF6FF', activeBg: '#2563EB', defaultLabel: 'Search & Rescue' };
-  }
-  return { icon: AlertTriangle, color: '#0284C7', bg: '#F0F9FF', activeBg: '#0284C7', defaultLabel: name };
+  return {
+    icon: AlertTriangle,
+    color: '#0284C7',
+    bg: '#F0F9FF',
+    activeBg: '#0284C7',
+    defaultLabel: name,
+    description: 'Emergency response and dispatch assistance',
+  };
 };
 
 // ─── Section label ────────────────────────────────────────────────────────────
@@ -146,16 +205,18 @@ function TypeCard({
   type,
   selected,
   onPress,
+  isFullWidth = false,
 }: {
   type: EmergencyTypeItem;
   selected: boolean;
   onPress: () => void;
+  isFullWidth?: boolean;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const IconComponent = type.icon;
 
   const handlePressIn = () =>
-    Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 35 }).start();
+    Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 35 }).start();
   const handlePressOut = () =>
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 25 }).start();
 
@@ -168,12 +229,13 @@ function TypeCard({
         onPressOut={handlePressOut}
         style={[
           styles.typeCard,
+          isFullWidth && styles.typeCardFullWidth,
           selected
             ? {
                 backgroundColor: type.activeBg,
                 borderColor: type.activeBg,
                 shadowColor: type.activeBg,
-                shadowOpacity: 0.25,
+                shadowOpacity: 0.28,
                 shadowRadius: 8,
                 elevation: 4,
               }
@@ -181,8 +243,8 @@ function TypeCard({
                 backgroundColor: '#FFFFFF',
                 borderColor: '#E2E8F0',
                 shadowColor: '#0F172A',
-                shadowOpacity: 0.03,
-                shadowRadius: 4,
+                shadowOpacity: 0.04,
+                shadowRadius: 5,
                 elevation: 1,
               },
         ]}
@@ -190,28 +252,43 @@ function TypeCard({
         <View
           style={[
             styles.typeCardIconContainer,
+            isFullWidth && styles.typeCardIconContainerFull,
             { backgroundColor: selected ? 'rgba(255, 255, 255, 0.22)' : type.bg },
           ]}
         >
           <IconComponent
-            size={20}
+            size={isFullWidth ? 22 : 20}
             color={selected ? '#FFFFFF' : type.color}
             strokeWidth={2.4}
           />
         </View>
 
-        <Text
-          numberOfLines={3}
-          style={[
-            styles.typeCardLabel,
-            { color: selected ? '#FFFFFF' : '#0F172A' },
-          ]}
-        >
-          {type.label}
-        </Text>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.typeCardLabel,
+              isFullWidth && styles.typeCardLabelFull,
+              { color: selected ? '#FFFFFF' : '#0F172A' },
+            ]}
+          >
+            {type.label}
+          </Text>
+          {isFullWidth && type.description ? (
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.typeCardSublabel,
+                { color: selected ? 'rgba(255, 255, 255, 0.9)' : '#64748B' },
+              ]}
+            >
+              {type.description}
+            </Text>
+          ) : null}
+        </View>
 
         {selected && (
-          <View style={styles.typeCardCheck}>
+          <View style={[styles.typeCardCheck, isFullWidth && styles.typeCardCheckFull]}>
             <Check size={12} color="#FFFFFF" strokeWidth={3} />
           </View>
         )}
@@ -328,16 +405,36 @@ export default function ReportScreen() {
       try {
         const types = await getIncidentTypesApi();
         if (isMounted && Array.isArray(types) && types.length > 0) {
-          const mapped: EmergencyTypeItem[] = types.map((t: any) => {
+          // Standard target order requested by user:
+          // 1. Medical Emergency
+          // 2. Fire Emergency
+          // 3. Severe Weather / Flood
+          // 4. Crime & Security
+          // 5. Search & Rescue
+          const getOrderScore = (name: string): number => {
+            const l = (name || '').toLowerCase();
+            if (l.includes('medic') || l.includes('health')) return 1;
+            if (l.includes('fire')) return 2;
+            if (l.includes('weather') || l.includes('flood') || l.includes('storm')) return 3;
+            if (l.includes('crime') || l.includes('secur') || l.includes('violen')) return 4;
+            if (l.includes('search') || l.includes('rescue') || l.includes('water') || l.includes('drown') || l.includes('accident')) return 5;
+            return 99;
+          };
+
+          const sortedTypes = [...types].sort((a: any, b: any) => {
+            return getOrderScore(a.incident_type_name) - getOrderScore(b.incident_type_name);
+          });
+
+          const mapped: EmergencyTypeItem[] = sortedTypes.map((t: any) => {
             const visual = resolveTypeVisual(t.incident_type_name);
             return {
               id: t.id,
-              label: t.incident_type_name || visual.defaultLabel,
+              label: visual.defaultLabel || t.incident_type_name,
               icon: visual.icon,
               color: visual.color,
               bg: visual.bg,
               activeBg: visual.activeBg,
-              description: t.type_description,
+              description: t.type_description || visual.description,
             };
           });
           setEmergencyTypes(mapped);
@@ -1484,9 +1581,9 @@ export default function ReportScreen() {
                     type={type}
                     selected={selectedType === type.id}
                     onPress={() => setSelectedType(type.id)}
+                    isFullWidth={row.length === 1}
                   />
                 ))}
-                {row.length === 1 && <View style={{ flex: 1 }} />}
               </View>
             ));
           })()}
@@ -2214,7 +2311,7 @@ const styles = StyleSheet.create({
   typeGrid: {
     gap: 10,
     marginTop: 2,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   typeGridRow: {
     flexDirection: 'row',
@@ -2225,40 +2322,67 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 18,
     borderWidth: 1.5,
-    minHeight: 62,
+    minHeight: 66,
     shadowOffset: { width: 0, height: 2 },
     position: 'relative',
   },
+  typeCardFullWidth: {
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    minHeight: 68,
+  },
   typeCardIconContainer: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 10,
     flexShrink: 0,
   },
+  typeCardIconContainerFull: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    marginRight: 12,
+  },
   typeCardLabel: {
-    flex: 1,
     fontSize: 12.5,
     fontWeight: '700',
-    lineHeight: 16,
+    lineHeight: 16.5,
+    letterSpacing: 0.1,
+  },
+  typeCardLabelFull: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  typeCardSublabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
     letterSpacing: 0.1,
   },
   typeCardCheck: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 7,
+    right: 7,
     width: 18,
     height: 18,
     borderRadius: 9,
     backgroundColor: 'rgba(255, 255, 255, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  typeCardCheckFull: {
+    position: 'relative',
+    top: 0,
+    right: 0,
+    marginLeft: 8,
   },
   typeRow: {
     marginBottom: 4,
