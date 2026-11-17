@@ -45,14 +45,7 @@ export default function DispatchScreen() {
   };
 
   const [userLocation, setUserLocation] = useState<Location.LocationObjectCoords | null>(null);
-  const [cameraHeading, setCameraHeading] = useState<number>(0);
   const { echo } = useRealtime() as { echo: any };
-
-  const handleCameraChanged = useCallback((e: any) => {
-    if (typeof e?.properties?.heading === 'number' && !isNaN(e.properties.heading)) {
-      setCameraHeading(e.properties.heading);
-    }
-  }, []);
 
   useEffect(() => {
     if (echo && dispatch && dispatch.incident_id) {
@@ -675,7 +668,6 @@ export default function DispatchScreen() {
           className="flex-1" 
           showsUserLocation={false}
           initialRegion={hasValidCoords ? { latitude: parsedLat, longitude: parsedLng } : undefined}
-          onCameraChanged={handleCameraChanged}
         >
           
           {/* Clean Incident Destination Marker (No Circular Container) */}
@@ -694,7 +686,7 @@ export default function DispatchScreen() {
             <SmoothResponderMarker
               targetLocation={{ latitude: userLocation.latitude, longitude: userLocation.longitude }}
               targetHeading={userLocation.heading || 0}
-              cameraHeading={cameraHeading}
+              cameraHeading={0}
               speed={userLocation.speed || 0}
               accuracy={userLocation.accuracy}
               size={36}

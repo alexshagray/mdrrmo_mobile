@@ -555,14 +555,7 @@ export default function TrackScreen() {
   const [routeCoords, setRouteCoords] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
-  const [cameraHeading, setCameraHeading] = useState<number>(0);
   const lastSegmentIndexRef = useRef<number>(0);
-
-  const handleCameraChanged = useCallback((e: any) => {
-    if (typeof e?.properties?.heading === 'number' && !isNaN(e.properties.heading)) {
-      setCameraHeading(e.properties.heading);
-    }
-  }, []);
 
   // Arrival Alarm & Notification State
   const [showArrivalModal, setShowArrivalModal] = useState(false);
@@ -1110,7 +1103,6 @@ export default function TrackScreen() {
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={hasIncidentCoords ? { latitude: incidentLat, longitude: incidentLng } : undefined}
-        onCameraChanged={handleCameraChanged}
         onTouchStart={() => {
           if (isFollowingAmbulance) {
             setIsFollowingAmbulance(false);
@@ -1180,7 +1172,7 @@ export default function TrackScreen() {
             id="residentTrackAmbulancePuck"
             targetLocation={{ latitude: ambLat!, longitude: ambLng! }}
             targetHeading={effectiveAmbulanceHeading}
-            cameraHeading={cameraHeading}
+            cameraHeading={0}
             size={36}
             label={unitName}
           />

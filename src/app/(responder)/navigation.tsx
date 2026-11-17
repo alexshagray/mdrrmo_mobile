@@ -92,7 +92,6 @@ export default function NavigationScreen() {
   // Navigation State
   const [displayedLocation, setDisplayedLocation] = useState<LatLng | null>(null);
   const [heading, setHeading] = useState<number>(0);
-  const [cameraHeading, setCameraHeading] = useState<number>(0);
   const [routeCoords, setRouteCoords] = useState<LatLng[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -107,7 +106,6 @@ export default function NavigationScreen() {
   const isCalculatingRef = useRef(false);
   const lastRecalcTimeRef = useRef(0);
   const lastReliableHeadingRef = useRef(0);
-  const cameraHeadingRef = useRef(0);
   const lastRawLocationRef = useRef<LatLng | null>(null);
   const lastRawTimestampRef = useRef<number>(0);
   const deviationCounterRef = useRef(0);
@@ -125,10 +123,6 @@ export default function NavigationScreen() {
   useEffect(() => {
     isFollowingRef.current = isFollowing;
   }, [isFollowing]);
-
-  useEffect(() => {
-    activeRouteRef.current = routeCoords;
-  }, [routeCoords]);
 
   // Proximity to scene: must be within 50 meters of the incident pin based on real GPS
   const distanceToScene = displayedLocation
@@ -319,15 +313,6 @@ export default function NavigationScreen() {
     if (isFollowingRef.current) {
       setIsFollowing(false);
       isFollowingRef.current = false;
-    }
-  }, []);
-
-  // Synchronize live map camera heading for arrow rotation compensation
-  const handleCameraChanged = useCallback((state: any) => {
-    const h = state?.properties?.heading;
-    if (typeof h === 'number' && !isNaN(h)) {
-      cameraHeadingRef.current = h;
-      setCameraHeading(h);
     }
   }, []);
 
@@ -631,7 +616,6 @@ export default function NavigationScreen() {
           scaleBarPosition={{ top: -9999, left: -9999 }}
           attributionEnabled={false}
           compassEnabled={false}
-          onCameraChanged={handleCameraChanged}
           styleURL={mapStyle === 'satellite' ? MapboxGL.StyleURL.SatelliteStreet : MapboxGL.StyleURL.Dark}
         >
           {/* Active Navigation Route Line matching Screenshot 2 */}
@@ -675,13 +659,13 @@ export default function NavigationScreen() {
             <IncidentLocationPin size={38} />
           </MapboxGL.PointAnnotation>
 
-          {/* 60 FPS Smoothly Interpolated Responder Navigation Marker with Camera Heading Sync */}
+          {/* Smooth Responder Navigation Marker */}
           {displayedLocation && (
             <SmoothResponderMarker
               id="navigationPuck"
               targetLocation={displayedLocation}
               targetHeading={heading}
-              cameraHeading={cameraHeading}
+              cameraHeading={isFpvMode ? heading : 0}
               speed={currentSpeedRef.current}
               accuracy={gpsAccuracyWarning ?? undefined}
               timestamp={lastRawTimestampRef.current}
