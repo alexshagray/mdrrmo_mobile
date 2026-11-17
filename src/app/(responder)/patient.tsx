@@ -11,6 +11,7 @@ import { WebView } from 'react-native-webview';
 import { Check, ChevronRight, ChevronLeft, Search, Save, Activity, Stethoscope, Clock, Truck, FileText, User, Plus, ShieldCheck, Send, MapPin, Navigation, RefreshCw, Lock, AlertTriangle, Camera, Trash2, AlertCircle, UserCheck, UserX, HelpCircle, Edit3, HeartPulse, Printer, Share2, X, CheckCircle2, Users } from 'lucide-react-native';
 import { searchPatients, createPatient, identifyPatient } from '@/shared/api/patients';
 import { getActiveDispatches, updatePcr, submitPcr, deletePcr, createWalkInDispatch, reportUnfoundedDispatch, uploadPcrPhoto } from '@/shared/api/dispatches';
+import { getChiefComplaintsApi } from '@/shared/api/incidents';
 import { useMissionAlarm } from '@/shared/contexts/MissionAlarmContext';
 import { resolveAddressFromCoords, formatPlaceOfIncident } from '@/shared/utils/location';
 import { offlineMissionService } from '@/shared/services/offlineMissionService';
@@ -356,8 +357,27 @@ export default function PatientCareRecordScreen() {
   const cachedWalkInLocRef = useRef<{ latitude: number, longitude: number } | null>(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [complaintSearch, setComplaintSearch] = useState('');
+  const [availableComplaints, setAvailableComplaints] = useState<string[]>(CHIEF_COMPLAINTS);
   const [isResolvingLocation, setIsResolvingLocation] = useState(false);
   const { missionRefreshTrigger } = useMissionAlarm();
+
+  // Load dynamic chief complaints from database API
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const data = await getChiefComplaintsApi();
+        if (isMounted && data?.all && Array.isArray(data.all) && data.all.length > 0) {
+          setAvailableComplaints(Array.from(new Set([...CHIEF_COMPLAINTS, ...data.all])).sort());
+        }
+      } catch (err) {
+        // Fallback gracefully to static CHIEF_COMPLAINTS
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Unidentified Patient selection modal state
   const [showUnidentifiedModal, setShowUnidentifiedModal] = useState(false);
@@ -4531,7 +4551,7 @@ export default function PatientCareRecordScreen() {
                 onChangeText={setComplaintSearch}
               />
               <ScrollView style={{ marginTop: 8 }}>
-                {CHIEF_COMPLAINTS.filter(c => c.toLowerCase().includes(complaintSearch.toLowerCase())).map((complaint, index) => (
+                {availableComplaints.filter(c => c.toLowerCase().includes(complaintSearch.toLowerCase())).map((complaint, index) => (
                   <TouchableOpacity
                     key={index}
                     style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}

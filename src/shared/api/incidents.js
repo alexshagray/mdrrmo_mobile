@@ -49,6 +49,16 @@ export const getIncidentTypesApi = async () => {
   }
 };
 
+export const getChiefComplaintsApi = async () => {
+  try {
+    const response = await apiClient.get('/chief-complaints');
+    return response.data;
+  } catch (e) {
+    console.warn('Failed to fetch chief complaints from server:', e);
+    return null;
+  }
+};
+
 export const submitEmergencyReport = async (formData) => {
   const response = await apiClient.post('/resident/incidents', formData, {
     headers: {
