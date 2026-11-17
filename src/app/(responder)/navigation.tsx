@@ -272,6 +272,19 @@ export default function NavigationScreen() {
           });
           deviationCounterRef.current = 0;
 
+          // Immediately orient arrow forward along the initial road path
+          const startPt = latestSnappedLocationRef.current || { latitude: startLat, longitude: startLng };
+          const initialBearing = calculateSmoothRouteBearing(
+            startPt,
+            result.coordinates,
+            0,
+            null,
+            0,
+            lastReliableHeadingRef.current
+          );
+          lastReliableHeadingRef.current = initialBearing;
+          setHeading(initialBearing);
+
           if (mapRef.current && !isFpvModeRef.current && !isFollowingRef.current) {
             const lats = [startLat, ...result.coordinates.map((c) => c.latitude), destLat];
             const lngs = [startLng, ...result.coordinates.map((c) => c.longitude), destLng];

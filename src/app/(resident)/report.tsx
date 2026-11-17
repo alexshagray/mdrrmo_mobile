@@ -521,30 +521,18 @@ export default function ReportScreen() {
           return false;
         }
 
+        // If dispatches exist, check whether all are completed or cancelled
         if (Array.isArray(inc.dispatches) && inc.dispatches.length > 0) {
-          const hasLiveDispatch = inc.dispatches.some((d: any) =>
-            ['assigned', 'accepted', 'en_route', 'arrived_on_scene'].includes(d.dispatch_status)
+          const allFinished = inc.dispatches.every((d: any) =>
+            ['completed', 'cancelled'].includes(d.dispatch_status)
           );
-          const hasCancelledDispatch = inc.dispatches.some((d: any) => d.dispatch_status === 'cancelled');
-
-          if (hasCancelledDispatch && !hasLiveDispatch) {
+          // If all dispatches are finished and incident itself is not in pending/verified, it is not ongoing
+          if (allFinished && !['pending', 'verified'].includes(inc.incident_status)) {
             return false;
           }
         }
 
-        if (['assigned', 'responding'].includes(inc.incident_status)) {
-          if (
-            inc.active_dispatch &&
-            ['assigned', 'accepted', 'en_route', 'arrived_on_scene'].includes(
-              inc.active_dispatch.dispatch_status
-            )
-          ) {
-            return true;
-          }
-          return false;
-        }
-
-        return ['pending', 'verified'].includes(inc.incident_status);
+        return ['pending', 'verified', 'assigned', 'responding'].includes(inc.incident_status);
       });
 
       if (ongoingActive) {
@@ -919,6 +907,67 @@ export default function ReportScreen() {
             { text: 'Complete Profile', onPress: () => router.push('/(resident)/personal-info') },
           ]
         );
+      } else if (
+        e?.response?.status === 422 &&
+        (e?.response?.data?.message?.includes('active emergency report') || e?.response?.data?.active_incident)
+      ) {
+        const serverActive = e?.response?.data?.active_incident;
+        await fetchIncidents();
+
+        const activeItem = serverActive || allIncidentsRef.current?.find((inc: any) =>
+          ['pending', 'verified', 'assigned', 'responding'].includes(inc.incident_status)
+        );
+
+        const incId = activeItem?.id || serverActive?.id;
+        const incCode = activeItem?.code || (incId ? `INC-2026-${String(incId).padStart(5, '0')}` : 'Active Report');
+        const canCancel = activeItem ? (activeItem.can_cancel ?? ['pending', 'verified'].includes(activeItem.incident_status)) : true;
+
+        Alert.alert(
+          'Active Report In Progress',
+          `You already have an ongoing emergency report (${incCode}). You can track its live response or cancel it if it has already been resolved.`,
+          canCancel && incId
+            ? [
+                {
+                  text: 'Cancel Old Report',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setIsSubmitting(true);
+                      await cancelEmergencyReport(incId, 'Cancelled by resident to file a new report');
+                      await fetchIncidents();
+                      setActiveIncident(null);
+                      Alert.alert(
+                        'Report Cancelled',
+                        'Your previous report has been cancelled. You may now submit your new emergency report.'
+                      );
+                    } catch (err: any) {
+                      Alert.alert('Cancellation Error', err?.response?.data?.message || 'Could not cancel previous report.');
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  },
+                },
+                {
+                  text: 'Track Incident',
+                  style: 'default',
+                  onPress: () => {
+                    if (activeItem) setActiveIncident(activeItem);
+                    router.push('/(resident)/track');
+                  },
+                },
+              ]
+            : [
+                {
+                  text: 'Track Live Mission',
+                  style: 'default',
+                  onPress: () => {
+                    if (activeItem) setActiveIncident(activeItem);
+                    router.push('/(resident)/track');
+                  },
+                },
+                { text: 'Close', style: 'cancel' },
+              ]
+        );
       } else {
         Alert.alert(
           'Submission Failed',
@@ -1232,7 +1281,7 @@ export default function ReportScreen() {
             {isEnRoute && (
               <TouchableOpacity
                 style={styles.trackBtnActive}
-                onPress={() => router.navigate('/track')}
+                onPress={() => router.push('/(resident)/track')}
                 activeOpacity={0.85}
               >
                 <Navigation size={18} color="#FFFFFF" strokeWidth={2.5} />
@@ -1296,18 +1345,44 @@ export default function ReportScreen() {
               <TouchableOpacity
                 style={styles.dismissBtn}
                 onPress={() => {
-                  Alert.alert(
-                    'Report New Emergency',
-                    'If this emergency mission concluded or was handled, you can return to the emergency report form.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Return to Report Form', onPress: () => setActiveIncident(null) }
-                    ]
-                  );
+                  if (canCancel && activeIncident?.id) {
+                    Alert.alert(
+                      'Report New Emergency',
+                      'To report a new emergency, your current pending request will be cancelled. Do you want to cancel it and proceed to the report form?',
+                      [
+                        { text: 'Keep Current Report', style: 'cancel' },
+                        {
+                          text: 'Cancel & Report New',
+                          style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              setIsLoading(true);
+                              await cancelEmergencyReport(activeIncident.id, 'Cancelled by resident to report new emergency');
+                              await fetchIncidents();
+                              setActiveIncident(null);
+                            } catch (err: any) {
+                              Alert.alert('Error', err?.response?.data?.message || 'Failed to cancel current request.');
+                            } finally {
+                              setIsLoading(false);
+                            }
+                          },
+                        },
+                      ]
+                    );
+                  } else {
+                    Alert.alert(
+                      'Active Response In Progress',
+                      'Responders are currently assigned or active on this emergency. Please track the live mission or contact the hotline.',
+                      [
+                        { text: 'Track Incident', onPress: () => router.push('/(resident)/track') },
+                        { text: 'Close', style: 'cancel' },
+                      ]
+                    );
+                  }
                 }}
                 activeOpacity={0.85}
               >
-                <Text style={styles.dismissBtnText}>Dismiss / Report New Emergency</Text>
+                <Text style={styles.dismissBtnText}>Cancel & Report New Emergency</Text>
               </TouchableOpacity>
             )}
           </View>

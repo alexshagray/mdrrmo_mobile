@@ -87,10 +87,11 @@ export const SmoothResponderMarker: React.FC<SmoothResponderMarkerProps> = React
     if (!renderCoord) return null;
 
     return (
-      <MapboxGL.PointAnnotation
+      <MapboxGL.MarkerView
         id={id}
         coordinate={renderCoord}
         anchor={{ x: 0.5, y: 0.5 }}
+        allowOverlap={true}
       >
         <View style={[styles.markerContainer, { width: size, height: size }]} pointerEvents="none">
           <ResponderNavigationArrow heading={renderHeading} size={size} />
@@ -103,7 +104,7 @@ export const SmoothResponderMarker: React.FC<SmoothResponderMarkerProps> = React
             </View>
           ) : null}
         </View>
-      </MapboxGL.PointAnnotation>
+      </MapboxGL.MarkerView>
     );
   }
 );
@@ -112,8 +113,6 @@ const styles = StyleSheet.create({
   markerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 9999,
-    elevation: 20,
   },
   labelWrapper: {
     position: 'absolute',
@@ -122,7 +121,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: 140,
-    zIndex: 10000,
   },
   labelPill: {
     backgroundColor: 'rgba(15, 23, 42, 0.92)',
@@ -133,11 +131,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
   },
   liveDot: {
     width: 6,

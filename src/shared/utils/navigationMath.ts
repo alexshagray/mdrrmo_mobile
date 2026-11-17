@@ -269,15 +269,16 @@ export const findNearestRoadSegment = (
 /**
  * Calculates the exact road-aligned navigation bearing along the active route.
  * - Samples ahead along the route for a stable forward window (16m), eliminating micro-segment noise.
- * - Blends with raw GPS heading when vehicle is moving to accurately follow corners, roundabouts, and U-turns.
- * - Uses shortest-angle math to prevent unnecessary full 360-degree spins.
+ * - Authoritative road alignment: arrow is locked tangent to the route polyline ahead so it always points
+ *   cleanly down the road path and never tilts sideways ("naka ta kilid") due to phone compass tilt or vehicle EMF.
+ * - Uses shortest-angle math to prevent erratic spins.
  * - Remains rock-solid stable when stopped or moving slowly.
  */
 export const calculateSmoothRouteBearing = (
   currentPosition: LatLng,
   routeCoordinates: LatLng[],
   segmentIndex: number,
-  rawHeading: number | null,
+  rawHeading: number | null = null,
   speedMps: number = 0,
   lastReliableHeading: number = 0
 ): number => {
@@ -311,30 +312,27 @@ export const calculateSmoothRouteBearing = (
   }
 
   // Calculate stable forward road bearing
-  const roadBearing = calculateBearing(
-    currentPosition.latitude,
-    currentPosition.longitude,
-    lookAheadPoint.latitude,
-    lookAheadPoint.longitude
-  );
-
-  // If raw GPS heading is available from the responder's device
-  if (typeof rawHeading === 'number' && rawHeading >= 0) {
-    const angleDiff = getShortestAngleDiff(roadBearing, rawHeading);
-
-    // If roughly following the road direction (within 55 degrees)
-    if (Math.abs(angleDiff) <= 55) {
-      // Blend 80% road tangent with 20% vehicle steering orientation
-      return (roadBearing + angleDiff * 0.2 + 360) % 360;
-    }
-
-    // If making a sharp corner or U-turn and vehicle is moving
-    if (Math.abs(angleDiff) > 55 && (speedMps > 0.8 || rawHeading > 0)) {
-      return rawHeading;
-    }
+  let roadBearing: number;
+  if (accumulatedDist >= 0.5) {
+    roadBearing = calculateBearing(
+      currentPosition.latitude,
+      currentPosition.longitude,
+      lookAheadPoint.latitude,
+      lookAheadPoint.longitude
+    );
+  } else {
+    // If vehicle is right on top of lookahead point (e.g. at end of segment or route),
+    // use the bearing of the segment itself
+    const p1 = routeCoordinates[clampedIdx];
+    const p2 = routeCoordinates[clampedIdx + 1];
+    roadBearing = calculateBearing(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
   }
 
-  return roadBearing;
+  // Route-following guarantee:
+  // When snapped to an active road route, the navigation puck MUST always face along
+  // the road polyline forward direction. This completely eliminates sideways tilting
+  // caused by device compass orientation or in-vehicle magnetic interference.
+  return (roadBearing + 360) % 360;
 };
 
 /**

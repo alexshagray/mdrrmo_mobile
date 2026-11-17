@@ -534,7 +534,7 @@ const TrackingLockedState = ({
 };
 
 // ─── Main Map-First Track Screen ───────────────────────────────────────────────
-export default function TrackScreen() {
+function TrackScreenInner() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -542,6 +542,7 @@ export default function TrackScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
   const { residentRefreshTrigger } = useResidentAlert();
   const { echo } = useRealtime() as { echo: any };
 
@@ -736,15 +737,6 @@ export default function TrackScreen() {
             distance: (route.distance / 1000).toFixed(1) + ' km',
             duration: Math.ceil(route.duration / 60) + ' min',
           });
-
-          // Fit route within camera viewport with generous margins
-          if (mapRef.current) {
-            const lats = [startLat, ...coords.map((c) => c.latitude), destLat];
-            const lngs = [startLng, ...coords.map((c) => c.longitude), destLng];
-            const ne = [Math.max(...lngs), Math.max(...lats)];
-            const sw = [Math.min(...lngs), Math.min(...lats)];
-            mapRef.current.fitBounds(ne, sw, [110, 60, SHEET_COLLAPSED_HEIGHT + BOTTOM_NAV_HEIGHT + 40, 60], 1200);
-          }
         }
       } catch (e) {
         console.warn('OSRM Routing Error:', e);
@@ -894,6 +886,204 @@ export default function TrackScreen() {
     }
   }, [isArrived, isEnRoute]);
 
+  // Coordinates (safely evaluated even before activeIncident loads)
+  const incidentLat = activeIncident?.incident_latitude
+    ? parseFloat(activeIncident.incident_latitude)
+    : NaN;
+  const incidentLng = activeIncident?.incident_longitude
+    ? parseFloat(activeIncident.incident_longitude)
+    : NaN;
+  const hasIncidentCoords =
+    !isNaN(incidentLat) && !isNaN(incidentLng) && incidentLat !== 0 && incidentLng !== 0;
+
+  const ambLat =
+    ambulanceCoords?.latitude ||
+    (activeDispatch?.last_latitude ? parseFloat(activeDispatch.last_latitude) : null);
+  const ambLng =
+    ambulanceCoords?.longitude ||
+    (activeDispatch?.last_longitude ? parseFloat(activeDispatch.last_longitude) : null);
+  const hasAmbulanceCoords = ambLat !== null && ambLng !== null && !isNaN(ambLat) && !isNaN(ambLng);
+
+  // Unit & Assigned Ambulance Driver Details
+  const unitName = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
+  const ambulanceDesc =
+    activeDispatch?.ambulance?.vehicle_name ||
+    activeDispatch?.ambulance?.plate_number ||
+    'MDRRMO Vehicle';
+  const driverUser = activeDispatch?.driver;
+  const driverBadge =
+    driverUser?.badge_number ||
+    driverUser?.badge_id ||
+    driverUser?.responder_profile?.badge_number ||
+    (driverUser?.id ? `RSP-${String(driverUser.id).padStart(4, '0')}` : null);
+  const driverDisplayId = driverBadge || (driverUser?.id ? `Responder #${driverUser.id}` : 'MDRRMO Responder');
+  const driverPhone =
+    driverUser?.phone_number ||
+    activeDispatch?.ambulance?.driver?.phone_number ||
+    activeDispatch?.team_leader?.phone_number ||
+    '';
+  const etaDuration = routeInfo?.duration || (isArrived ? 'On Scene' : 'Calculating...');
+  const etaDistance = routeInfo?.distance || '';
+
+  // Camera Actions & Active Responder Auto-Tracking (HOOKS MUST BE TOP-LEVEL)
+  const [isFollowingAmbulance, setIsFollowingAmbulance] = useState(true);
+  const isMapReadyRef = useRef(false);
+  const isInitialMountRef = useRef(true);
+
+  // Initial map center calculation (used by MapView defaultSettings natively)
+  const initialMapCenter = hasAmbulanceCoords && ambLat !== null && ambLng !== null
+    ? { latitude: ambLat, longitude: ambLng }
+    : hasIncidentCoords
+      ? { latitude: incidentLat, longitude: incidentLng }
+      : undefined;
+
+  // Smooth camera tracking: keep ambulance smoothly centered as it drives
+  useEffect(() => {
+    // Avoid calling setCamera during initial mount - defaultSettings handles initial framing natively
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    if (!isMapReadyRef.current) return;
+    if (isFollowingAmbulance && mapRef.current && hasAmbulanceCoords && ambLat !== null && ambLng !== null) {
+      try {
+        mapRef.current.setCamera({
+          centerCoordinate: [ambLng, ambLat],
+          zoomLevel: 16.2,
+          animationDuration: 850,
+          animationMode: 'easeTo',
+        });
+      } catch (e) {
+        // Safe guard against native camera exceptions
+      }
+    }
+  }, [ambLat, ambLng, isFollowingAmbulance, hasAmbulanceCoords]);
+
+  const handleRecenterOnResponder = () => {
+    setIsFollowingAmbulance(true);
+    if (mapRef.current && hasAmbulanceCoords && ambLat !== null && ambLng !== null) {
+      mapRef.current.setCamera({
+        centerCoordinate: [ambLng, ambLat],
+        zoomLevel: 16.5,
+        animationDuration: 850,
+        animationMode: 'easeTo',
+      });
+    } else if (mapRef.current && hasIncidentCoords) {
+      mapRef.current.setCamera({
+        centerCoordinate: [incidentLng, incidentLat],
+        zoomLevel: 15.5,
+        animationDuration: 850,
+        animationMode: 'easeTo',
+      });
+    }
+  };
+
+  const handleFitRouteOverview = () => {
+    setIsFollowingAmbulance(false);
+    if (mapRef.current && hasIncidentCoords && hasAmbulanceCoords && ambLat !== null && ambLng !== null) {
+      try {
+        const lats = [incidentLat, ambLat].filter((n) => typeof n === 'number' && !isNaN(n));
+        const lngs = [incidentLng, ambLng].filter((n) => typeof n === 'number' && !isNaN(n));
+        const ne = [Math.max(...lngs), Math.max(...lats)];
+        const sw = [Math.min(...lngs), Math.min(...lats)];
+        if (Math.abs(ne[0] - sw[0]) < 0.0001 && Math.abs(ne[1] - sw[1]) < 0.0001) {
+          mapRef.current.setCamera({
+            centerCoordinate: [ambLng, ambLat],
+            zoomLevel: 16,
+            animationDuration: 850,
+            animationMode: 'easeTo',
+          });
+          return;
+        }
+        mapRef.current.fitBounds(
+          ne,
+          sw,
+          [110, 60, SHEET_COLLAPSED_HEIGHT + BOTTOM_NAV_HEIGHT + 40, 60],
+          900
+        );
+      } catch (err) {
+        console.warn('fitBounds error:', err);
+      }
+    }
+  };
+
+  // Dial Driver Helper
+  const dialDriverNumber = () => {
+    if (driverPhone) {
+      const cleanNumber = driverPhone.replace(/[^0-9+]/g, '');
+      Linking.openURL(`tel:${cleanNumber}`);
+    } else {
+      Linking.openURL('tel:911');
+    }
+  };
+
+  // Call Responder Flow
+  const handleCallResponder = () => {
+    setIsLocationModalVisible(true);
+  };
+
+  const onAllowLocation = async () => {
+    setIsLocationModalVisible(false);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted' && activeIncident?.id) {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        await callResponderApi(activeIncident.id, location.coords.latitude, location.coords.longitude);
+      }
+    } catch (error) {
+      // ignore
+    } finally {
+      dialDriverNumber();
+    }
+  };
+
+  const onDenyLocation = () => {
+    setIsLocationModalVisible(false);
+    dialDriverNumber();
+  };
+
+  // Dynamic Route Trimming & Road-Aligned Smooth Bearing (HOOK MUST BE TOP-LEVEL)
+  const { visibleRouteCoords, effectiveAmbulanceHeading } = React.useMemo(() => {
+    if (!hasAmbulanceCoords || !routeCoords || routeCoords.length < 2 || ambLat === null || ambLng === null) {
+      return {
+        visibleRouteCoords: routeCoords,
+        effectiveAmbulanceHeading: ambulanceCoords?.heading || 0,
+      };
+    }
+
+    const currentLoc = { latitude: ambLat, longitude: ambLng };
+    const trimResult = trimRouteProgress(
+      routeCoords,
+      currentLoc,
+      lastSegmentIndexRef.current,
+      40
+    );
+
+    if (trimResult.segmentIndex >= lastSegmentIndexRef.current) {
+      lastSegmentIndexRef.current = trimResult.segmentIndex;
+    }
+
+    const smoothBearing = calculateSmoothRouteBearing(
+      currentLoc,
+      routeCoords,
+      trimResult.segmentIndex,
+      ambulanceCoords?.heading ?? null,
+      0,
+      ambulanceCoords?.heading || 0
+    );
+
+    const offsetRoute = getVisuallyOffsetRemainingRoute(trimResult.remainingRoute, 5.5);
+
+    return {
+      visibleRouteCoords: offsetRoute,
+      effectiveAmbulanceHeading: smoothBearing,
+    };
+  }, [hasAmbulanceCoords, ambLat, ambLng, routeCoords, ambulanceCoords?.heading]);
+
+  // ── Render States ─────────────────────────────────────────────────────────
+
   // Loading State
   if (isLoading) {
     return (
@@ -945,239 +1135,83 @@ export default function TrackScreen() {
     );
   }
 
-  // Coordinates
-  const incidentLat = parseFloat(activeIncident.incident_latitude);
-  const incidentLng = parseFloat(activeIncident.incident_longitude);
-  const hasIncidentCoords =
-    !isNaN(incidentLat) && !isNaN(incidentLng) && incidentLat !== 0 && incidentLng !== 0;
-
-  const ambLat =
-    ambulanceCoords?.latitude ||
-    (activeDispatch?.last_latitude ? parseFloat(activeDispatch.last_latitude) : null);
-  const ambLng =
-    ambulanceCoords?.longitude ||
-    (activeDispatch?.last_longitude ? parseFloat(activeDispatch.last_longitude) : null);
-  const hasAmbulanceCoords = ambLat !== null && ambLng !== null && !isNaN(ambLat) && !isNaN(ambLng);
-
-  // Unit & Assigned Ambulance Driver Details
-  const unitName = activeDispatch?.team ? `Unit ${activeDispatch.team}` : 'Response Unit';
-  const ambulanceDesc =
-    activeDispatch?.ambulance?.vehicle_name ||
-    activeDispatch?.ambulance?.plate_number ||
-    'MDRRMO Vehicle';
-  const driverUser = activeDispatch?.driver;
-  const driverBadge =
-    driverUser?.badge_number ||
-    driverUser?.badge_id ||
-    driverUser?.responder_profile?.badge_number ||
-    (driverUser?.id ? `RSP-${String(driverUser.id).padStart(4, '0')}` : null);
-  const driverDisplayId = driverBadge || (driverUser?.id ? `Responder #${driverUser.id}` : 'MDRRMO Responder');
-  const driverPhone =
-    driverUser?.phone_number ||
-    activeDispatch?.ambulance?.driver?.phone_number ||
-    activeDispatch?.team_leader?.phone_number ||
-    '';
-  const etaDuration = routeInfo?.duration || (isArrived ? 'On Scene' : 'Calculating...');
-  const etaDistance = routeInfo?.distance || '';
-
-  // Camera Actions & Active Responder Auto-Tracking
-  const [isFollowingAmbulance, setIsFollowingAmbulance] = useState(true);
-
-  // Smooth camera tracking: keep ambulance smoothly centered as it drives
-  useEffect(() => {
-    if (isFollowingAmbulance && mapRef.current && hasAmbulanceCoords) {
-      mapRef.current.setCamera({
-        centerCoordinate: [ambLng!, ambLat!],
-        zoomLevel: 16.2,
-        animationDuration: 850,
-      });
-    }
-  }, [ambLat, ambLng, isFollowingAmbulance, hasAmbulanceCoords]);
-
-  const handleRecenterOnResponder = () => {
-    setIsFollowingAmbulance(true);
-    if (mapRef.current && hasAmbulanceCoords) {
-      mapRef.current.setCamera({
-        centerCoordinate: [ambLng!, ambLat!],
-        zoomLevel: 16.5,
-        animationDuration: 900,
-      });
-    }
-  };
-
-  const handleFitRouteOverview = () => {
-    setIsFollowingAmbulance(false);
-    if (mapRef.current && hasIncidentCoords && hasAmbulanceCoords) {
-      const lats = [incidentLat, ambLat!];
-      const lngs = [incidentLng, ambLng!];
-      const ne = [Math.max(...lngs), Math.max(...lats)];
-      const sw = [Math.min(...lngs), Math.min(...lats)];
-      mapRef.current.fitBounds(
-        ne,
-        sw,
-        [110, 60, SHEET_COLLAPSED_HEIGHT + BOTTOM_NAV_HEIGHT + 40, 60],
-        1000
-      );
-    }
-  };
-
-  // Dial Driver Helper
-  const dialDriverNumber = () => {
-    if (driverPhone) {
-      const cleanNumber = driverPhone.replace(/[^0-9+]/g, '');
-      Linking.openURL(`tel:${cleanNumber}`);
-    } else {
-      Linking.openURL('tel:911');
-    }
-  };
-
-  // Call Responder Flow
-  const handleCallResponder = () => {
-    setIsLocationModalVisible(true);
-  };
-
-  const onAllowLocation = async () => {
-    setIsLocationModalVisible(false);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        await callResponderApi(activeIncident.id, location.coords.latitude, location.coords.longitude);
-      }
-    } catch (error) {
-      // ignore
-    } finally {
-      dialDriverNumber();
-    }
-  };
-
-  const onDenyLocation = () => {
-    setIsLocationModalVisible(false);
-    dialDriverNumber();
-  };
-
-  // Dynamic Route Trimming & Road-Aligned Smooth Bearing
-  const { visibleRouteCoords, effectiveAmbulanceHeading } = React.useMemo(() => {
-    if (!hasAmbulanceCoords || !routeCoords || routeCoords.length < 2) {
-      return {
-        visibleRouteCoords: routeCoords,
-        effectiveAmbulanceHeading: ambulanceCoords?.heading || 0,
-      };
-    }
-
-    const currentLoc = { latitude: ambLat!, longitude: ambLng! };
-    const trimResult = trimRouteProgress(
-      routeCoords,
-      currentLoc,
-      lastSegmentIndexRef.current,
-      40
-    );
-
-    if (trimResult.segmentIndex >= lastSegmentIndexRef.current) {
-      lastSegmentIndexRef.current = trimResult.segmentIndex;
-    }
-
-    const smoothBearing = calculateSmoothRouteBearing(
-      currentLoc,
-      routeCoords,
-      trimResult.segmentIndex,
-      ambulanceCoords?.heading ?? null,
-      0,
-      ambulanceCoords?.heading || 0
-    );
-
-    const offsetRoute = getVisuallyOffsetRemainingRoute(trimResult.remainingRoute, 5.5);
-
-    return {
-      visibleRouteCoords: offsetRoute,
-      effectiveAmbulanceHeading: smoothBearing,
-    };
-  }, [hasAmbulanceCoords, ambLat, ambLng, routeCoords, ambulanceCoords?.heading]);
-
   return (
     <View style={styles.container}>
       {/* ─── 1. FULLSCREEN MAP (PRIMARY FOCUS) ─── */}
-      <MapView
-        ref={mapRef}
+      <View
         style={StyleSheet.absoluteFill}
-        initialRegion={hasIncidentCoords ? { latitude: incidentLat, longitude: incidentLng } : undefined}
         onTouchStart={() => {
           if (isFollowingAmbulance) {
             setIsFollowingAmbulance(false);
           }
         }}
       >
-        {/* Dual-Layer Navigation Route Line */}
-        {visibleRouteCoords.length > 0 && (
-          <MapboxGL.ShapeSource
-            id="routeSource"
-            shape={{
-              type: 'LineString',
-              coordinates: visibleRouteCoords.map((c) => [c.longitude, c.latitude]),
-            }}
-          >
-            {/* Ambient Glow Route Layer */}
-            <MapboxGL.LineLayer
-              id="routeGlow"
-              style={{
-                lineColor: isArrived ? '#10B981' : '#208AEF',
-                lineWidth: 11,
-                lineCap: 'round',
-                lineJoin: 'round',
-                lineOpacity: 0.28,
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFill}
+          initialRegion={initialMapCenter}
+          onDidFinishLoadingMap={() => {
+            isMapReadyRef.current = true;
+            setIsMapReady(true);
+          }}
+        >
+          {/* Dual-Layer Navigation Route Line */}
+          {isMapReady && visibleRouteCoords && visibleRouteCoords.length >= 2 && (
+            <MapboxGL.ShapeSource
+              id="routeSource"
+              shape={{
+                type: 'LineString',
+                coordinates: visibleRouteCoords.map((c) => [c.longitude, c.latitude]),
               }}
-            />
-            {/* Outer Route Border / Casing for High Contrast */}
-            <MapboxGL.LineLayer
-              id="routeCasing"
-              style={{
-                lineColor: isArrived ? '#064E3B' : '#1E3A8A',
-                lineWidth: 7,
-                lineCap: 'round',
-                lineJoin: 'round',
-                lineOpacity: 0.85,
-              }}
-            />
-            {/* Inner Vibrant Navigation Core */}
-            <MapboxGL.LineLayer
-              id="routeCore"
-              style={{
-                lineColor: isArrived ? '#34D399' : '#60A5FA',
-                lineWidth: 4.5,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-          </MapboxGL.ShapeSource>
-        )}
+            >
+              {/* Outer Route Border / Casing for High Contrast */}
+              <MapboxGL.LineLayer
+                id="routeCasing"
+                style={{
+                  lineColor: isArrived ? '#064E3B' : '#1E3A8A',
+                  lineWidth: 7,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  lineOpacity: 0.85,
+                }}
+              />
+              {/* Inner Vibrant Navigation Core */}
+              <MapboxGL.LineLayer
+                id="routeCore"
+                style={{
+                  lineColor: isArrived ? '#34D399' : '#60A5FA',
+                  lineWidth: 4.5,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            </MapboxGL.ShapeSource>
+          )}
 
-        {/* ─── 2. EMERGENCY / INCIDENT LOCATION MARKER ─── */}
-        {/* ─── 2. CLEAN INCIDENT DESTINATION PIN (NO CIRCULAR CONTAINER) ─── */}
-        {hasIncidentCoords && (
-          <MapboxGL.PointAnnotation
-            id="incident-marker"
-            coordinate={[incidentLng, incidentLat]}
-            title="Emergency Location"
-            anchor={{ x: 0.5, y: 1.0 }}
-          >
-            <IncidentLocationPin size={38} />
-          </MapboxGL.PointAnnotation>
-        )}
+          {/* ─── 2. CLEAN INCIDENT DESTINATION PIN (MarkerView prevents native Android crashes) ─── */}
+          {isMapReady && hasIncidentCoords && (
+            <MapboxGL.MarkerView
+              id="incident-marker"
+              coordinate={[incidentLng, incidentLat]}
+              anchor={{ x: 0.5, y: 1.0 }}
+              allowOverlap={true}
+            >
+              <IncidentLocationPin size={38} />
+            </MapboxGL.MarkerView>
+          )}
 
-        {/* ─── 3. CLEAN RESPONDER NAVIGATION ARROW (SMOOTH 60FPS INTERPOLATION + CAMERA SYNC) ─── */}
-        {hasAmbulanceCoords && (
-          <SmoothResponderMarker
-            id="residentTrackAmbulancePuck"
-            targetLocation={{ latitude: ambLat!, longitude: ambLng! }}
-            targetHeading={effectiveAmbulanceHeading}
-            cameraHeading={0}
-            size={36}
-            label={unitName}
-          />
-        )}
-      </MapView>
+          {/* ─── 3. CLEAN RESPONDER NAVIGATION ARROW (MATCHES RESPONDER APP STABLE ENGINE) ─── */}
+          {isMapReady && hasAmbulanceCoords && (
+            <SmoothResponderMarker
+              id="residentTrackAmbulancePuck"
+              targetLocation={{ latitude: ambLat!, longitude: ambLng! }}
+              targetHeading={effectiveAmbulanceHeading}
+              cameraHeading={0}
+              size={36}
+            />
+          )}
+        </MapView>
+      </View>
 
       {/* ─── 4. COMPACT TOP STATUS PILL (MINIMAL MAP OVERLAY) ─── */}
       <SafeAreaView
@@ -1553,6 +1587,56 @@ export default function TrackScreen() {
         onDeny={onDenyLocation}
       />
     </View>
+  );
+}
+
+class TrackErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error('TrackScreen Error caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#1E293B', borderRadius: 24, padding: 24, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#334155' }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(239, 68, 68, 0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <AlertTriangle size={28} color="#EF4444" />
+            </View>
+            <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', textAlign: 'center', marginBottom: 8 }}>
+              Live Tracking Encountered an Issue
+            </Text>
+            <Text style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center', lineHeight: 18, marginBottom: 20 }}>
+              {this.state.error?.message || 'A temporary error occurred loading live navigation.'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => this.setState({ hasError: false, error: null })}
+              style={{ backgroundColor: '#208AEF', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 16 }}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 14 }}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function TrackScreen() {
+  return (
+    <TrackErrorBoundary>
+      <TrackScreenInner />
+    </TrackErrorBoundary>
   );
 }
 

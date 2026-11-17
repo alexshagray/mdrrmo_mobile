@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import ENV from '../config/env';
+
+const isSSR = Platform.OS === 'web' && typeof window === 'undefined';
 
 const QUEUE_KEY = '@mdrrmo_sync_queue_v2';
 const ID_MAPPINGS_KEY = '@mdrrmo_sync_id_mappings';
@@ -31,6 +34,7 @@ class OfflineSyncService {
   }
 
   private async init() {
+    if (isSSR) return;
     try {
       const last = await AsyncStorage.getItem('@mdrrmo_last_sync_timestamp');
       if (last) this.lastSyncTime = parseInt(last, 10);
@@ -77,6 +81,7 @@ class OfflineSyncService {
    * Get all operations currently in the persistent queue
    */
   public async getQueue(): Promise<SyncOperation[]> {
+    if (isSSR) return [];
     try {
       const raw = await AsyncStorage.getItem(QUEUE_KEY);
       return raw ? JSON.parse(raw) : [];

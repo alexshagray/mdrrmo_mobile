@@ -31,12 +31,11 @@ export const MapView = forwardRef<MapboxGL.Camera, MapViewProps>(({
     <View style={[StyleSheet.absoluteFill, { width: '100%', height: '100%', flex: 1 }, style]}>
       <MapboxGL.MapView
         style={{ flex: 1 }}
-        styleURL={MapboxGL.StyleURL.Street}
-        logoEnabled={false} // Clean UI, no logo spam (Mapbox allows this for paid/internal, but we can disable the large one)
+        styleURL={props.styleURL || MapboxGL.StyleURL.Street}
+        logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
-        scaleBarPosition={{ top: -9999, left: -9999 }}
         {...props}
       >
         <MapboxGL.Camera
@@ -45,8 +44,8 @@ export const MapView = forwardRef<MapboxGL.Camera, MapViewProps>(({
             centerCoordinate: defaultCenter,
             zoomLevel: 15,
           }}
-          animationMode="flyTo"
-          animationDuration={1500}
+          animationMode="easeTo"
+          animationDuration={900}
         />
         {showsUserLocation && (
           <MapboxGL.UserLocation visible={true} showsUserHeadingIndicator={true} />
