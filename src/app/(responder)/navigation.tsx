@@ -23,7 +23,7 @@ import {
   ArrowLeft,
   Settings,
   RefreshCw,
-  Map as MapIcon,
+  Crosshair,
   Layers,
   Compass,
   AlertTriangle,
@@ -594,21 +594,6 @@ export default function NavigationScreen() {
     };
   }, [calculateRoute, destination.latitude, destination.longitude]);
 
-  // Overview Fit Bounds (displays complete path from vehicle to incident)
-  const handleOverview = useCallback(() => {
-    setIsFollowing(false);
-    isFollowingRef.current = false;
-    setIsFpvMode(false);
-    isFpvModeRef.current = false;
-
-    if (mapRef.current && routeCoords.length > 0 && displayedLocation) {
-      const lats = [displayedLocation.latitude, ...routeCoords.map((c) => c.latitude), destination.latitude];
-      const lngs = [displayedLocation.longitude, ...routeCoords.map((c) => c.longitude), destination.longitude];
-      const ne = [Math.max(...lngs), Math.max(...lats)];
-      const sw = [Math.min(...lngs), Math.min(...lats)];
-      mapRef.current.fitBounds(ne, sw, [110, 40, 310, 40], 1000);
-    }
-  }, [displayedLocation, routeCoords, destination]);
 
   // Toggle First-Person Perspective (FPV 3D Mode)
   const toggleFpv = useCallback(() => {
@@ -793,15 +778,17 @@ export default function NavigationScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Overview Fit Bounds Button */}
-        <TouchableOpacity
-          onPress={handleOverview}
-          activeOpacity={0.8}
-          style={[styles.floatingButton, !isFpvMode && !isFollowing ? styles.floatingButtonActive : null]}
-          accessibilityLabel="Fit route overview"
-        >
-          <MapIcon size={20} color={!isFpvMode && !isFollowing ? '#FFFFFF' : '#CBD5E1'} />
-        </TouchableOpacity>
+        {/* Re-center / Resume Follow Button (Shown when responder zoomed out or panned) */}
+        {!isFollowing && (
+          <TouchableOpacity
+            onPress={handleRecenter}
+            activeOpacity={0.85}
+            style={[styles.floatingButton, styles.recenterFloatingButton]}
+            accessibilityLabel="Re-center on vehicle"
+          >
+            <Crosshair size={22} color="#FFFFFF" strokeWidth={2.4} />
+          </TouchableOpacity>
+        )}
 
         {/* 3D FPV Perspective Mode Button */}
         <TouchableOpacity
@@ -1239,6 +1226,15 @@ const styles = StyleSheet.create({
   floatingButtonActive: {
     backgroundColor: '#10B981',
     borderColor: '#059669',
+  },
+  recenterFloatingButton: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
   },
 
   // Bottom Navigation Panel
