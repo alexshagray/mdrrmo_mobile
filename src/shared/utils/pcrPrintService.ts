@@ -556,26 +556,79 @@ export function generatePcrHtml({ formData, activeDispatch, pcrPhotos = [] }: Pc
       font-size: 8.5pt;
       margin-bottom: 2px;
     }
+    .witness-title {
+      text-align: center;
+      font-weight: bold;
+      font-size: 8pt;
+      margin-top: 5px;
+      margin-bottom: 2px;
+      letter-spacing: 0.3px;
+    }
     .waiver-statement {
-      line-height: 1.25;
+      line-height: 1.35;
       text-align: justify;
       margin-bottom: 3px;
+      padding-top: 20px;
+    }
+    .patient-sig-name-wrap {
+      position: relative;
+      display: inline-block;
+      min-width: 145px;
+      text-align: center;
+      border-bottom: 1px solid #000;
+      padding: 0 6px;
+      font-weight: bold;
+      vertical-align: baseline;
+    }
+    .patient-sig-overlay {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      max-height: 26px;
+      max-width: 135px;
+      object-fit: contain;
+      display: block;
+      margin-bottom: -2px;
+      pointer-events: none;
+    }
+    .patient-unable-overlay {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-size: 6.5pt;
+      font-weight: bold;
+      color: #b91c1c;
+      font-style: italic;
+      margin-bottom: 1px;
     }
     .waiver-bottom-cols {
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
-      margin-top: 3px;
+      margin-top: 2px;
+      gap: 12px;
     }
     .sig-col {
       width: 48%;
+    }
+    .sig-line-holder {
+      position: relative;
+      border-bottom: 1px solid #000;
+      display: inline-flex;
+      justify-content: center;
+      align-items: flex-end;
+      flex: 1;
+      min-height: 24px;
     }
     .sig-holder-img {
       max-height: 26px;
       max-width: 130px;
       object-fit: contain;
       display: block;
-      margin-bottom: 2px;
+      margin-bottom: -1px;
     }
     .photos-page {
       page-break-before: always;
@@ -654,7 +707,21 @@ export function generatePcrHtml({ formData, activeDispatch, pcrPhotos = [] }: Pc
       </td>
       <td style="width: 14%;">
         <span class="field-name">Age:</span>
-        <span class="field-data">${formData.age ? formData.age : '___'}</span>
+        <span class="field-data">${(() => {
+          if (formData.age !== null && formData.age !== undefined && String(formData.age).trim() !== '') {
+            return formData.age;
+          }
+          const dob = (formData as any).birthdate || (formData as any).patient_birthdate || incident?.resident?.resident_profile?.birthdate;
+          if (!dob) return '___';
+          const birth = new Date(typeof dob === 'string' && dob.includes('-') && !dob.includes('T') ? dob.replace(/-/g, '/') : dob);
+          if (isNaN(birth.getTime())) return '___';
+          const ref = formData.record_date ? new Date(String(formData.record_date).replace(/-/g, '/')) : new Date();
+          const eff = isNaN(ref.getTime()) ? new Date() : ref;
+          let years = eff.getFullYear() - birth.getFullYear();
+          const m = eff.getMonth() - birth.getMonth();
+          if (m < 0 || (m === 0 && eff.getDate() < birth.getDate())) years--;
+          return years >= 0 && years <= 130 ? String(years) : '___';
+        })()}</span>
       </td>
       <td style="width: 10%;">
         <span class="field-name">Male</span> ${box(isMale)}
@@ -664,7 +731,7 @@ export function generatePcrHtml({ formData, activeDispatch, pcrPhotos = [] }: Pc
       </td>
       <td colspan="2">
         <span class="field-name">Caller #:</span>
-        <span class="field-data">${incident.caller_phone_number || formData.contact_number || '_________________'}</span>
+        <span class="field-data">${formData.caller_no || incident.caller_phone_number || incident.resident?.phone_number || formData.contact_number || '_________________'}</span>
       </td>
     </tr>
 
@@ -1001,46 +1068,50 @@ export function generatePcrHtml({ formData, activeDispatch, pcrPhotos = [] }: Pc
   <div class="waiver-wrapper">
     <div class="waiver-title">WAIVER</div>
     <div class="waiver-statement">
-      By signing this form, I <b style="text-decoration: underline; padding: 0 4px;">${patientFullName}</b> is releasing OPOL RESCUE TEAM of any liability and/or medical claim resulting from my decision to refuse care against medical advice.
-    </div>
-
-    <div class="waiver-bottom-cols">
-      <div class="sig-col">
-        <div style="min-height: 28px; display: flex; align-items: flex-end;">
-          ${(() => {
+      By signing this form, I
+      <span class="patient-sig-name-wrap">
+        ${(() => {
             const effectivePatientSig = formData.patient_signature || formData.waiver_signature;
             const isPatientUnableToSign = formData.patient_signature === 'UNABLE_TO_SIGN' || formData.waiver_signature === 'UNABLE_TO_SIGN';
             if (!isPatientUnableToSign && effectivePatientSig && String(effectivePatientSig).startsWith('data:image')) {
-              return `<img src="${effectivePatientSig}" class="sig-holder-img" alt="Patient Signature" />`;
+              return `<img src="${effectivePatientSig}" class="patient-sig-overlay" alt="Patient Signature" />`;
             }
             if (isPatientUnableToSign) {
-              return `<span style="font-size: 7.5pt; font-weight: bold; color: #b91c1c; font-style: italic; margin-bottom: 2px;">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
+              return `<span class="patient-unable-overlay">[ PATIENT UNABLE TO SIGN / UNCONSCIOUS ]</span>`;
             }
             return '';
           })()}
+        ${patientFullName || '&nbsp;'}
+      </span>
+      is releasing OPOL RESCUE TEAM of any liability and/or medical claim resulting from my decision to refuse care against medical advice.
+    </div>
+
+    <div class="witness-title">WITNESS INFORMATION</div>
+
+    <div class="waiver-bottom-cols">
+      <div class="sig-col">
+        <div style="display: flex; align-items: flex-end; gap: 4px; margin-bottom: 3px;">
+          <span class="field-name" style="white-space: nowrap;">SIGNATURE:</span>
+          <span class="sig-line-holder">
+            ${formData.witness_signature && String(formData.witness_signature).startsWith('data:image')
+              ? `<img src="${formData.witness_signature}" class="sig-holder-img" alt="Witness Signature" />`
+              : ''}
+          </span>
         </div>
-        <div style="margin-bottom: 2px;">
-          <span class="field-name">SIGNATURE:</span>
-          <span style="border-bottom: 1px solid #000; display: inline-block; width: 140px;"></span>
-        </div>
-        <div>
-          <span class="field-name">DATE:</span>
-          <span style="border-bottom: 1px solid #000; display: inline-block; width: 170px; font-weight: bold; padding-left: 4px;">
+        <div style="display: flex; align-items: flex-end; gap: 4px;">
+          <span class="field-name" style="white-space: nowrap;">DATE:</span>
+          <span style="border-bottom: 1px solid #000; flex: 1; font-weight: bold; padding-left: 4px;">
             ${formatMoDayYr(formData.record_date)}
           </span>
         </div>
       </div>
 
       <div class="sig-col">
-        <span class="field-name" style="display: block; margin-bottom: 2px;">WITNESS INFORMATION</span>
-        <div style="margin-bottom: 2px;">
-          <span class="field-name">NAME:</span>
-          <span style="border-bottom: 1px solid #000; display: inline-block; width: 185px; font-weight: bold; padding-left: 4px;">
+        <div style="display: flex; align-items: flex-end; gap: 4px;">
+          <span class="field-name" style="white-space: nowrap;">NAME:</span>
+          <span style="border-bottom: 1px solid #000; flex: 1; font-weight: bold; padding-left: 4px;">
             ${formData.witness_name || ''}
           </span>
-        </div>
-        <div style="min-height: 25px; display: flex; align-items: flex-end;">
-          ${formData.witness_signature && String(formData.witness_signature).startsWith('data:image') ? `<img src="${formData.witness_signature}" class="sig-holder-img" alt="Witness Signature" />` : ''}
         </div>
       </div>
     </div>
