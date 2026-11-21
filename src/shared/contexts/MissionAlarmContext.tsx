@@ -156,7 +156,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
         if (
           status?.didJustFinish ||
-          (!status?.playing && status?.currentTime > 0 && status?.currentTime >= ((status?.duration || 4.5) - 0.25))
+          (!status?.playing && status?.currentTime > 0 && status?.currentTime >= ((status?.duration || 52) - 0.3))
         ) {
           try {
             player.seekTo(0);
@@ -479,15 +479,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
     // Cold-start notification handling: when opened by tapping an emergency notification
     notificationService.checkInitialNotification((response: any) => {
+      console.log('[MissionAlarmContext] 📱 Cold-start notification tapped by responder:', response);
       const data = response?.notification?.request?.content?.data;
       const rawDispatchId = data?.dispatch_id || data?.id;
       if (rawDispatchId) {
         const dispatchId = Number(rawDispatchId);
         if (!acknowledgedMissionIds.current.has(dispatchId)) {
           startLoopingAlarm(dispatchId, data);
-        } else {
-          router.navigate('/(responder)/dispatch');
         }
+        // Direct the user immediately to the mission dispatch screen!
+        setTimeout(() => {
+          try {
+            router.navigate('/(responder)/dispatch');
+          } catch (_) {
+            router.replace('/(responder)/dispatch');
+          }
+        }, 150);
       }
     });
 
@@ -499,6 +506,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   // Handle Foreground Notifications and User Taps
   useEffect(() => {
     const handleNotificationPayload = (data: any, isTap: boolean = false) => {
+      console.log(`[MissionAlarmContext] Notification payload received (isTap = ${isTap}):`, data);
       const isDispatchAlert =
         data?.type === 'dispatch_assigned' ||
         data?.type === 'dispatch_reassigned' ||
@@ -512,8 +520,15 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       if (isDispatchAlert && dispatchId) {
         if (!acknowledgedMissionIds.current.has(dispatchId)) {
           startLoopingAlarm(dispatchId, data);
-        } else if (isTap) {
-          router.navigate('/(responder)/dispatch');
+        }
+        // When user taps the notification banner: DIRECT IMMEDIATELY TO MISSION DETAILS
+        if (isTap) {
+          console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! Directing to /(responder)/dispatch for dispatch #${dispatchId}`);
+          try {
+            router.navigate('/(responder)/dispatch');
+          } catch (_) {
+            router.replace('/(responder)/dispatch');
+          }
         }
       } else if (data?.type === 'dispatch_cancelled' || data?.event_type === 'dispatch_cancelled') {
         stopSirenAndVibration();
