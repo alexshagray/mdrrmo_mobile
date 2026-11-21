@@ -157,7 +157,7 @@ export default function DispatchScreen() {
     }
   }, [dispatch, isLoading]);
 
-  const { missionRefreshTrigger, clearMission, acknowledgeMission, stopAlarm } = useMissionAlarm();
+  const { missionRefreshTrigger, clearMission, acknowledgeMission, stopAlarm, silenceMission } = useMissionAlarm();
   const hasLoadedRef = useRef(false);
   const autoAcknowledgedIdsRef = useRef<Set<number>>(new Set());
 
@@ -171,10 +171,12 @@ export default function DispatchScreen() {
         const activeItem = data.data[0];
         setDispatch(activeItem);
 
-        // Auto-acknowledgment handshake (Requirements 2, 3, & 6):
-        // Automatically acknowledge the incident once the Mission Details screen has successfully loaded.
-        // Stop the looping alarm ONLY after the backend confirms that the assigned incident has been acknowledged.
         const activeId = Number(activeItem.id);
+        // Responder is currently on the Mission Details screen: stop and silence the alarm
+        if (typeof stopAlarm === 'function') {
+          stopAlarm(activeId);
+        }
+
         if (
           activeId &&
           activeItem.dispatch_status === 'assigned' &&
@@ -195,14 +197,14 @@ export default function DispatchScreen() {
                     }
                   : prev
               );
-            } else {
-              // If backend acknowledgment failed, permit retry and keep alarm active
-              autoAcknowledgedIdsRef.current.delete(activeId);
             }
           });
         }
       } else if (!data?.is_offline) {
         setDispatch(null);
+        if (typeof stopAlarm === 'function') {
+          stopAlarm();
+        }
       }
     } catch (e) {
       console.log('Error fetching dispatches, loading cached offline mission:', e);
@@ -242,8 +244,12 @@ export default function DispatchScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Responder opened/viewed Mission Details: IMMEDIATELY silence and stop the alarm
+      if (typeof stopAlarm === 'function') {
+        stopAlarm();
+      }
       fetchDispatch(hasLoadedRef.current);
-    }, [fetchDispatch])
+    }, [fetchDispatch, stopAlarm])
   );
 
   // Auto-refresh when real-time mission assignment or status arrives via WebSockets
@@ -402,14 +408,18 @@ export default function DispatchScreen() {
   const confirmDecline = async () => {
     if (!dispatch || isDeclining) return;
     setIsDeclining(true);
+    const dispatchId = dispatch.id;
     try {
       if (typeof stopAlarm === 'function') {
-        stopAlarm();
+        stopAlarm(dispatchId);
       }
-      await updateDispatchStatus(dispatch.id, 'cancelled');
+      if (typeof silenceMission === 'function') {
+        silenceMission(dispatchId);
+      }
       if (typeof clearMission === 'function') {
-        clearMission();
+        clearMission(dispatchId);
       }
+      await updateDispatchStatus(dispatchId, 'cancelled');
       setDispatch(null);
       setShowDeclineModal(false);
       Alert.alert(
@@ -438,8 +448,15 @@ export default function DispatchScreen() {
   const handleAccept = async () => {
     if (!dispatch || isAccepting) return;
     setIsAccepting(true);
+    const dispatchId = dispatch.id;
     if (typeof stopAlarm === 'function') {
-      stopAlarm();
+      stopAlarm(dispatchId);
+    }
+    if (typeof silenceMission === 'function') {
+      silenceMission(dispatchId);
+    }
+    if (typeof clearMission === 'function') {
+      clearMission(dispatchId);
     }
 
     const previousStatus = dispatch.dispatch_status;

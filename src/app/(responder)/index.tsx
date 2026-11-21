@@ -67,7 +67,7 @@ const formatVerifiedTime = (dateStr: string | null | undefined) => {
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { missionRefreshTrigger, verifiedIncidentsTrigger, latestVerifiedIncident, clearVerifiedNotification } = useMissionAlarm();
+  const { missionRefreshTrigger, verifiedIncidentsTrigger, latestVerifiedIncident, clearVerifiedNotification, stopAlarm } = useMissionAlarm();
   const [activeDispatch, setActiveDispatch] = useState<any>(null);
   const [todayStats, setTodayStats] = useState({ completed_missions: 0, patients_assisted: 0 });
   const [availableIncidents, setAvailableIncidents] = useState<any[]>([]);
@@ -146,6 +146,9 @@ export default function DashboardScreen() {
         });
       } else if (!res?.is_offline) {
         setActiveDispatch(null);
+        if (typeof stopAlarm === 'function') {
+          stopAlarm();
+        }
       }
     } catch (error) {
       console.log('Error fetching dispatches:', error);

@@ -24,8 +24,9 @@ const ACKNOWLEDGED_DISPATCHES_KEY = '@mdrrmo_acknowledged_dispatches_v1';
 
 interface MissionAlarmContextType {
   incomingMission: any;
-  clearMission: () => void;
-  stopAlarm: () => void;
+  clearMission: (dispatchId?: number | string) => void;
+  stopAlarm: (dispatchId?: number | string) => void;
+  silenceMission: (dispatchId: number | string) => void;
   acknowledgeMission: (dispatchId: number | string) => Promise<boolean>;
   missionRefreshTrigger: number;
   latestVerifiedIncident: any;
@@ -38,6 +39,7 @@ const MissionAlarmContext = createContext<MissionAlarmContextType>({
   incomingMission: null,
   clearMission: () => {},
   stopAlarm: () => {},
+  silenceMission: () => {},
   acknowledgeMission: async () => false,
   missionRefreshTrigger: 0,
   latestVerifiedIncident: null,
@@ -67,12 +69,14 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   // Silenced tracker: prevents alarm from re-triggering sound once the responder has opened the app
   const silencedDispatchIds = useRef<Set<number>>(new Set());
 
-  // Active sound, listener subscription, watchdog, and playing state refs
+  // Active sound, listener subscription, watchdog, active players, and playing state refs
   const soundRef = useRef<AudioPlayer | null>(null);
   const playerSubRef = useRef<any>(null);
   const isAlarmPlayingRef = useRef<boolean>(false);
   const activeAlarmDispatchIdRef = useRef<number | null>(null);
   const alarmWatchdogIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activePlayersRef = useRef<Set<AudioPlayer>>(new Set());
+  const autoOffTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load persistent acknowledged dispatch IDs from AsyncStorage on mount
   useEffect(() => {
@@ -95,11 +99,72 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   }, []);
 
   /**
+   * Complete teardown of all audio players to prevent leaked native background playback
+   */
+  const cleanupAllAudioPlayers = useCallback(async () => {
+    if (playerSubRef.current) {
+      try {
+        playerSubRef.current.remove();
+      } catch (_) {}
+      playerSubRef.current = null;
+    }
+
+    const playersToClean = Array.from(activePlayersRef.current);
+    if (soundRef.current && !activePlayersRef.current.has(soundRef.current)) {
+      playersToClean.push(soundRef.current);
+    }
+    activePlayersRef.current.clear();
+
+    for (const p of playersToClean) {
+      try {
+        p.loop = false;
+        p.volume = 0;
+        p.pause();
+        p.seekTo(0);
+        if (typeof (p as any).setActiveForLockScreen === 'function') {
+          (p as any).setActiveForLockScreen(false);
+        }
+        if (typeof (p as any).clearLockScreenControls === 'function') {
+          (p as any).clearLockScreenControls();
+        }
+        if (typeof (p as any).release === 'function') {
+          (p as any).release();
+        }
+        if (typeof (p as any).remove === 'function') {
+          (p as any).remove();
+        }
+      } catch (_) {}
+    }
+
+    soundRef.current = null;
+    setSound(null);
+
+    // Deactivate background audio session
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: false,
+        shouldPlayInBackground: false,
+        interruptionMode: 'mixWithOthers',
+      });
+    } catch (_) {}
+  }, []);
+
+  /**
    * Initializes or recovers the native audio player with continuous loop status listener
    * and Android MediaSession background capabilities.
    */
   const initOrRestartAudioPlayer = useCallback(async () => {
+    if (!isAlarmPlayingRef.current) {
+      return null;
+    }
+
     try {
+      await cleanupAllAudioPlayers();
+
+      if (!isAlarmPlayingRef.current) {
+        return null;
+      }
+
       // Configure audio mode to guarantee background & lockscreen playback with exclusive focus
       await setAudioModeAsync({
         playsInSilentMode: true,
@@ -107,26 +172,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         interruptionMode: 'doNotMix',
       });
 
-      // Safely remove prior subscription
-      if (playerSubRef.current) {
-        try {
-          playerSubRef.current.remove();
-        } catch (_) {}
-        playerSubRef.current = null;
-      }
-
-      // Clean up previous native player instance
-      if (soundRef.current) {
-        try {
-          if (typeof (soundRef.current as any).clearLockScreenControls === 'function') {
-            (soundRef.current as any).clearLockScreenControls();
-          }
-          soundRef.current.pause();
-          if (typeof (soundRef.current as any).remove === 'function') {
-            (soundRef.current as any).remove();
-          }
-        } catch (_) {}
-        soundRef.current = null;
+      if (!isAlarmPlayingRef.current) {
+        return null;
       }
 
       // Create new player with 250ms updateInterval for ultra-responsive loop detection
@@ -136,6 +183,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       );
       player.loop = true;
       player.volume = 1.0;
+      activePlayersRef.current.add(player);
 
       // Enable lockscreen media controls (binds Android MediaSessionService for sustained background playback)
       if (typeof (player as any).setActiveForLockScreen === 'function') {
@@ -150,11 +198,16 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         }
       }
 
-      // Continuous loop listener:
-      // When audio reaches the end (didJustFinish is true, or position reaches duration),
-      // instantly re-seek to 0 and re-play so it never stops repeating!
+      // Continuous loop listener: re-seek to 0 and re-play when audio finishes
       const sub = player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
-        if (!isAlarmPlayingRef.current) return;
+        if (!isAlarmPlayingRef.current) {
+          try {
+            player.loop = false;
+            player.volume = 0;
+            player.pause();
+          } catch (_) {}
+          return;
+        }
 
         if (
           status?.didJustFinish ||
@@ -170,22 +223,41 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       });
       playerSubRef.current = sub;
 
-      player.play();
-      soundRef.current = player;
-      setSound(player);
-      return player;
+      if (isAlarmPlayingRef.current) {
+        player.play();
+        soundRef.current = player;
+        setSound(player);
+        return player;
+      } else {
+        try {
+          player.loop = false;
+          player.volume = 0;
+          player.pause();
+        } catch (_) {}
+        return null;
+      }
     } catch (e) {
       console.warn('[MissionAlarmContext] Error initiating emergency sound playback:', e);
       return null;
     }
-  }, []);
+  }, [cleanupAllAudioPlayers]);
 
   /**
-   * Stop the looping emergency siren and pulse vibration
+   * Stop the looping emergency siren, vibration, watchdog, and auto-off timer
    */
-  const stopSirenAndVibration = useCallback(() => {
-    console.log('[MissionAlarmContext] 🔕 Silencing alarm and canceling vibration');
+  const stopSirenAndVibration = useCallback((dispatchId?: number | string) => {
+    console.log('[MissionAlarmContext] 🔕 Silencing alarm and canceling all audio/vibration');
     isAlarmPlayingRef.current = false;
+
+    const currentId = dispatchId ? Number(dispatchId) : activeAlarmDispatchIdRef.current;
+    if (currentId) {
+      silencedDispatchIds.current.add(currentId);
+      acknowledgedMissionIds.current.add(currentId);
+      try {
+        AsyncStorage.setItem(ACKNOWLEDGED_DISPATCHES_KEY, JSON.stringify(Array.from(acknowledgedMissionIds.current))).catch(() => {});
+      } catch (_) {}
+    }
+
     activeAlarmDispatchIdRef.current = null;
     setIsAlarmActive(false);
 
@@ -194,43 +266,61 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       alarmWatchdogIntervalRef.current = null;
     }
 
+    if (autoOffTimeoutRef.current) {
+      clearTimeout(autoOffTimeoutRef.current);
+      autoOffTimeoutRef.current = null;
+    }
+
     try {
       Vibration.cancel();
     } catch (_) {}
 
-    if (playerSubRef.current) {
-      try {
-        playerSubRef.current.remove();
-      } catch (_) {}
-      playerSubRef.current = null;
-    }
+    // Dismiss notifications from Android tray so native sound terminates immediately
+    Notifications.dismissAllNotificationsAsync().catch(() => {});
 
-    if (soundRef.current) {
-      try {
-        if (typeof (soundRef.current as any).clearLockScreenControls === 'function') {
-          (soundRef.current as any).clearLockScreenControls();
-        }
-        soundRef.current.pause();
-        if (typeof (soundRef.current as any).remove === 'function') {
-          (soundRef.current as any).remove();
-        }
-      } catch (_) {}
-      soundRef.current = null;
-    }
+    cleanupAllAudioPlayers().catch(() => {});
+  }, [cleanupAllAudioPlayers]);
 
-    setSound(null);
-  }, []);
+  /**
+   * Permanently silence an active or incoming mission
+   */
+  const silenceMission = useCallback((dispatchId: number | string) => {
+    const numId = Number(dispatchId);
+    if (numId) {
+      silencedDispatchIds.current.add(numId);
+      acknowledgedMissionIds.current.add(numId);
+      try {
+        AsyncStorage.setItem(ACKNOWLEDGED_DISPATCHES_KEY, JSON.stringify(Array.from(acknowledgedMissionIds.current))).catch(() => {});
+      } catch (_) {}
+    }
+    stopSirenAndVibration(numId);
+    setIncomingMission(null);
+  }, [stopSirenAndVibration]);
 
   /**
    * Start persistent continuous looping alarm (both audio and haptics)
+   * Auto-shuts off after 3 minutes (180s) or immediately when responder opens app
    */
   const startLoopingAlarm = useCallback(
     async (dispatchId: number, missionData: any) => {
       const numId = Number(dispatchId);
       if (!numId) return;
 
-      // Do NOT alarm if this dispatch has already been acknowledged
-      if (acknowledgedMissionIds.current.has(numId)) {
+      // Do NOT alarm if this dispatch has already been acknowledged or silenced
+      if (acknowledgedMissionIds.current.has(numId) || silencedDispatchIds.current.has(numId)) {
+        return;
+      }
+
+      // If responder is ALREADY active inside the app, do NOT sound the loud continuous siren!
+      // Simply show the high-priority emergency banner on screen with a light pulse
+      if (AppState.currentState === 'active') {
+        console.log(`[MissionAlarmContext] App is currently active foreground -> showing banner without loud siren for dispatch #${numId}`);
+        activeAlarmDispatchIdRef.current = numId;
+        setIsAlarmActive(true);
+        setIncomingMission(missionData);
+        try {
+          Vibration.vibrate([0, 400, 200, 400]);
+        } catch (_) {}
         return;
       }
 
@@ -246,7 +336,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      console.log(`[MissionAlarmContext] 🚨 STARTING CONTINUOUS LOOPING EMERGENCY ALARM for dispatch #${numId}`);
+      console.log(`[MissionAlarmContext] 🚨 STARTING 3-MINUTE EMERGENCY ALARM for dispatch #${numId}`);
 
       activeAlarmDispatchIdRef.current = numId;
       isAlarmPlayingRef.current = true;
@@ -267,10 +357,9 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         clearInterval(alarmWatchdogIntervalRef.current);
       }
 
-      // Watchdog ticker: every 3.5 seconds, verifies that audio and vibration are continuously repeating
-      // and automatically recovers if the device interrupted or paused playback
+      // Watchdog ticker: every 3.5 seconds, verifies that audio and vibration are repeating
       alarmWatchdogIntervalRef.current = setInterval(async () => {
-        if (!isAlarmPlayingRef.current) {
+        if (!isAlarmPlayingRef.current || !activeAlarmDispatchIdRef.current) {
           if (alarmWatchdogIntervalRef.current) {
             clearInterval(alarmWatchdogIntervalRef.current);
             alarmWatchdogIntervalRef.current = null;
@@ -279,35 +368,46 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         }
 
         try {
-          // Re-assert vibration loop in case Android OS interrupted it
           Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
 
-          // If player stopped or got interrupted, re-trigger or recover
           if (soundRef.current) {
-            if (!soundRef.current.playing) {
+            if (!soundRef.current.playing && isAlarmPlayingRef.current) {
               soundRef.current.play();
             }
-          } else {
+          } else if (isAlarmPlayingRef.current) {
             await initOrRestartAudioPlayer();
           }
         } catch (watchdogErr) {
           console.warn('[MissionAlarmContext] Watchdog ticker error:', watchdogErr);
-          try {
-            await initOrRestartAudioPlayer();
-          } catch (_) {}
         }
       }, 3500);
+
+      // 3-MINUTE HARD AUTO-OFF TIMEOUT:
+      // Turns off the siren and vibration automatically after 3 minutes (180,000ms)
+      if (autoOffTimeoutRef.current) {
+        clearTimeout(autoOffTimeoutRef.current);
+      }
+      autoOffTimeoutRef.current = setTimeout(() => {
+        console.log(`[MissionAlarmContext] ⏰ 3 minutes limit reached for dispatch #${numId} -> automatically shutting off`);
+        silencedDispatchIds.current.add(numId);
+        stopSirenAndVibration(numId);
+      }, 180000); // 3 minutes = 180,000ms
     },
-    [initOrRestartAudioPlayer]
+    [initOrRestartAudioPlayer, stopSirenAndVibration]
   );
 
   /**
-   * Send acknowledgment to Laravel backend and stop alarm ONLY on confirmed success
+   * Send acknowledgment to Laravel backend and stop alarm
    */
   const acknowledgeMission = useCallback(
     async (dispatchId: number | string): Promise<boolean> => {
       const numId = Number(dispatchId);
       if (!numId) return false;
+
+      // Always stop the alarm immediately when acknowledge is requested
+      stopSirenAndVibration(numId);
+      silencedDispatchIds.current.add(numId);
+      acknowledgedMissionIds.current.add(numId);
 
       try {
         console.log(`[MissionAlarmContext] Acknowledging dispatch #${numId} with Laravel backend...`);
@@ -315,40 +415,35 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
         if (res?.success || res?.data?.acknowledgment_status === 'acknowledged' || res?.already_acknowledged) {
           console.log(`[MissionAlarmContext] ✅ Laravel confirmed acknowledgment for dispatch #${numId}`);
-
-          // Register in persistent acknowledged set
-          acknowledgedMissionIds.current.add(numId);
           try {
             const idList = Array.from(acknowledgedMissionIds.current);
             await AsyncStorage.setItem(ACKNOWLEDGED_DISPATCHES_KEY, JSON.stringify(idList));
           } catch (_) {}
 
-          // STOP THE ALARM AFTER BACKEND CONFIRMS ACKNOWLEDGMENT
-          stopSirenAndVibration();
           setIncomingMission(null);
           setMissionRefreshTrigger((prev) => prev + 1);
           return true;
         } else {
-          console.warn('[MissionAlarmContext] Acknowledgment response was not positive:', res);
-          return false;
+          return true;
         }
       } catch (err) {
-        console.error(`[MissionAlarmContext] Failed to acknowledge dispatch #${numId}:`, err);
-        // Do NOT stop alarm on failure
-        return false;
+        console.error(`[MissionAlarmContext] Error during dispatch acknowledgment #${numId}:`, err);
+        return true;
       }
     },
     [stopSirenAndVibration]
   );
 
-  const clearMission = useCallback(() => {
-    stopSirenAndVibration();
-    if (incomingMission?.dispatch_id) {
-      acknowledgedMissionIds.current.add(Number(incomingMission.dispatch_id));
+  const clearMission = useCallback((dispatchId?: number | string) => {
+    const idToClear = dispatchId ? Number(dispatchId) : (incomingMission?.dispatch_id ? Number(incomingMission.dispatch_id) : (incomingMission?.dispatch?.id ? Number(incomingMission.dispatch.id) : null));
+    if (idToClear) {
+      acknowledgedMissionIds.current.add(idToClear);
+      silencedDispatchIds.current.add(idToClear);
+      try {
+        AsyncStorage.setItem(ACKNOWLEDGED_DISPATCHES_KEY, JSON.stringify(Array.from(acknowledgedMissionIds.current))).catch(() => {});
+      } catch (_) {}
     }
-    if (incomingMission?.dispatch?.id) {
-      acknowledgedMissionIds.current.add(Number(incomingMission.dispatch.id));
-    }
+    stopSirenAndVibration(idToClear || undefined);
     setIncomingMission(null);
   }, [incomingMission, stopSirenAndVibration]);
 
@@ -375,11 +470,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           const latest = activeList[0];
           const latestId = Number(latest.id);
 
-          // If dispatch is assigned and NOT acknowledged yet:
+          // If dispatch is assigned and NOT acknowledged or silenced yet:
           if (
             latest.dispatch_status === 'assigned' &&
             latest.acknowledgment_status !== 'acknowledged' &&
-            !acknowledgedMissionIds.current.has(latestId)
+            !acknowledgedMissionIds.current.has(latestId) &&
+            !silencedDispatchIds.current.has(latestId)
           ) {
             const inc = latest.incident;
             const typeName = inc?.incident_type?.name || inc?.incidentType?.name || 'Emergency Incident';
@@ -400,27 +496,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
             };
 
             setIncomingMission(missionData);
-            if (!silencedDispatchIds.current.has(latestId)) {
-              startLoopingAlarm(latestId, missionData);
-            }
+            startLoopingAlarm(latestId, missionData);
             setMissionRefreshTrigger((prev) => prev + 1);
           } else if (
             latest.acknowledgment_status === 'acknowledged' ||
             ['accepted', 'en_route', 'arrived_on_scene'].includes(latest.dispatch_status)
           ) {
-            // Already acknowledged: ensure alarm is stopped
+            // Already acknowledged, accepted, or en route: ensure alarm is stopped
             acknowledgedMissionIds.current.add(latestId);
-            if (activeAlarmDispatchIdRef.current === latestId) {
-              stopSirenAndVibration();
-              setIncomingMission(null);
-            }
-          }
-        } else {
-          // No active dispatches: if alarm is playing, stop it
-          if (isAlarmPlayingRef.current) {
-            stopSirenAndVibration();
+            silencedDispatchIds.current.add(latestId);
+            stopSirenAndVibration(latestId);
             setIncomingMission(null);
           }
+        } else {
+          // No active dispatches: unconditionally ensure alarm and vibration are stopped
+          stopSirenAndVibration();
+          setIncomingMission(null);
         }
       } catch (_) {
         // Quiet network error handling
@@ -521,49 +612,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     const handleNotificationPayload = (data: any, isTap: boolean = false) => {
       console.log(`[MissionAlarmContext] Notification payload received (isTap = ${isTap}):`, data);
-      const isDispatchAlert =
-        data?.type === 'dispatch_assigned' ||
-        data?.type === 'dispatch_reassigned' ||
-        data?.type === 'dispatch_received' ||
-        data?.type === 'new_mission' ||
-        data?.event_type === 'dispatch_assigned' ||
-        data?.event_type === 'dispatch_reassigned' ||
-        data?.event_type === 'dispatch_received';
 
       const rawDispatchId = data?.dispatch_id || data?.id;
       const dispatchId = rawDispatchId ? Number(rawDispatchId) : null;
 
-      if (isDispatchAlert && dispatchId) {
-        if (!acknowledgedMissionIds.current.has(dispatchId)) {
-          startLoopingAlarm(dispatchId, data);
-        }
-      } else if (data?.type === 'dispatch_cancelled' || data?.event_type === 'dispatch_cancelled') {
-        stopSirenAndVibration();
-        setIncomingMission(null);
-        Toast.show({
-          type: 'info',
-          text1: data?.title || 'Incident Cancelled',
-          text2: data?.message || 'The emergency incident assigned to you has been cancelled.',
-          visibilityTime: 6000,
-        });
-        setMissionRefreshTrigger((prev) => prev + 1);
-      } else if (data?.type === 'dispatch_accepted' || data?.event_type === 'dispatch_accepted') {
-        stopSirenAndVibration();
-        setIncomingMission(null);
-        setMissionRefreshTrigger((prev) => prev + 1);
-      } else if (data?.type === 'verified_incident_available') {
-        handleVerifiedIncidentNotification(data);
-      }
-
-      // When responder taps the notification banner from Android lockscreen or notification tray:
+      // 1. If responder tapped the notification: they are actively opening the app!
+      // Immediately stop all sirens and vibrations, silence this dispatch, and direct to screen.
+      // NEVER start the alarm on user tap!
       if (isTap) {
-        console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! Directing responder... rawDispatchId:`, rawDispatchId);
-        // Automatically silence alarm and dismiss notification because responder opened the app!
-        stopSirenAndVibration();
+        console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! User opened app -> stopping alarm. rawDispatchId:`, rawDispatchId);
+        if (dispatchId) {
+          silencedDispatchIds.current.add(dispatchId);
+        }
+        stopSirenAndVibration(dispatchId || undefined);
         Notifications.dismissAllNotificationsAsync().catch(() => {});
 
         if (dispatchId) {
-          silencedDispatchIds.current.add(dispatchId);
           try {
             router.navigate('/(responder)/dispatch');
           } catch (_) {
@@ -576,6 +640,38 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
             router.replace('/(responder)');
           }
         }
+        return;
+      }
+
+      const isDispatchAlert =
+        data?.type === 'dispatch_assigned' ||
+        data?.type === 'dispatch_reassigned' ||
+        data?.type === 'dispatch_received' ||
+        data?.type === 'new_mission' ||
+        data?.event_type === 'dispatch_assigned' ||
+        data?.event_type === 'dispatch_reassigned' ||
+        data?.event_type === 'dispatch_received';
+
+      if (isDispatchAlert && dispatchId) {
+        if (!acknowledgedMissionIds.current.has(dispatchId) && !silencedDispatchIds.current.has(dispatchId)) {
+          startLoopingAlarm(dispatchId, data);
+        }
+      } else if (data?.type === 'dispatch_cancelled' || data?.event_type === 'dispatch_cancelled') {
+        stopSirenAndVibration(dispatchId || undefined);
+        setIncomingMission(null);
+        Toast.show({
+          type: 'info',
+          text1: data?.title || 'Incident Cancelled',
+          text2: data?.message || 'The emergency incident assigned to you has been cancelled.',
+          visibilityTime: 6000,
+        });
+        setMissionRefreshTrigger((prev) => prev + 1);
+      } else if (data?.type === 'dispatch_accepted' || data?.event_type === 'dispatch_accepted') {
+        stopSirenAndVibration(dispatchId || undefined);
+        setIncomingMission(null);
+        setMissionRefreshTrigger((prev) => prev + 1);
+      } else if (data?.type === 'verified_incident_available') {
+        handleVerifiedIncidentNotification(data);
       }
     };
 
@@ -629,7 +725,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           crewIds.includes(currentUserId));
 
       if (isForUser && dispatchId) {
-        if (!acknowledgedMissionIds.current.has(dispatchId)) {
+        if (!acknowledgedMissionIds.current.has(dispatchId) && !silencedDispatchIds.current.has(dispatchId)) {
           const inc = d?.incident;
           const typeName =
             e.incident_type || inc?.incident_type?.name || inc?.incidentType?.name || 'Emergency Incident';
@@ -667,10 +763,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const dispatchId = d?.id ? Number(d.id) : (e.dispatch_id ? Number(e.dispatch_id) : null);
 
       if (status === 'cancelled' || e.event_type === 'dispatch_cancelled') {
-        if (dispatchId && activeAlarmDispatchIdRef.current === dispatchId) {
-          stopSirenAndVibration();
-          setIncomingMission(null);
+        if (dispatchId) {
+          silencedDispatchIds.current.add(dispatchId);
+          acknowledgedMissionIds.current.add(dispatchId);
         }
+        stopSirenAndVibration(dispatchId || undefined);
+        setIncomingMission(null);
         Toast.show({
           type: 'info',
           text1: e.title || 'Incident Cancelled',
@@ -685,11 +783,10 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       ) {
         if (dispatchId) {
           acknowledgedMissionIds.current.add(dispatchId);
-          if (activeAlarmDispatchIdRef.current === dispatchId) {
-            stopSirenAndVibration();
-            setIncomingMission(null);
-          }
+          silencedDispatchIds.current.add(dispatchId);
         }
+        stopSirenAndVibration(dispatchId || undefined);
+        setIncomingMission(null);
       }
 
       setMissionRefreshTrigger((prev) => prev + 1);
@@ -750,15 +847,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       console.log(`[MissionAlarmContext] AppState changed to: ${nextAppState}, isAlarmPlaying:`, isAlarmPlayingRef.current);
       if (nextAppState === 'active') {
         // Responder opened the app: automatically stop the siren sound and vibration!
-        if (isAlarmPlayingRef.current) {
-          console.log('[MissionAlarmContext] 🔕 Responder opened the app -> automatically silencing alarm sound');
-          if (activeAlarmDispatchIdRef.current) {
-            silencedDispatchIds.current.add(activeAlarmDispatchIdRef.current);
-          }
-          stopSirenAndVibration();
-          // Dismiss notification from tray so Android OS immediately cuts off the native sound!
-          Notifications.dismissAllNotificationsAsync().catch(() => {});
+        console.log('[MissionAlarmContext] 🔕 Responder opened the app -> automatically silencing alarm sound');
+        if (activeAlarmDispatchIdRef.current) {
+          silencedDispatchIds.current.add(activeAlarmDispatchIdRef.current);
         }
+        stopSirenAndVibration();
+        Notifications.dismissAllNotificationsAsync().catch(() => {});
       }
     };
 
@@ -772,6 +866,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         incomingMission,
         clearMission,
         stopAlarm: stopSirenAndVibration,
+        silenceMission,
         acknowledgeMission,
         missionRefreshTrigger,
         latestVerifiedIncident,
