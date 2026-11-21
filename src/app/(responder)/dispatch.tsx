@@ -172,33 +172,10 @@ export default function DispatchScreen() {
         setDispatch(activeItem);
 
         const activeId = Number(activeItem.id);
-        // Responder is currently on the Mission Details screen: stop and silence the alarm
-        if (typeof stopAlarm === 'function') {
+        // If the mission has already been accepted or is beyond assigned status, stop alarm.
+        // If it is still 'assigned', DO NOT stop the alarm here — let it continue playing until ACCEPT or DECLINE is pressed!
+        if (activeItem.dispatch_status !== 'assigned' && typeof stopAlarm === 'function') {
           stopAlarm(activeId);
-        }
-
-        if (
-          activeId &&
-          activeItem.dispatch_status === 'assigned' &&
-          activeItem.acknowledgment_status !== 'acknowledged' &&
-          !autoAcknowledgedIdsRef.current.has(activeId)
-        ) {
-          autoAcknowledgedIdsRef.current.add(activeId);
-          console.log(`[DispatchScreen] Mission Details loaded. Acknowledging dispatch #${activeId} with backend...`);
-          acknowledgeMission(activeId).then((success) => {
-            if (success) {
-              console.log(`[DispatchScreen] Dispatch #${activeId} successfully acknowledged. Alarm stopped.`);
-              setDispatch((prev: any) =>
-                prev && Number(prev.id) === activeId
-                  ? {
-                      ...prev,
-                      acknowledgment_status: 'acknowledged',
-                      acknowledged_at: new Date().toISOString(),
-                    }
-                  : prev
-              );
-            }
-          });
         }
       } else if (!data?.is_offline) {
         setDispatch(null);
@@ -212,28 +189,8 @@ export default function DispatchScreen() {
       if (cached) {
         setDispatch(cached);
         const cachedId = Number(cached.id);
-        if (
-          cachedId &&
-          cached.dispatch_status === 'assigned' &&
-          cached.acknowledgment_status !== 'acknowledged' &&
-          !autoAcknowledgedIdsRef.current.has(cachedId)
-        ) {
-          autoAcknowledgedIdsRef.current.add(cachedId);
-          acknowledgeMission(cachedId).then((success) => {
-            if (success) {
-              setDispatch((prev: any) =>
-                prev && Number(prev.id) === cachedId
-                  ? {
-                      ...prev,
-                      acknowledgment_status: 'acknowledged',
-                      acknowledged_at: new Date().toISOString(),
-                    }
-                  : prev
-              );
-            } else {
-              autoAcknowledgedIdsRef.current.delete(cachedId);
-            }
-          });
+        if (cached.dispatch_status !== 'assigned' && typeof stopAlarm === 'function') {
+          stopAlarm(cachedId);
         }
       }
     } finally {

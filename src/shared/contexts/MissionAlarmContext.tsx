@@ -553,14 +553,11 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const data = response?.notification?.request?.content?.data;
       const rawDispatchId = data?.dispatch_id || data?.id;
 
-      // Automatically silence alarm sound and dismiss notification because responder opened the app!
-      stopSirenAndVibration();
+      // Note: Do NOT silence alarm on notification tap; alarm continues until responder explicitly ACCEPTS or DECLINES!
       Notifications.dismissAllNotificationsAsync().catch(() => {});
 
       if (rawDispatchId) {
-        const dispatchId = Number(rawDispatchId);
-        silencedDispatchIds.current.add(dispatchId);
-        // Direct the user immediately to the mission dispatch screen!
+        // Direct the user immediately to the mission dispatch screen to Accept or Decline!
         setTimeout(() => {
           try {
             router.navigate('/(responder)/dispatch');
@@ -590,15 +587,10 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const rawDispatchId = data?.dispatch_id || data?.id;
       const dispatchId = rawDispatchId ? Number(rawDispatchId) : null;
 
-      // 1. If responder tapped the notification: they are actively opening the app!
-      // Immediately stop all sirens and vibrations, silence this dispatch, and direct to screen.
-      // NEVER start the alarm on user tap!
+      // 1. If responder tapped the notification: actively direct them to the dispatch screen to Accept or Decline
+      // Keep alarm ringing until the responder explicitly decides (Accept or Decline)!
       if (isTap) {
-        console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! User opened app -> stopping alarm. rawDispatchId:`, rawDispatchId);
-        if (dispatchId) {
-          silencedDispatchIds.current.add(dispatchId);
-        }
-        stopSirenAndVibration(dispatchId || undefined);
+        console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! Directing user to dispatch screen. rawDispatchId:`, rawDispatchId);
         Notifications.dismissAllNotificationsAsync().catch(() => {});
 
         if (dispatchId) {
@@ -815,31 +807,6 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   }, [echo, user, startLoopingAlarm, stopSirenAndVibration]);
 
   // AppState change: when responder opens the app from background/lockscreen (app becomes 'active'),
-  // automatically silence/turn off the alarm sound and vibration!
-  const previousAppStateRef = useRef<AppStateStatus>(AppState.currentState);
-
-  useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      console.log(`[MissionAlarmContext] AppState changed from ${previousAppStateRef.current} to: ${nextAppState}, isAlarmPlaying:`, isAlarmPlayingRef.current);
-      if (
-        (previousAppStateRef.current === 'background' || previousAppStateRef.current === 'inactive') &&
-        nextAppState === 'active'
-      ) {
-        // Responder opened the app from background/lockscreen: automatically stop the siren sound and vibration!
-        console.log('[MissionAlarmContext] 🔕 Responder opened the app from background/lockscreen -> automatically silencing alarm sound');
-        if (activeAlarmDispatchIdRef.current) {
-          silencedDispatchIds.current.add(activeAlarmDispatchIdRef.current);
-        }
-        stopSirenAndVibration();
-        Notifications.dismissAllNotificationsAsync().catch(() => {});
-      }
-      previousAppStateRef.current = nextAppState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, [stopSirenAndVibration]);
-
   return (
     <MissionAlarmContext.Provider
       value={{
@@ -862,7 +829,6 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={() => {
-              stopSirenAndVibration();
               try {
                 router.navigate('/(responder)/dispatch');
               } catch (_) {}
