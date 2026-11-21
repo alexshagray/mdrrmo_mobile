@@ -595,6 +595,7 @@ export default function PatientCareRecordScreen() {
 
   // Negative on Scene / False Alarm State
   const [showUnfoundedModal, setShowUnfoundedModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [unfoundedCategory, setUnfoundedCategory] = useState<'false_alarm' | 'prank'>('false_alarm');
   const [unfoundedReason, setUnfoundedReason] = useState('');
   const [isSubmittingUnfounded, setIsSubmittingUnfounded] = useState(false);
@@ -1734,76 +1735,61 @@ export default function PatientCareRecordScreen() {
   };
 
   const handleDeleteOrResetPcr = () => {
-    const isExistingSaved = !!formData.pcr_id;
-    const isMultiple = missionPcrs.length > 1;
-    const patientName = [formData.first_name, formData.last_name].filter(Boolean).join(' ') || `Patient #${activePcrIndex + 1}`;
+    setShowDeleteModal(true);
+  };
 
-    Alert.alert(
-      isExistingSaved ? 'Delete Patient Care Record?' : 'Discard PCR Form?',
-      isExistingSaved
-        ? (isMultiple
-            ? `Are you sure you want to permanently delete the medical record for ${patientName}? This action cannot be undone.`
-            : `Are you sure you want to permanently delete this Patient Care Record (${patientName})? All entered clinical data will be erased from this mission.`)
-        : 'Are you sure you want to discard all entered data and reset this form to empty?',
-      [
-        { text: 'No, Cancel', style: 'cancel' },
-        {
-          text: isExistingSaved ? 'Yes, Delete' : 'Yes, Discard',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsSaving(true);
-              if (formData.pcr_id && activeDispatch?.id) {
-                const res = await deletePcr(activeDispatch.id, formData.pcr_id);
-                if (res?.all_pcrs) {
-                  setMissionPcrs(res.all_pcrs);
-                  if (res.all_pcrs.length > 0) {
-                    const nextPcr = res.all_pcrs[0];
-                    setFormData(populatePcrToForm(nextPcr, activeDispatch));
-                    setActivePcrIndex(0);
-                  } else {
-                    if (activeDispatch?.id) {
-                      AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-                      AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
-                    }
-                    setPcrPhotos([]);
-                    setFormData(initialFormData);
-                    setActivePcrIndex(0);
-                  }
-                }
-              } else {
-                if (activeDispatch?.id) {
-                  AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-                  AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
-                }
-                setPcrPhotos([]);
-                setFormData(initialFormData);
-                setActivePcrIndex(0);
-              }
-              setStep(1);
-              setReachedReview(false);
-              setErrors({});
-              triggerToast('PCR record deleted and reset.');
-            } catch (err: any) {
-              // If offline or network issue, still allow local draft clearing
-              if (activeDispatch?.id) {
-                AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-                AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
-              }
-              setPcrPhotos([]);
-              setFormData(initialFormData);
-              setActivePcrIndex(0);
-              setStep(1);
-              setReachedReview(false);
-              setErrors({});
-              triggerToast('Local draft cleared.');
-            } finally {
-              setIsSaving(false);
+  const executeDeleteOrResetPcr = async () => {
+    try {
+      setIsSaving(true);
+      if (formData.pcr_id && activeDispatch?.id) {
+        const res = await deletePcr(activeDispatch.id, formData.pcr_id);
+        if (res?.all_pcrs) {
+          setMissionPcrs(res.all_pcrs);
+          if (res.all_pcrs.length > 0) {
+            const nextPcr = res.all_pcrs[0];
+            setFormData(populatePcrToForm(nextPcr, activeDispatch));
+            setActivePcrIndex(0);
+          } else {
+            if (activeDispatch?.id) {
+              AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+              AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
             }
-          },
-        },
-      ]
-    );
+            setPcrPhotos([]);
+            setFormData(initialFormData);
+            setActivePcrIndex(0);
+          }
+        }
+      } else {
+        if (activeDispatch?.id) {
+          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+        }
+        setPcrPhotos([]);
+        setFormData(initialFormData);
+        setActivePcrIndex(0);
+      }
+      setStep(1);
+      setReachedReview(false);
+      setErrors({});
+      setShowDeleteModal(false);
+      triggerToast('PCR record deleted and form reset.');
+    } catch (err: any) {
+      // If offline or network issue, still allow local draft clearing
+      if (activeDispatch?.id) {
+        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+      }
+      setPcrPhotos([]);
+      setFormData(initialFormData);
+      setActivePcrIndex(0);
+      setStep(1);
+      setReachedReview(false);
+      setErrors({});
+      setShowDeleteModal(false);
+      triggerToast('Local draft cleared.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleFinalSubmit = async () => {
@@ -4558,6 +4544,136 @@ export default function PatientCareRecordScreen() {
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Submit & Free</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Professional Custom PCR Delete / Discard Confirmation Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showDeleteModal}
+          onRequestClose={() => !isSaving && setShowDeleteModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{
+              width: '100%',
+              maxWidth: 380,
+              backgroundColor: '#FFFFFF',
+              borderRadius: 24,
+              padding: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 12 },
+              shadowOpacity: 0.28,
+              shadowRadius: 24,
+              elevation: 12,
+              borderWidth: 1,
+              borderColor: '#F1F5F9'
+            }}>
+              {/* Header Icon */}
+              <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                <View style={{
+                  width: 60,
+                  height: 60,
+                  backgroundColor: '#FEE2E2',
+                  borderRadius: 30,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: 12,
+                  borderWidth: 1.5,
+                  borderColor: '#FECACA',
+                }}>
+                  <Trash2 size={28} color="#DC2626" strokeWidth={2.2} />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center', letterSpacing: -0.3 }}>
+                  {formData.pcr_id ? 'Delete Patient Record?' : 'Discard PCR Form?'}
+                </Text>
+                <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
+                  {formData.pcr_id
+                    ? 'This medical record will be permanently deleted from this incident mission.'
+                    : 'All unsaved medical data and clinical inputs for this form will be discarded.'}
+                </Text>
+              </View>
+
+              {/* Patient Detail Summary Box */}
+              <View style={{
+                backgroundColor: '#F8FAFC',
+                borderRadius: 14,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+                marginBottom: 18,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Target Patient</Text>
+                  <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#DC2626' }}>
+                      {formData.pcr_id ? 'SAVED RECORD' : 'DRAFT'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1E293B' }} numberOfLines={1}>
+                  {[formData.first_name, formData.last_name].filter(Boolean).join(' ') || (formData.is_unidentified ? 'Unidentified Patient' : `Patient #${activePcrIndex + 1}`)}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                  Dispatch #{activeDispatch?.id} • {activeDispatch?.incident?.tracking_number || 'Walk-In'}
+                </Text>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  disabled={isSaving}
+                  onPress={() => setShowDeleteModal(false)}
+                  activeOpacity={0.75}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 14,
+                    borderRadius: 14,
+                    backgroundColor: '#F1F5F9',
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#475569' }}>
+                    No, Cancel
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  disabled={isSaving}
+                  onPress={executeDeleteOrResetPcr}
+                  activeOpacity={0.8}
+                  style={{
+                    flex: 1.25,
+                    paddingVertical: 14,
+                    borderRadius: 14,
+                    backgroundColor: '#DC2626',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    gap: 6,
+                    shadowColor: '#DC2626',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 8,
+                    elevation: 4,
+                  }}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Trash2 size={16} color="#FFFFFF" strokeWidth={2.2} />
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF' }}>
+                        Yes, Delete
+                      </Text>
+                    </>
                   )}
                 </TouchableOpacity>
               </View>
