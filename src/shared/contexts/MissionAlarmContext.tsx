@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, Vibration, AppState, AppStateStatus, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Vibration, AppState, AppStateStatus, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync, AudioPlayer, AudioStatus } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
@@ -65,8 +65,9 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   // Acknowledged tracker: persists dispatch IDs that have been confirmed acknowledged
   const acknowledgedMissionIds = useRef<Set<number>>(new Set());
 
-  // Active sound, watchdog, and playing state refs
+  // Active sound, listener subscription, watchdog, and playing state refs
   const soundRef = useRef<AudioPlayer | null>(null);
+  const playerSubRef = useRef<any>(null);
   const isAlarmPlayingRef = useRef<boolean>(false);
   const activeAlarmDispatchIdRef = useRef<number | null>(null);
   const alarmWatchdogIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -92,6 +93,92 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   }, []);
 
   /**
+   * Initializes or recovers the native audio player with continuous loop status listener
+   * and Android MediaSession background capabilities.
+   */
+  const initOrRestartAudioPlayer = useCallback(async () => {
+    try {
+      // Configure audio mode to guarantee background & lockscreen playback with exclusive focus
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
+      });
+
+      // Safely remove prior subscription
+      if (playerSubRef.current) {
+        try {
+          playerSubRef.current.remove();
+        } catch (_) {}
+        playerSubRef.current = null;
+      }
+
+      // Clean up previous native player instance
+      if (soundRef.current) {
+        try {
+          if (typeof (soundRef.current as any).clearLockScreenControls === 'function') {
+            (soundRef.current as any).clearLockScreenControls();
+          }
+          soundRef.current.pause();
+          if (typeof (soundRef.current as any).remove === 'function') {
+            (soundRef.current as any).remove();
+          }
+        } catch (_) {}
+        soundRef.current = null;
+      }
+
+      // Create new player with 250ms updateInterval for ultra-responsive loop detection
+      const player = createAudioPlayer(
+        require('../../../assets/sounds/alarm.mp3'),
+        { updateInterval: 250 }
+      );
+      player.loop = true;
+      player.volume = 1.0;
+
+      // Enable lockscreen media controls (binds Android MediaSessionService for sustained background playback)
+      if (typeof (player as any).setActiveForLockScreen === 'function') {
+        try {
+          (player as any).setActiveForLockScreen(true, {
+            title: '🚨 CRITICAL EMERGENCY DISPATCH',
+            artist: 'MDRRMO OPOL RESQ',
+            album: 'Emergency Alert',
+          });
+        } catch (lockErr) {
+          console.warn('[MissionAlarmContext] Lockscreen setup notice:', lockErr);
+        }
+      }
+
+      // Continuous loop listener:
+      // When audio reaches the end (didJustFinish is true, or position reaches duration),
+      // instantly re-seek to 0 and re-play so it never stops repeating!
+      const sub = player.addListener('playbackStatusUpdate', (status: AudioStatus) => {
+        if (!isAlarmPlayingRef.current) return;
+
+        if (
+          status?.didJustFinish ||
+          (!status?.playing && status?.currentTime > 0 && status?.currentTime >= ((status?.duration || 4.5) - 0.25))
+        ) {
+          try {
+            player.seekTo(0);
+            player.play();
+          } catch (loopErr) {
+            console.warn('[MissionAlarmContext] Native loop re-seek notice:', loopErr);
+          }
+        }
+      });
+      playerSubRef.current = sub;
+
+      player.play();
+      soundRef.current = player;
+      setSound(player);
+      return player;
+    } catch (e) {
+      console.warn('[MissionAlarmContext] Error initiating emergency sound playback:', e);
+      return null;
+    }
+  }, []);
+
+  /**
    * Stop the looping emergency siren and pulse vibration
    */
   const stopSirenAndVibration = useCallback(() => {
@@ -109,11 +196,21 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       Vibration.cancel();
     } catch (_) {}
 
+    if (playerSubRef.current) {
+      try {
+        playerSubRef.current.remove();
+      } catch (_) {}
+      playerSubRef.current = null;
+    }
+
     if (soundRef.current) {
       try {
+        if (typeof (soundRef.current as any).clearLockScreenControls === 'function') {
+          (soundRef.current as any).clearLockScreenControls();
+        }
         soundRef.current.pause();
-        if (typeof soundRef.current.remove === 'function') {
-          soundRef.current.remove();
+        if (typeof (soundRef.current as any).remove === 'function') {
+          (soundRef.current as any).remove();
         }
       } catch (_) {}
       soundRef.current = null;
@@ -135,8 +232,15 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         return;
       }
 
-      // Do not duplicate if already playing for this exact dispatch
+      // If already playing for this exact dispatch, verify playback health and do not duplicate
       if (isAlarmPlayingRef.current && activeAlarmDispatchIdRef.current === numId) {
+        if (soundRef.current && !soundRef.current.playing) {
+          try {
+            soundRef.current.play();
+          } catch (_) {
+            initOrRestartAudioPlayer();
+          }
+        }
         return;
       }
 
@@ -147,43 +251,22 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       setIsAlarmActive(true);
       setIncomingMission(missionData);
 
+      // Continuous emergency pulse vibration pattern: [wait, vibrate, pause, vibrate, pause, long vibrate]
       try {
-        // Continuous emergency pulse vibration pattern: [wait, vibrate, pause, vibrate, pause, long vibrate]
         Vibration.cancel();
         Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
+      } catch (_) {}
 
-        // Configure audio mode to guarantee background & lockscreen playback
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-        });
-
-        if (soundRef.current) {
-          try {
-            soundRef.current.pause();
-            if (typeof soundRef.current.remove === 'function') {
-              soundRef.current.remove();
-            }
-          } catch (_) {}
-          soundRef.current = null;
-        }
-
-        const player = createAudioPlayer(require('../../../assets/sounds/alarm.mp3'));
-        player.loop = true;
-        player.volume = 1.0;
-        player.play();
-        soundRef.current = player;
-        setSound(player);
-      } catch (e) {
-        console.warn('[MissionAlarmContext] Error initiating emergency sound playback:', e);
-      }
+      // Start continuous audio playback
+      await initOrRestartAudioPlayer();
 
       // Clear any prior watchdog interval
       if (alarmWatchdogIntervalRef.current) {
         clearInterval(alarmWatchdogIntervalRef.current);
       }
 
-      // Watchdog ticker: every 4.5 seconds, verifies that audio and vibration are continuously repeating
+      // Watchdog ticker: every 3.5 seconds, verifies that audio and vibration are continuously repeating
+      // and automatically recovers if the device interrupted or paused playback
       alarmWatchdogIntervalRef.current = setInterval(async () => {
         if (!isAlarmPlayingRef.current) {
           if (alarmWatchdogIntervalRef.current) {
@@ -197,30 +280,23 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           // Re-assert vibration loop in case Android OS interrupted it
           Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
 
-          // If player stopped or got interrupted, re-trigger
+          // If player stopped or got interrupted, re-trigger or recover
           if (soundRef.current) {
-            soundRef.current.play();
+            if (!soundRef.current.playing) {
+              soundRef.current.play();
+            }
           } else {
-            const player = createAudioPlayer(require('../../../assets/sounds/alarm.mp3'));
-            player.loop = true;
-            player.volume = 1.0;
-            player.play();
-            soundRef.current = player;
-            setSound(player);
+            await initOrRestartAudioPlayer();
           }
         } catch (watchdogErr) {
           console.warn('[MissionAlarmContext] Watchdog ticker error:', watchdogErr);
+          try {
+            await initOrRestartAudioPlayer();
+          } catch (_) {}
         }
-      }, 4500);
-
-      // Requirement 3: Automatically navigate to the assigned Mission Details screen
-      try {
-        router.navigate('/(responder)/dispatch');
-      } catch (navErr) {
-        console.warn('[MissionAlarmContext] Auto-navigation notice:', navErr);
-      }
+      }, 3500);
     },
-    [router]
+    [initOrRestartAudioPlayer]
   );
 
   /**
@@ -621,22 +697,39 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     };
   }, [echo, user, startLoopingAlarm, stopSirenAndVibration]);
 
-  // AppState change: ensure alarm persists if app goes into background or screen locks
+  // AppState change: ensure alarm persists and automatically recovers when switching apps or locking/unlocking phone
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active' && isAlarmPlayingRef.current) {
-        // App returned to foreground, re-verify audio player
+      console.log(`[MissionAlarmContext] AppState changed to: ${nextAppState}, isAlarmPlaying:`, isAlarmPlayingRef.current);
+      if (isAlarmPlayingRef.current) {
+        // App returned to foreground or moved to background: guarantee audio mode & alive player
+        setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionMode: 'doNotMix',
+        }).catch(() => {});
+
         if (soundRef.current) {
           try {
-            soundRef.current.play();
-          } catch (_) {}
+            if (!soundRef.current.playing) {
+              soundRef.current.play();
+            }
+          } catch (_) {
+            initOrRestartAudioPlayer();
+          }
+        } else {
+          initOrRestartAudioPlayer();
         }
+
+        try {
+          Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
+        } catch (_) {}
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, []);
+  }, [initOrRestartAudioPlayer]);
 
   return (
     <MissionAlarmContext.Provider
@@ -653,18 +746,34 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       }}
     >
       {children}
-      {/* Non-blocking top alert indicator when an emergency dispatch is actively alarming and synchronizing */}
+      {/* Interactive, high-priority emergency banner displayed on top of any screen when alarm is active */}
       {isAlarmActive && incomingMission && (
-        <View style={styles.topBannerWrapper} pointerEvents="none">
-          <View style={styles.topBanner}>
-            <ActivityIndicator size="small" color="#EF4444" style={{ marginRight: 10 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.topBannerTitle}>🚨 CRITICAL EMERGENCY DISPATCH</Text>
+        <View style={styles.topBannerWrapper} pointerEvents="box-none">
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => {
+              try {
+                router.navigate('/(responder)/dispatch');
+              } catch (_) {}
+            }}
+            style={styles.topBanner}
+          >
+            <View style={styles.bannerPulseDot}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1, paddingRight: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.topBannerBadge}>NEW DISPATCH</Text>
+                <Text style={styles.topBannerTitle}>🚨 CRITICAL ALARM ACTIVE</Text>
+              </View>
               <Text style={styles.topBannerSubtitle} numberOfLines={1}>
-                Opening Mission Details to confirm acknowledgment...
+                {incomingMission.incident_type || 'Emergency'} • {incomingMission.barangay ? `Brgy. ${incomingMission.barangay}` : (incomingMission.location || 'Opol')}
+              </Text>
+              <Text style={styles.topBannerAction}>
+                Tap here to open details & acknowledge →
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
       )}
     </MissionAlarmContext.Provider>
@@ -677,8 +786,8 @@ const styles = StyleSheet.create({
   topBannerWrapper: {
     position: 'absolute',
     top: 50,
-    left: 16,
-    right: 16,
+    left: 14,
+    right: 14,
     zIndex: 99999,
     alignItems: 'center',
     elevation: 200,
@@ -686,27 +795,54 @@ const styles = StyleSheet.create({
   topBanner: {
     backgroundColor: '#0F172A',
     borderColor: '#EF4444',
-    borderWidth: 1.5,
-    borderRadius: 14,
+    borderWidth: 2,
+    borderRadius: 16,
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
     shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
   },
-  topBannerTitle: {
-    color: '#EF4444',
-    fontSize: 13,
-    fontWeight: '800',
+  bannerPulseDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  topBannerBadge: {
+    backgroundColor: '#DC2626',
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4,
+    marginRight: 6,
     letterSpacing: 0.5,
   },
-  topBannerSubtitle: {
-    color: '#E2E8F0',
+  topBannerTitle: {
+    color: '#F87171',
     fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  topBannerSubtitle: {
+    color: '#F1F5F9',
+    fontSize: 13,
+    fontWeight: '700',
     marginTop: 2,
+  },
+  topBannerAction: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 4,
   },
 });

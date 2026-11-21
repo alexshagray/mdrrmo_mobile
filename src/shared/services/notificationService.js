@@ -35,6 +35,13 @@ class NotificationService {
       sound: 'alarm',  // maps to alarm.mp3 in Android res/raw or assets
       enableVibrate: true,
       showBadge: true,
+      audioAttributes: {
+        usage: Notifications.AndroidAudioUsage.ALARM,
+        contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+        flags: {
+          enforceAudibility: true,
+        },
+      },
     };
 
     try {
