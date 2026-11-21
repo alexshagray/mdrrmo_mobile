@@ -64,6 +64,8 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
   const notifiedIncidentIds = useRef<Set<number>>(new Set());
   // Acknowledged tracker: persists dispatch IDs that have been confirmed acknowledged
   const acknowledgedMissionIds = useRef<Set<number>>(new Set());
+  // Silenced tracker: prevents alarm from re-triggering sound once the responder has opened the app
+  const silencedDispatchIds = useRef<Set<number>>(new Set());
 
   // Active sound, listener subscription, watchdog, and playing state refs
   const soundRef = useRef<AudioPlayer | null>(null);
@@ -156,7 +158,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
         if (
           status?.didJustFinish ||
-          (!status?.playing && status?.currentTime > 0 && status?.currentTime >= ((status?.duration || 52) - 0.3))
+          (!status?.playing && status?.currentTime > 0 && status?.currentTime >= ((status?.duration || 183) - 0.3))
         ) {
           try {
             player.seekTo(0);
@@ -397,7 +399,10 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
               location: cleanLocation,
             };
 
-            startLoopingAlarm(latestId, missionData);
+            setIncomingMission(missionData);
+            if (!silencedDispatchIds.current.has(latestId)) {
+              startLoopingAlarm(latestId, missionData);
+            }
             setMissionRefreshTrigger((prev) => prev + 1);
           } else if (
             latest.acknowledgment_status === 'acknowledged' ||
@@ -482,11 +487,14 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       console.log('[MissionAlarmContext] 📱 Cold-start notification tapped by responder:', response);
       const data = response?.notification?.request?.content?.data;
       const rawDispatchId = data?.dispatch_id || data?.id;
+
+      // Automatically silence alarm sound and dismiss notification because responder opened the app!
+      stopSirenAndVibration();
+      Notifications.dismissAllNotificationsAsync().catch(() => {});
+
       if (rawDispatchId) {
         const dispatchId = Number(rawDispatchId);
-        if (!acknowledgedMissionIds.current.has(dispatchId)) {
-          startLoopingAlarm(dispatchId, data);
-        }
+        silencedDispatchIds.current.add(dispatchId);
         // Direct the user immediately to the mission dispatch screen!
         setTimeout(() => {
           try {
@@ -507,7 +515,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, startLoopingAlarm, router]);
+  }, [isAuthenticated, stopSirenAndVibration, router]);
 
   // Handle Foreground Notifications and User Taps
   useEffect(() => {
@@ -550,7 +558,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       // When responder taps the notification banner from Android lockscreen or notification tray:
       if (isTap) {
         console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! Directing responder... rawDispatchId:`, rawDispatchId);
+        // Automatically silence alarm and dismiss notification because responder opened the app!
+        stopSirenAndVibration();
+        Notifications.dismissAllNotificationsAsync().catch(() => {});
+
         if (dispatchId) {
+          silencedDispatchIds.current.add(dispatchId);
           try {
             router.navigate('/(responder)/dispatch');
           } catch (_) {
@@ -726,39 +739,28 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     };
   }, [echo, user, startLoopingAlarm, stopSirenAndVibration]);
 
-  // AppState change: ensure alarm persists and automatically recovers when switching apps or locking/unlocking phone
+  // AppState change: when responder opens the app (app becomes 'active'),
+  // automatically silence/turn off the alarm sound and vibration!
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       console.log(`[MissionAlarmContext] AppState changed to: ${nextAppState}, isAlarmPlaying:`, isAlarmPlayingRef.current);
-      if (isAlarmPlayingRef.current) {
-        // App returned to foreground or moved to background: guarantee audio mode & alive player
-        setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-          interruptionMode: 'doNotMix',
-        }).catch(() => {});
-
-        if (soundRef.current) {
-          try {
-            if (!soundRef.current.playing) {
-              soundRef.current.play();
-            }
-          } catch (_) {
-            initOrRestartAudioPlayer();
+      if (nextAppState === 'active') {
+        // Responder opened the app: automatically stop the siren sound and vibration!
+        if (isAlarmPlayingRef.current) {
+          console.log('[MissionAlarmContext] 🔕 Responder opened the app -> automatically silencing alarm sound');
+          if (activeAlarmDispatchIdRef.current) {
+            silencedDispatchIds.current.add(activeAlarmDispatchIdRef.current);
           }
-        } else {
-          initOrRestartAudioPlayer();
+          stopSirenAndVibration();
+          // Dismiss notification from tray so Android OS immediately cuts off the native sound!
+          Notifications.dismissAllNotificationsAsync().catch(() => {});
         }
-
-        try {
-          Vibration.vibrate([0, 600, 300, 600, 300, 1000], true);
-        } catch (_) {}
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, [initOrRestartAudioPlayer]);
+  }, [stopSirenAndVibration]);
 
   return (
     <MissionAlarmContext.Provider
