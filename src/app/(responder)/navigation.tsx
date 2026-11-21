@@ -204,10 +204,6 @@ export default function NavigationScreen() {
 
   const handleArrived = async () => {
     if (isArriving) return;
-    if (!isWithinRange) {
-      confirmManualArrival();
-      return;
-    }
     await executeArrival();
   };
 
@@ -846,71 +842,27 @@ export default function NavigationScreen() {
             </View>
           </View>
 
-          {/* Row 2: GPS Distance & Manual Override Warning Container */}
-          {!isWithinRange ? (
-            <View style={styles.warningContainer}>
-              <View style={styles.warningLeft}>
-                <AlertTriangle size={16} color="#F59E0B" style={{ marginRight: 8 }} />
-                <Text style={styles.warningText} numberOfLines={1}>
-                  {displayedLocation
-                    ? `${Math.round(distanceToScene)}m away (Limit: ${ARRIVAL_RADIUS_METERS}m)`
-                    : 'Acquiring GPS proximity...'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={confirmManualArrival}
-                disabled={isArriving}
-                activeOpacity={0.8}
-                style={styles.overrideButton}
-              >
-                <Text style={styles.overrideButtonText}>Override GPS</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.successContainer}>
-              <CheckCircle2 size={16} color="#10B981" style={{ marginRight: 8 }} />
-              <Text style={styles.successText}>
-                Within arrival range ({Math.round(distanceToScene)}m from incident pin)
-              </Text>
-            </View>
-          )}
-
-          {/* Row 3: Prominent Arrived Button */}
+          {/* Prominent Arrived on Scene Button */}
           <TouchableOpacity
             onPress={handleArrived}
             disabled={isArriving}
             activeOpacity={0.88}
             style={[
               styles.btnArrived,
-              !isWithinRange ? styles.btnArrivedOverride : styles.btnArrivedNormal,
+              styles.btnArrivedNormal,
+              { marginTop: 12 },
             ]}
           >
             {isArriving ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <View style={styles.btnContentRow}>
-                {!isWithinRange ? (
-                  <ShieldAlert size={21} color="#FEF3C7" style={{ marginRight: 8 }} />
-                ) : (
-                  <ShieldCheck size={21} color="#FFFFFF" style={{ marginRight: 8 }} />
-                )}
+                <ShieldCheck size={21} color="#FFFFFF" style={{ marginRight: 8 }} />
                 <Text style={styles.btnArrivedText}>
-                  {!isWithinRange ? 'ARRIVED (MANUAL OVERRIDE)' : 'ARRIVED ON SCENE'}
+                  ARRIVED ON SCENE
                 </Text>
               </View>
             )}
-          </TouchableOpacity>
-
-          {/* Row 4: Secondary False Alarm / No Incident Found Button */}
-          <TouchableOpacity
-            onPress={() => setShowUnfoundedModal(true)}
-            activeOpacity={0.8}
-            style={styles.btnUnfounded}
-          >
-            <AlertTriangle size={15} color="#F59E0B" style={{ marginRight: 8 }} />
-            <Text style={styles.btnUnfoundedText}>
-              No Incident Found / False Alarm
-            </Text>
           </TouchableOpacity>
         </View>
       </View>
