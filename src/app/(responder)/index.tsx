@@ -354,7 +354,13 @@ export default function DashboardScreen() {
               </View>
               <DispatchCard
                 dispatch={activeDispatch}
-                onDetails={() => router.navigate('/(responder)/dispatch')}
+                onDetails={() => {
+                  if (activeDispatch?.status === 'arrived_on_scene') {
+                    router.navigate('/(responder)/patient');
+                  } else {
+                    router.navigate('/(responder)/dispatch');
+                  }
+                }}
               />
             </>
           ) : (

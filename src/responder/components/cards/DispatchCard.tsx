@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { StatusChip } from '@/shared/components';
 import { MapPin, Clock, AlertTriangle, ArrowRight, Navigation } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 interface DispatchCardProps {
   dispatch?: any;
@@ -10,6 +11,7 @@ interface DispatchCardProps {
 }
 
 export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps) {
+  const router = useRouter();
   const data = dispatch || {
     id: 'DSP-2026-089',
     type: 'Medical Emergency',
@@ -21,6 +23,16 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
 
   const isUrgent = data.status === 'assigned';
   const isEnRoute = data.status === 'accepted' || data.status === 'en_route';
+
+  const handlePress = () => {
+    if (data.status === 'arrived_on_scene') {
+      router.navigate('/(responder)/patient');
+    } else if (onDetails) {
+      onDetails();
+    } else {
+      router.navigate('/(responder)/dispatch');
+    }
+  };
 
   return (
     <View
@@ -72,7 +84,7 @@ export function DispatchCard({ dispatch, onPress, onDetails }: DispatchCardProps
 
       {/* Primary Action Button */}
       <TouchableOpacity
-        onPress={onDetails || (() => {})}
+        onPress={handlePress}
         activeOpacity={0.85}
         className={`py-3.5 px-5 rounded-lg flex-row items-center justify-center ${
           isUrgent

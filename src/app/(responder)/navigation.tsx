@@ -178,10 +178,10 @@ export default function NavigationScreen() {
       setTrackingStatus('arrived_on_scene');
       setRouteCoords([]);
       setRouteInfo(null);
-      navigateBackSafe();
+      router.replace('/(responder)/patient');
     } catch (e: any) {
       console.error('Error updating status to arrived_on_scene:', e);
-      navigateBackSafe();
+      router.replace('/(responder)/patient');
     } finally {
       setIsArriving(false);
     }

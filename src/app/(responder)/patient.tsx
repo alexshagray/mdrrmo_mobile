@@ -613,8 +613,8 @@ export default function PatientCareRecordScreen() {
       const incCode = activeDispatch?.incident?.incident_code || (activeDispatch?.id ? `#DISP-${activeDispatch.id}` : 'Incident');
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       if (activeDispatch?.id) {
-        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
       }
       setSuccessModalData({
         type: 'unfounded',
@@ -643,7 +643,7 @@ export default function PatientCareRecordScreen() {
   // Auto-persist draft to AsyncStorage on every change
   useEffect(() => {
     if (activeDispatch?.id && formData?.patient_id) {
-      AsyncStorage.setItem(`@pcr_draft_${activeDispatch.id}`, JSON.stringify(formData)).catch(() => {});
+      AsyncStorage.setItem(`@pcr_draft_${activeDispatch.id}`, JSON.stringify(formData)).catch(() => { });
     }
   }, [formData, activeDispatch?.id]);
 
@@ -651,9 +651,9 @@ export default function PatientCareRecordScreen() {
   useEffect(() => {
     if (activeDispatch?.id) {
       if (pcrPhotos.length > 0) {
-        AsyncStorage.setItem(`@pcr_photos_${activeDispatch.id}`, JSON.stringify(pcrPhotos)).catch(() => {});
+        AsyncStorage.setItem(`@pcr_photos_${activeDispatch.id}`, JSON.stringify(pcrPhotos)).catch(() => { });
       } else {
-        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
       }
     }
   }, [pcrPhotos, activeDispatch?.id]);
@@ -665,7 +665,7 @@ export default function PatientCareRecordScreen() {
         const curDispatch = activeDispatchRef.current;
         const curForm = formDataRef.current;
         if (curDispatch?.id && curForm?.patient_id) {
-          AsyncStorage.setItem(`@pcr_draft_${curDispatch.id}`, JSON.stringify(curForm)).catch(() => {});
+          AsyncStorage.setItem(`@pcr_draft_${curDispatch.id}`, JSON.stringify(curForm)).catch(() => { });
 
           const uniqueAssessments = Array.from(new Set(curForm.assessment_markers.map((m: any) => m.label).filter(Boolean)));
           const payload = {
@@ -997,7 +997,7 @@ export default function PatientCareRecordScreen() {
           };
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   };
 
   const handleConfirmWalkIn = async () => {
@@ -1056,7 +1056,7 @@ export default function PatientCareRecordScreen() {
             realLocationName = fastGeocode;
             addressStr = fastGeocode;
           }
-        } catch {}
+        } catch { }
       }
 
       // Call API immediately
@@ -1088,7 +1088,7 @@ export default function PatientCareRecordScreen() {
             setFormData(prev => ({ ...prev, place_of_incident: bgAddress }));
             setWalkInCoords(prev => prev ? { ...prev, address: bgAddress } : { latitude: coords.latitude, longitude: coords.longitude, address: bgAddress });
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } catch (error: any) {
       console.log('Error creating walk-in dispatch:', error);
@@ -1730,7 +1730,7 @@ export default function PatientCareRecordScreen() {
     if (targetIdx === activePcrIndex) return;
 
     if (formData.patient_id && activeDispatch?.id) {
-      await saveCurrentStep().catch(() => {});
+      await saveCurrentStep().catch(() => { });
     }
 
     const targetPcr = missionPcrs[targetIdx];
@@ -1760,8 +1760,8 @@ export default function PatientCareRecordScreen() {
             setActivePcrIndex(0);
           } else {
             if (activeDispatch?.id) {
-              AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-              AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+              AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+              AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
             }
             setPcrPhotos([]);
             setFormData(initialFormData);
@@ -1770,8 +1770,8 @@ export default function PatientCareRecordScreen() {
         }
       } else {
         if (activeDispatch?.id) {
-          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
         }
         setPcrPhotos([]);
         setFormData(initialFormData);
@@ -1785,8 +1785,8 @@ export default function PatientCareRecordScreen() {
     } catch (err: any) {
       // If offline or network issue, still allow local draft clearing
       if (activeDispatch?.id) {
-        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
       }
       setPcrPhotos([]);
       setFormData(initialFormData);
@@ -1870,8 +1870,8 @@ export default function PatientCareRecordScreen() {
       });
 
       if (activeDispatch?.id) {
-        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
       }
 
       const totalPatients = Math.max(missionPcrs.length, 1);
@@ -1915,8 +1915,8 @@ export default function PatientCareRecordScreen() {
           payload: {},
         });
         if (activeDispatch?.id) {
-          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => {});
-          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => {});
+          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
         }
         const pName = [formData.first_name, formData.last_name].filter(Boolean).join(' ') || 'Patient';
         const incCode = activeDispatch?.incident?.incident_code || `#DISP-${activeDispatch.id}`;
@@ -2855,64 +2855,64 @@ export default function PatientCareRecordScreen() {
       accent: string;
       systemLog?: string | null;
     }> = [
-      {
-        key: 'dispatch_time',
-        label: 'Dispatch Time',
-        description: 'Unit assigned / mission dispatched',
-        badge: 'Auto-logged',
-        badgeBg: '#EFF6FF',
-        badgeText: '#1D4ED8',
-        accent: '#2563EB',
-        systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.assigned_at || activeDispatch.created_at) : null,
-      },
-      {
-        key: 'en_route_time',
-        label: 'En Route Time',
-        description: 'Departed station / proceeding to scene',
-        badge: 'Auto-logged',
-        badgeBg: '#EFF6FF',
-        badgeText: '#1D4ED8',
-        accent: '#0284C7',
-        systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.en_route_at) : null,
-      },
-      {
-        key: 'on_scene_time',
-        label: 'Arrived on Scene',
-        description: 'Arrived at incident location',
-        badge: 'Auto-logged',
-        badgeBg: '#ECFDF5',
-        badgeText: '#047857',
-        accent: '#10B981',
-        systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.arrived_on_scene_at || activeDispatch.arrived_at) : null,
-      },
-      {
-        key: 'transport_time',
-        label: 'Transport Time',
-        description: 'Left incident scene for hospital',
-        badge: 'Optional',
-        badgeBg: '#F1F5F9',
-        badgeText: '#475569',
-        accent: '#F59E0B',
-      },
-      {
-        key: 'arrived_hf_time',
-        label: 'Arrived Health Facility',
-        description: 'Arrived at receiving hospital / clinic',
-        badge: 'Optional',
-        badgeBg: '#F1F5F9',
-        badgeText: '#475569',
-        accent: '#8B5CF6',
-      },
-      {
-        key: 'departed_hf_time',
-        label: 'Departed Health Facility',
-        description: 'Cleared / departed receiving facility',
-        badge: 'Optional',
-        badgeBg: '#F1F5F9',
-        badgeText: '#475569',
-        accent: '#64748B',
-      },
-    ];
+        {
+          key: 'dispatch_time',
+          label: 'Dispatch Time',
+          description: 'Unit assigned / mission dispatched',
+          badge: 'Auto-logged',
+          badgeBg: '#EFF6FF',
+          badgeText: '#1D4ED8',
+          accent: '#2563EB',
+          systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.assigned_at || activeDispatch.created_at) : null,
+        },
+        {
+          key: 'en_route_time',
+          label: 'En Route Time',
+          description: 'Departed station / proceeding to scene',
+          badge: 'Auto-logged',
+          badgeBg: '#EFF6FF',
+          badgeText: '#1D4ED8',
+          accent: '#0284C7',
+          systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.en_route_at) : null,
+        },
+        {
+          key: 'on_scene_time',
+          label: 'Arrived on Scene',
+          description: 'Arrived at incident location',
+          badge: 'Auto-logged',
+          badgeBg: '#ECFDF5',
+          badgeText: '#047857',
+          accent: '#10B981',
+          systemLog: activeDispatch ? formatTime24ForApi(activeDispatch.arrived_on_scene_at || activeDispatch.arrived_at) : null,
+        },
+        {
+          key: 'transport_time',
+          label: 'Transport Time',
+          description: 'Left incident scene for hospital',
+          badge: 'Optional',
+          badgeBg: '#F1F5F9',
+          badgeText: '#475569',
+          accent: '#F59E0B',
+        },
+        {
+          key: 'arrived_hf_time',
+          label: 'Arrived Health Facility',
+          description: 'Arrived at receiving hospital / clinic',
+          badge: 'Optional',
+          badgeBg: '#F1F5F9',
+          badgeText: '#475569',
+          accent: '#8B5CF6',
+        },
+        {
+          key: 'departed_hf_time',
+          label: 'Departed Health Facility',
+          description: 'Cleared / departed receiving facility',
+          badge: 'Optional',
+          badgeBg: '#F1F5F9',
+          badgeText: '#475569',
+          accent: '#64748B',
+        },
+      ];
 
     const handleOpTimeDigitsChange = (key: TimeFieldKey, rawVal: string) => {
       const { period } = getTime12Parts(formData[key]);
@@ -3142,7 +3142,7 @@ export default function PatientCareRecordScreen() {
                   ? [formData.first_name, formData.last_name].filter(Boolean).join(' ')
                   : null;
                 const patientName = currentName
-                  || [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ') 
+                  || [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ')
                   || (p.patient?.is_unidentified || (idx === activePcrIndex && formData.is_unidentified) ? 'Unidentified' : `Patient #${idx + 1}`);
                 return (
                   <TouchableOpacity
@@ -3900,8 +3900,8 @@ export default function PatientCareRecordScreen() {
               {isSaving
                 ? 'SUBMITTING...'
                 : (missionPcrs.length > 1
-                    ? `FINALIZE & SUBMIT ALL (${missionPcrs.length} PATIENTS)`
-                    : 'FINALIZE & SUBMIT MISSION')}
+                  ? `FINALIZE & SUBMIT ALL (${missionPcrs.length} PATIENTS)`
+                  : 'FINALIZE & SUBMIT MISSION')}
             </Text>
           </TouchableOpacity>
 
@@ -3983,15 +3983,15 @@ export default function PatientCareRecordScreen() {
                 successModalData?.type === 'offline'
                   ? '#EFF6FF'
                   : successModalData?.type === 'unfounded'
-                  ? '#FEF2F2'
-                  : '#ECFDF5',
+                    ? '#FEF2F2'
+                    : '#ECFDF5',
               borderWidth: 1.5,
               borderColor:
                 successModalData?.type === 'offline'
                   ? '#BFDBFE'
                   : successModalData?.type === 'unfounded'
-                  ? '#FECACA'
-                  : '#A7F3D0',
+                    ? '#FECACA'
+                    : '#A7F3D0',
               alignItems: 'center',
               justifyContent: 'center',
               marginBottom: 12,
@@ -4006,16 +4006,16 @@ export default function PatientCareRecordScreen() {
                   successModalData?.type === 'offline'
                     ? '#2563EB'
                     : successModalData?.type === 'unfounded'
-                    ? '#EF4444'
-                    : '#10B981',
+                      ? '#EF4444'
+                      : '#10B981',
                 alignItems: 'center',
                 justifyContent: 'center',
                 shadowColor:
                   successModalData?.type === 'offline'
                     ? '#2563EB'
                     : successModalData?.type === 'unfounded'
-                    ? '#EF4444'
-                    : '#10B981',
+                      ? '#EF4444'
+                      : '#10B981',
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.3,
                 shadowRadius: 8,
@@ -4040,8 +4040,8 @@ export default function PatientCareRecordScreen() {
                 successModalData?.type === 'offline'
                   ? '#DBEAFE'
                   : successModalData?.type === 'unfounded'
-                  ? '#FEE2E2'
-                  : '#D1FAE5',
+                    ? '#FEE2E2'
+                    : '#D1FAE5',
               paddingHorizontal: 12,
               paddingVertical: 4.5,
               borderRadius: 20,
@@ -4057,8 +4057,8 @@ export default function PatientCareRecordScreen() {
                   successModalData?.type === 'offline'
                     ? '#2563EB'
                     : successModalData?.type === 'unfounded'
-                    ? '#DC2626'
-                    : '#059669',
+                      ? '#DC2626'
+                      : '#059669',
               }}
             />
             <Text
@@ -4070,8 +4070,8 @@ export default function PatientCareRecordScreen() {
                   successModalData?.type === 'offline'
                     ? '#1D4ED8'
                     : successModalData?.type === 'unfounded'
-                    ? '#DC2626'
-                    : '#047857',
+                      ? '#DC2626'
+                      : '#047857',
                 textTransform: 'uppercase',
               }}
             >
@@ -4390,994 +4390,994 @@ export default function PatientCareRecordScreen() {
           />
           {renderStepIndicator()}
 
-        {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
-        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-          <TouchableOpacity
-            onPress={() => setShowUnfoundedModal(true)}
-            activeOpacity={0.8}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: '#FEF3C7',
-              borderColor: '#FDE68A',
-              borderWidth: 1,
-              borderRadius: 12,
-              paddingVertical: 9,
-              paddingHorizontal: 14,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <AlertTriangle size={15} color="#D97706" />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400E' }}>
-                No Patient Found / False Alarm?
-              </Text>
-            </View>
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
-              Report & Free Unit →
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.flex1} contentContainerStyle={styles.scroll}>
-          {step === 1 && renderStep1()}
-          {step === 2 && renderStep2()}
-          {step === 3 && renderStep3()}
-          {step === 4 && renderStep4()}
-          {step === 5 && renderStep5()}
-          {step === 6 && renderStep6()}
-          {step === 7 && renderStep7()}
-          {step === 8 && renderStep8()}
-        </ScrollView>
-
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 85) + 16 }]}>
-          <TouchableOpacity style={[styles.navBtn, step === 1 && styles.navBtnDisabled]} disabled={step === 1} onPress={() => setStep(step - 1)}>
-            <Text style={styles.navText}>Back</Text>
-          </TouchableOpacity>
-          {reachedReview && step < TOTAL_STEPS && (
+          {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
             <TouchableOpacity
-              onPress={handleReturnToReview}
+              onPress={() => setShowUnfoundedModal(true)}
               activeOpacity={0.8}
               style={{
-                paddingVertical: 12,
-                paddingHorizontal: 14,
-                borderRadius: 8,
-                backgroundColor: '#eff6ff',
-                borderWidth: 1.5,
-                borderColor: '#93c5fd',
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 5,
+                justifyContent: 'space-between',
+                backgroundColor: '#FEF3C7',
+                borderColor: '#FDE68A',
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingVertical: 9,
+                paddingHorizontal: 14,
               }}
             >
-              <Check size={16} color="#1d4ed8" />
-              <Text style={{ color: '#1d4ed8', fontWeight: '800', fontSize: 13 }}>Done Editing</Text>
-            </TouchableOpacity>
-          )}
-          {step < TOTAL_STEPS && (
-            <TouchableOpacity style={styles.navBtnPrimary} onPress={handleNext}>
-              <Text style={styles.navTextPrimary}>Next</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Modal to select Unidentified Patient Gender */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showUnidentifiedModal}
-          onRequestClose={() => !isCreatingUnidentified && setShowUnidentifiedModal(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-            <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 }}>
-              
-              <View style={{ alignItems: 'center', marginBottom: 18 }}>
-                <View style={{ width: 56, height: 56, backgroundColor: '#FEF3C7', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                  <UserX size={28} color="#D97706" />
-                </View>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
-                  Unidentified Patient
-                </Text>
-                <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
-                  Select gender if observable from the patient:
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={15} color="#D97706" />
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400E' }}>
+                  No Patient Found / False Alarm?
                 </Text>
               </View>
-
-              {/* Selection cards */}
-              <View style={{ gap: 10, marginBottom: 16 }}>
-                <TouchableOpacity
-                  disabled={isCreatingUnidentified}
-                  onPress={() => createUnidentifiedPatient('male')}
-                  activeOpacity={0.7}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 14,
-                    borderRadius: 16,
-                    borderWidth: 1.5,
-                    borderColor: '#BFDBFE',
-                    backgroundColor: '#EFF6FF',
-                  }}
-                >
-                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                    <User size={22} color="#2563EB" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#1E40AF' }}>Unknown Male</Text>
-                    <Text style={{ fontSize: 12, color: '#3B82F6', marginTop: 1 }}>Observed as male patient</Text>
-                  </View>
-                  <ChevronRight size={18} color="#2563EB" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  disabled={isCreatingUnidentified}
-                  onPress={() => createUnidentifiedPatient('female')}
-                  activeOpacity={0.7}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 14,
-                    borderRadius: 16,
-                    borderWidth: 1.5,
-                    borderColor: '#FBCFE8',
-                    backgroundColor: '#FDF2F8',
-                  }}
-                >
-                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#FCE7F3', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                    <User size={22} color="#DB2777" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#9D174D' }}>Unknown Female</Text>
-                    <Text style={{ fontSize: 12, color: '#EC4899', marginTop: 1 }}>Observed as female patient</Text>
-                  </View>
-                  <ChevronRight size={18} color="#DB2777" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  disabled={isCreatingUnidentified}
-                  onPress={() => createUnidentifiedPatient(null)}
-                  activeOpacity={0.7}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    padding: 14,
-                    borderRadius: 16,
-                    borderWidth: 1.5,
-                    borderColor: '#E2E8F0',
-                    backgroundColor: '#F8FAFC',
-                  }}
-                >
-                  <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                    <HelpCircle size={22} color="#64748B" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '800', color: '#334155' }}>Unknown</Text>
-                    <Text style={{ fontSize: 12, color: '#64748B', marginTop: 1 }}>Unspecified / Not observable on scene</Text>
-                  </View>
-                  <ChevronRight size={18} color="#64748B" />
-                </TouchableOpacity>
-              </View>
-
-              {isCreatingUnidentified ? (
-                <View style={{ paddingVertical: 12, alignItems: 'center' }}>
-                  <ActivityIndicator size="small" color="#D97706" />
-                  <Text style={{ fontSize: 12, color: '#D97706', fontWeight: '600', marginTop: 6 }}>Setting up profile...</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setShowUnidentifiedModal(false)}
-                  style={{ paddingVertical: 12, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center' }}
-                >
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#475569' }}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-
-            </View>
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
+                Report & Free Unit →
+              </Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
 
-        {/* Modal to complete identification for Unidentified Patient */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showIdentifyModal}
-          onRequestClose={() => !isIdentifying && setShowIdentifyModal(false)}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' }}
+          <ScrollView style={styles.flex1} contentContainerStyle={styles.scroll}>
+            {step === 1 && renderStep1()}
+            {step === 2 && renderStep2()}
+            {step === 3 && renderStep3()}
+            {step === 4 && renderStep4()}
+            {step === 5 && renderStep5()}
+            {step === 6 && renderStep6()}
+            {step === 7 && renderStep7()}
+            {step === 8 && renderStep8()}
+          </ScrollView>
+
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 85) + 16 }]}>
+            <TouchableOpacity style={[styles.navBtn, step === 1 && styles.navBtnDisabled]} disabled={step === 1} onPress={() => setStep(step - 1)}>
+              <Text style={styles.navText}>Back</Text>
+            </TouchableOpacity>
+            {reachedReview && step < TOTAL_STEPS && (
+              <TouchableOpacity
+                onPress={handleReturnToReview}
+                activeOpacity={0.8}
+                style={{
+                  paddingVertical: 12,
+                  paddingHorizontal: 14,
+                  borderRadius: 8,
+                  backgroundColor: '#eff6ff',
+                  borderWidth: 1.5,
+                  borderColor: '#93c5fd',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <Check size={16} color="#1d4ed8" />
+                <Text style={{ color: '#1d4ed8', fontWeight: '800', fontSize: 13 }}>Done Editing</Text>
+              </TouchableOpacity>
+            )}
+            {step < TOTAL_STEPS && (
+              <TouchableOpacity style={styles.navBtnPrimary} onPress={handleNext}>
+                <Text style={styles.navTextPrimary}>Next</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Modal to select Unidentified Patient Gender */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={showUnidentifiedModal}
+            onRequestClose={() => !isCreatingUnidentified && setShowUnidentifiedModal(false)}
           >
-            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, maxHeight: '88%' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#0f172a' }}>Complete Patient Details</Text>
-                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Enter legal name & details provided by family</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setShowIdentifyModal(false)}
-                  disabled={isIdentifying}
-                  style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Text style={{ fontSize: 16, color: '#64748b', fontWeight: 'bold' }}>✕</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+              <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 }}>
 
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={{ backgroundColor: '#fffbeb', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#fde68a', marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <AlertCircle size={18} color="#d97706" />
-                  <Text style={{ color: '#92400e', fontSize: 12, flex: 1, fontWeight: '600', lineHeight: 16 }}>
-                    Once saved, this patient will be permanently verified and locked. Further edits will be disabled for both responders and dispatchers.
+                <View style={{ alignItems: 'center', marginBottom: 18 }}>
+                  <View style={{ width: 56, height: 56, backgroundColor: '#FEF3C7', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                    <UserX size={28} color="#D97706" />
+                  </View>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
+                    Unidentified Patient
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
+                    Select gender if observable from the patient:
                   </Text>
                 </View>
 
-                <Text style={styles.label}>First Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Juan"
-                  value={identifyForm.first_name}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, first_name: v })}
-                />
+                {/* Selection cards */}
+                <View style={{ gap: 10, marginBottom: 16 }}>
+                  <TouchableOpacity
+                    disabled={isCreatingUnidentified}
+                    onPress={() => createUnidentifiedPatient('male')}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 14,
+                      borderRadius: 16,
+                      borderWidth: 1.5,
+                      borderColor: '#BFDBFE',
+                      backgroundColor: '#EFF6FF',
+                    }}
+                  >
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <User size={22} color="#2563EB" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#1E40AF' }}>Unknown Male</Text>
+                      <Text style={{ fontSize: 12, color: '#3B82F6', marginTop: 1 }}>Observed as male patient</Text>
+                    </View>
+                    <ChevronRight size={18} color="#2563EB" />
+                  </TouchableOpacity>
 
-                <Text style={styles.label}>Middle Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Optional"
-                  value={identifyForm.middle_name}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, middle_name: v })}
-                />
+                  <TouchableOpacity
+                    disabled={isCreatingUnidentified}
+                    onPress={() => createUnidentifiedPatient('female')}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 14,
+                      borderRadius: 16,
+                      borderWidth: 1.5,
+                      borderColor: '#FBCFE8',
+                      backgroundColor: '#FDF2F8',
+                    }}
+                  >
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#FCE7F3', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <User size={22} color="#DB2777" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#9D174D' }}>Unknown Female</Text>
+                      <Text style={{ fontSize: 12, color: '#EC4899', marginTop: 1 }}>Observed as female patient</Text>
+                    </View>
+                    <ChevronRight size={18} color="#DB2777" />
+                  </TouchableOpacity>
 
-                <Text style={styles.label}>Last Name *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Dela Cruz"
-                  value={identifyForm.last_name}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, last_name: v })}
-                />
-
-                <Text style={styles.label}>Gender</Text>
-                <View style={styles.checkboxContainer}>
-                  {['male', 'female'].map(g => (
-                    <TouchableOpacity
-                      key={g}
-                      style={[styles.checkbox, identifyForm.gender === g && styles.checkboxActive]}
-                      onPress={() => setIdentifyForm({ ...identifyForm, gender: g })}
-                    >
-                      <Text style={[styles.checkboxText, identifyForm.gender === g && styles.checkboxTextActive]}>
-                        {g.charAt(0).toUpperCase() + g.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  <TouchableOpacity
+                    disabled={isCreatingUnidentified}
+                    onPress={() => createUnidentifiedPatient(null)}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      padding: 14,
+                      borderRadius: 16,
+                      borderWidth: 1.5,
+                      borderColor: '#E2E8F0',
+                      backgroundColor: '#F8FAFC',
+                    }}
+                  >
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                      <HelpCircle size={22} color="#64748B" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: '#334155' }}>Unknown</Text>
+                      <Text style={{ fontSize: 12, color: '#64748B', marginTop: 1 }}>Unspecified / Not observable on scene</Text>
+                    </View>
+                    <ChevronRight size={18} color="#64748B" />
+                  </TouchableOpacity>
                 </View>
 
-                <Text style={styles.label}>Age</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 35"
-                  keyboardType="numeric"
-                  value={identifyForm.age}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, age: v.replace(/[^0-9]/g, '') })}
-                />
+                {isCreatingUnidentified ? (
+                  <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="#D97706" />
+                    <Text style={{ fontSize: 12, color: '#D97706', fontWeight: '600', marginTop: 6 }}>Setting up profile...</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setShowUnidentifiedModal(false)}
+                    style={{ paddingVertical: 12, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center' }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#475569' }}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
 
-                <Text style={styles.label}>Resident Home Address</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Zone, Barangay, Municipality"
-                  value={identifyForm.address}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, address: v })}
-                />
+              </View>
+            </View>
+          </Modal>
 
-                <Text style={styles.label}>Contact Number</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. 09123456789"
-                  keyboardType="phone-pad"
-                  value={identifyForm.contact_number}
-                  onChangeText={v => setIdentifyForm({ ...identifyForm, contact_number: v })}
-                />
-
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 24 }}>
+          {/* Modal to complete identification for Unidentified Patient */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={showIdentifyModal}
+            onRequestClose={() => !isIdentifying && setShowIdentifyModal(false)}
+          >
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'flex-end' }}
+            >
+              <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 22, maxHeight: '88%' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 20, fontWeight: '800', color: '#0f172a' }}>Complete Patient Details</Text>
+                    <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Enter legal name & details provided by family</Text>
+                  </View>
                   <TouchableOpacity
                     onPress={() => setShowIdentifyModal(false)}
                     disabled={isIdentifying}
-                    style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' }}
+                    style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}
                   >
-                    <Text style={{ color: '#475569', fontWeight: '700', fontSize: 15 }}>Cancel</Text>
+                    <Text style={{ fontSize: 16, color: '#64748b', fontWeight: 'bold' }}>✕</Text>
                   </TouchableOpacity>
+                </View>
+
+                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                  <View style={{ backgroundColor: '#fffbeb', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#fde68a', marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <AlertCircle size={18} color="#d97706" />
+                    <Text style={{ color: '#92400e', fontSize: 12, flex: 1, fontWeight: '600', lineHeight: 16 }}>
+                      Once saved, this patient will be permanently verified and locked. Further edits will be disabled for both responders and dispatchers.
+                    </Text>
+                  </View>
+
+                  <Text style={styles.label}>First Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Juan"
+                    value={identifyForm.first_name}
+                    onChangeText={v => setIdentifyForm({ ...identifyForm, first_name: v })}
+                  />
+
+                  <Text style={styles.label}>Middle Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Optional"
+                    value={identifyForm.middle_name}
+                    onChangeText={v => setIdentifyForm({ ...identifyForm, middle_name: v })}
+                  />
+
+                  <Text style={styles.label}>Last Name *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Dela Cruz"
+                    value={identifyForm.last_name}
+                    onChangeText={v => setIdentifyForm({ ...identifyForm, last_name: v })}
+                  />
+
+                  <Text style={styles.label}>Gender</Text>
+                  <View style={styles.checkboxContainer}>
+                    {['male', 'female'].map(g => (
+                      <TouchableOpacity
+                        key={g}
+                        style={[styles.checkbox, identifyForm.gender === g && styles.checkboxActive]}
+                        onPress={() => setIdentifyForm({ ...identifyForm, gender: g })}
+                      >
+                        <Text style={[styles.checkboxText, identifyForm.gender === g && styles.checkboxTextActive]}>
+                          {g.charAt(0).toUpperCase() + g.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.label}>Age</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. 35"
+                    keyboardType="numeric"
+                    value={identifyForm.age}
+                    onChangeText={v => setIdentifyForm({ ...identifyForm, age: v.replace(/[^0-9]/g, '') })}
+                  />
+
+                  <Text style={styles.label}>Resident Home Address</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Zone, Barangay, Municipality"
+                    value={identifyForm.address}
+                    onChangeText={v => setIdentifyForm({ ...identifyForm, address: v })}
+                  />
+
+                  <Text style={styles.label}>Contact Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. 09123456789"
+                    keyboardType="phone-pad"
+                    value={identifyForm.contact_number}
+                    onChangeText={v => setIdentifyForm({ ...identifyForm, contact_number: v })}
+                  />
+
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 24 }}>
+                    <TouchableOpacity
+                      onPress={() => setShowIdentifyModal(false)}
+                      disabled={isIdentifying}
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#475569', fontWeight: '700', fontSize: 15 }}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSaveIdentification}
+                      disabled={isIdentifying}
+                      style={{ flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: '#d97706', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
+                    >
+                      {isIdentifying ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <>
+                          <UserCheck size={18} color="#fff" />
+                          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Verify Identity</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
+          </Modal>
+
+          {/* Modal to report Negative on Scene / False Alarm / Prank */}
+          <Modal
+            visible={showUnfoundedModal}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => !isSubmittingUnfounded && setShowUnfoundedModal(false)}
+          >
+            <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+              <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 }}>
+                <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{ width: 56, height: 56, backgroundColor: '#FEF3C7', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                    <AlertTriangle size={28} color="#D97706" />
+                  </View>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
+                    No Patient / False Alarm
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#64748B', textAlign: 'center', marginTop: 4 }}>
+                    If zero patients or incidents are found on scene, report it to close the dispatch and release your unit back to available.
+                  </Text>
+                </View>
+
+                {/* Selection Category */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                   <TouchableOpacity
-                    onPress={handleSaveIdentification}
-                    disabled={isIdentifying}
-                    style={{ flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: '#d97706', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}
+                    onPress={() => setUnfoundedCategory('false_alarm')}
+                    style={{
+                      flex: 1,
+                      padding: 10,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      alignItems: 'center',
+                      backgroundColor: unfoundedCategory === 'false_alarm' ? '#FFFBEB' : '#F8FAFC',
+                      borderColor: unfoundedCategory === 'false_alarm' ? '#F59E0B' : '#E2E8F0',
+                    }}
                   >
-                    {isIdentifying ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'false_alarm' ? '#B45309' : '#475569' }}>
+                      ⚠️ False Alarm
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Good faith / Left scene</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setUnfoundedCategory('prank')}
+                    style={{
+                      flex: 1,
+                      padding: 10,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      alignItems: 'center',
+                      backgroundColor: unfoundedCategory === 'prank' ? '#FEF2F2' : '#F8FAFC',
+                      borderColor: unfoundedCategory === 'prank' ? '#EF4444' : '#E2E8F0',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'prank' ? '#DC2626' : '#475569' }}>
+                      🚨 Intentional Prank
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Fabricated hoax</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Reason text input */}
+                <TextInput
+                  value={unfoundedReason}
+                  onChangeText={setUnfoundedReason}
+                  placeholder="Enter observations (e.g. Conducted area sweep, no patient found, caller unreachable)..."
+                  placeholderTextColor="#94A3B8"
+                  multiline
+                  numberOfLines={3}
+                  style={{
+                    backgroundColor: '#F8FAFC',
+                    borderWidth: 1,
+                    borderColor: '#E2E8F0',
+                    borderRadius: 12,
+                    padding: 12,
+                    fontSize: 12,
+                    color: '#1E293B',
+                    marginBottom: 16,
+                    textAlignVertical: 'top',
+                    height: 75,
+                  }}
+                />
+
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    disabled={isSubmittingUnfounded}
+                    onPress={() => setShowUnfoundedModal(false)}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    disabled={isSubmittingUnfounded}
+                    onPress={handleConfirmUnfounded}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    {isSubmittingUnfounded ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Submit & Free</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Professional Custom PCR Delete / Discard Confirmation Modal */}
+          <Modal
+            animationType="fade"
+            transparent={true}
+            visible={showDeleteModal}
+            onRequestClose={() => !isSaving && setShowDeleteModal(false)}
+          >
+            <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+              <View style={{
+                width: '100%',
+                maxWidth: 380,
+                backgroundColor: '#FFFFFF',
+                borderRadius: 24,
+                padding: 24,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 12 },
+                shadowOpacity: 0.28,
+                shadowRadius: 24,
+                elevation: 12,
+                borderWidth: 1,
+                borderColor: '#F1F5F9'
+              }}>
+                {/* Header Icon */}
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  <View style={{
+                    width: 60,
+                    height: 60,
+                    backgroundColor: '#FEE2E2',
+                    borderRadius: 30,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 12,
+                    borderWidth: 1.5,
+                    borderColor: '#FECACA',
+                  }}>
+                    <Trash2 size={28} color="#DC2626" strokeWidth={2.2} />
+                  </View>
+                  <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center', letterSpacing: -0.3 }}>
+                    {formData.pcr_id ? 'Delete Patient Record?' : 'Discard PCR Form?'}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
+                    {formData.pcr_id
+                      ? 'This medical record will be permanently deleted from this incident mission.'
+                      : 'All unsaved medical data and clinical inputs for this form will be discarded.'}
+                  </Text>
+                </View>
+
+                {/* Patient Detail Summary Box */}
+                <View style={{
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: 14,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderColor: '#E2E8F0',
+                  marginBottom: 18,
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Target Patient</Text>
+                    <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#DC2626' }}>
+                        {formData.pcr_id ? 'SAVED RECORD' : 'DRAFT'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#1E293B' }} numberOfLines={1}>
+                    {[formData.first_name, formData.last_name].filter(Boolean).join(' ') || (formData.is_unidentified ? 'Unidentified Patient' : `Patient #${activePcrIndex + 1}`)}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                    Dispatch #{activeDispatch?.id} • {activeDispatch?.incident?.tracking_number || 'Walk-In'}
+                  </Text>
+                </View>
+
+                {/* Action Buttons */}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    disabled={isSaving}
+                    onPress={() => setShowDeleteModal(false)}
+                    activeOpacity={0.75}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      backgroundColor: '#F1F5F9',
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#475569' }}>
+                      No, Cancel
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    disabled={isSaving}
+                    onPress={executeDeleteOrResetPcr}
+                    activeOpacity={0.8}
+                    style={{
+                      flex: 1.25,
+                      paddingVertical: 14,
+                      borderRadius: 14,
+                      backgroundColor: '#DC2626',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 6,
+                      shadowColor: '#DC2626',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 0.25,
+                      shadowRadius: 8,
+                      elevation: 4,
+                    }}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <>
-                        <UserCheck size={18} color="#fff" />
-                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Verify Identity</Text>
+                        <Trash2 size={16} color="#FFFFFF" strokeWidth={2.2} />
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF' }}>
+                          Yes, Delete
+                        </Text>
                       </>
                     )}
                   </TouchableOpacity>
                 </View>
-              </ScrollView>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
-
-        {/* Modal to report Negative on Scene / False Alarm / Prank */}
-        <Modal
-          visible={showUnfoundedModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => !isSubmittingUnfounded && setShowUnfoundedModal(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-            <View style={{ width: '100%', maxWidth: 380, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 }}>
-              <View style={{ alignItems: 'center', marginBottom: 12 }}>
-                <View style={{ width: 56, height: 56, backgroundColor: '#FEF3C7', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-                  <AlertTriangle size={28} color="#D97706" />
-                </View>
-                <Text style={{ fontSize: 18, fontWeight: '800', color: '#1E293B', textAlign: 'center' }}>
-                  No Patient / False Alarm
-                </Text>
-                <Text style={{ fontSize: 12, color: '#64748B', textAlign: 'center', marginTop: 4 }}>
-                  If zero patients or incidents are found on scene, report it to close the dispatch and release your unit back to available.
-                </Text>
-              </View>
-
-              {/* Selection Category */}
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                <TouchableOpacity
-                  onPress={() => setUnfoundedCategory('false_alarm')}
-                  style={{
-                    flex: 1,
-                    padding: 10,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    alignItems: 'center',
-                    backgroundColor: unfoundedCategory === 'false_alarm' ? '#FFFBEB' : '#F8FAFC',
-                    borderColor: unfoundedCategory === 'false_alarm' ? '#F59E0B' : '#E2E8F0',
-                  }}
-                >
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'false_alarm' ? '#B45309' : '#475569' }}>
-                    ⚠️ False Alarm
-                  </Text>
-                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Good faith / Left scene</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setUnfoundedCategory('prank')}
-                  style={{
-                    flex: 1,
-                    padding: 10,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    alignItems: 'center',
-                    backgroundColor: unfoundedCategory === 'prank' ? '#FEF2F2' : '#F8FAFC',
-                    borderColor: unfoundedCategory === 'prank' ? '#EF4444' : '#E2E8F0',
-                  }}
-                >
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'prank' ? '#DC2626' : '#475569' }}>
-                    🚨 Intentional Prank
-                  </Text>
-                  <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Fabricated hoax</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Reason text input */}
-              <TextInput
-                value={unfoundedReason}
-                onChangeText={setUnfoundedReason}
-                placeholder="Enter observations (e.g. Conducted area sweep, no patient found, caller unreachable)..."
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={3}
-                style={{
-                  backgroundColor: '#F8FAFC',
-                  borderWidth: 1,
-                  borderColor: '#E2E8F0',
-                  borderRadius: 12,
-                  padding: 12,
-                  fontSize: 12,
-                  color: '#1E293B',
-                  marginBottom: 16,
-                  textAlignVertical: 'top',
-                  height: 75,
-                }}
-              />
-
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity
-                  disabled={isSubmittingUnfounded}
-                  onPress={() => setShowUnfoundedModal(false)}
-                  style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#475569' }}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  disabled={isSubmittingUnfounded}
-                  onPress={handleConfirmUnfounded}
-                  style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  {isSubmittingUnfounded ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Submit & Free</Text>
-                  )}
-                </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
 
-        {/* Professional Custom PCR Delete / Discard Confirmation Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showDeleteModal}
-          onRequestClose={() => !isSaving && setShowDeleteModal(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.75)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-            <View style={{
-              width: '100%',
-              maxWidth: 380,
-              backgroundColor: '#FFFFFF',
-              borderRadius: 24,
-              padding: 24,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 12 },
-              shadowOpacity: 0.28,
-              shadowRadius: 24,
-              elevation: 12,
-              borderWidth: 1,
-              borderColor: '#F1F5F9'
-            }}>
-              {/* Header Icon */}
-              <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                <View style={{
-                  width: 60,
-                  height: 60,
-                  backgroundColor: '#FEE2E2',
-                  borderRadius: 30,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 12,
-                  borderWidth: 1.5,
-                  borderColor: '#FECACA',
-                }}>
-                  <Trash2 size={28} color="#DC2626" strokeWidth={2.2} />
-                </View>
-                <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center', letterSpacing: -0.3 }}>
-                  {formData.pcr_id ? 'Delete Patient Record?' : 'Discard PCR Form?'}
-                </Text>
-                <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
-                  {formData.pcr_id
-                    ? 'This medical record will be permanently deleted from this incident mission.'
-                    : 'All unsaved medical data and clinical inputs for this form will be discarded.'}
-                </Text>
-              </View>
-
-              {/* Patient Detail Summary Box */}
-              <View style={{
-                backgroundColor: '#F8FAFC',
-                borderRadius: 14,
-                padding: 12,
-                borderWidth: 1,
-                borderColor: '#E2E8F0',
-                marginBottom: 18,
-              }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Target Patient</Text>
-                  <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 }}>
-                    <Text style={{ fontSize: 10, fontWeight: '800', color: '#DC2626' }}>
-                      {formData.pcr_id ? 'SAVED RECORD' : 'DRAFT'}
-                    </Text>
+          {/* Waiver Modal */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={showWaiverModal}
+            onRequestClose={() => setShowWaiverModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalIconBg}>
+                    <ShieldCheck size={28} color="#e11d48" />
                   </View>
+                  <Text style={styles.modalTitle}>Refusal of Care Waiver</Text>
                 </View>
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1E293B' }} numberOfLines={1}>
-                  {[formData.first_name, formData.last_name].filter(Boolean).join(' ') || (formData.is_unidentified ? 'Unidentified Patient' : `Patient #${activePcrIndex + 1}`)}
-                </Text>
-                <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                  Dispatch #{activeDispatch?.id} • {activeDispatch?.incident?.tracking_number || 'Walk-In'}
-                </Text>
-              </View>
 
-              {/* Action Buttons */}
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity
-                  disabled={isSaving}
-                  onPress={() => setShowDeleteModal(false)}
-                  activeOpacity={0.75}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 14,
-                    borderRadius: 14,
-                    backgroundColor: '#F1F5F9',
-                    borderWidth: 1,
-                    borderColor: '#E2E8F0',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: '#475569' }}>
-                    No, Cancel
-                  </Text>
-                </TouchableOpacity>
+                <Text style={styles.waiverText}>
+                  By signing this form, I, <Text style={styles.waiverName}>{formData.first_name ? `${formData.first_name} ${formData.last_name}` : '____________'}</Text>, am releasing OPOL RESCUE TEAM of any liability and/or medical claim from my decision to refuse care against medical advice.
+                </Text>
 
                 <TouchableOpacity
-                  disabled={isSaving}
-                  onPress={executeDeleteOrResetPcr}
-                  activeOpacity={0.8}
-                  style={{
-                    flex: 1.25,
-                    paddingVertical: 14,
-                    borderRadius: 14,
-                    backgroundColor: '#DC2626',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'row',
-                    gap: 6,
-                    shadowColor: '#DC2626',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.25,
-                    shadowRadius: 8,
-                    elevation: 4,
-                  }}
-                >
-                  {isSaving ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Trash2 size={16} color="#FFFFFF" strokeWidth={2.2} />
-                      <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF' }}>
-                        Yes, Delete
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Waiver Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showWaiverModal}
-          onRequestClose={() => setShowWaiverModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <View style={styles.modalIconBg}>
-                  <ShieldCheck size={28} color="#e11d48" />
-                </View>
-                <Text style={styles.modalTitle}>Refusal of Care Waiver</Text>
-              </View>
-
-              <Text style={styles.waiverText}>
-                By signing this form, I, <Text style={styles.waiverName}>{formData.first_name ? `${formData.first_name} ${formData.last_name}` : '____________'}</Text>, am releasing OPOL RESCUE TEAM of any liability and/or medical claim from my decision to refuse care against medical advice.
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.checkbox, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxActive, { marginBottom: 16 }]}
-                onPress={() => {
-                  setFormData(prev => {
-                    if (prev.waiver_signature === 'UNABLE_TO_SIGN') {
-                      return { ...prev, waiver_signature: '', patient_signature: '' };
-                    } else {
-                      return { ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' };
-                    }
-                  });
-                }}
-              >
-                <Text style={[styles.checkboxText, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxTextActive]}>
-                  Patient is unable to sign waiver (e.g., Unconscious, Minor)
-                </Text>
-              </TouchableOpacity>
-
-              {formData.waiver_signature === 'UNABLE_TO_SIGN' ? (
-                <TouchableOpacity
-                  style={[styles.signButton, { marginTop: 10 }]}
+                  style={[styles.checkbox, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxActive, { marginBottom: 16 }]}
                   onPress={() => {
-                    setFormData(prev => ({ ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' }));
-                    setShowWaiverModal(false);
+                    setFormData(prev => {
+                      if (prev.waiver_signature === 'UNABLE_TO_SIGN') {
+                        return { ...prev, waiver_signature: '', patient_signature: '' };
+                      } else {
+                        return { ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' };
+                      }
+                    });
                   }}
                 >
-                  <Text style={styles.signButtonText}>Confirm & Close</Text>
-                </TouchableOpacity>
-              ) : (
-                <SignaturePad
-                  descriptionText="Please sign below:"
-                  onOK={(sig) => {
-                    setFormData(prev => ({ ...prev, waiver_signature: sig, patient_signature: sig }));
-                    setShowWaiverModal(false);
-                  }}
-                  onEmpty={() => { }}
-                />
-              )}
-
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => {
-                  setShowWaiverModal(false);
-                }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Witness Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showWitnessModal}
-          onRequestClose={() => setShowWitnessModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <View style={[styles.modalIconBg, { backgroundColor: '#F0F7FF' }]}>
-                  <User size={28} color="#208AEF" />
-                </View>
-                <Text style={styles.modalTitle}>Witness Information</Text>
-              </View>
-
-              <Text style={styles.label}>Name (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Witness Name / Relationship"
-                value={formData.witness_name}
-                onChangeText={(v) => setFormData({ ...formData, witness_name: v })}
-              />
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                <Text style={[styles.label, { marginTop: 0, marginRight: 8, marginBottom: 0 }]}>Date:</Text>
-                <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '600' }}>
-                  {new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </Text>
-              </View>
-
-              <SignaturePad
-                descriptionText="Please sign below:"
-                onOK={(sig) => {
-                  setFormData({ ...formData, witness_signature: sig });
-                  setShowWitnessModal(false);
-                }}
-                onEmpty={() => { }}
-              />
-
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setShowWitnessModal(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Chief Complaint Multi-Select Modal */}
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={showComplaintModal}
-          onRequestClose={() => {
-            setShowComplaintModal(false);
-            setComplaintSearch('');
-          }}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { maxHeight: '85%', paddingBottom: 16 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <View>
-                  <Text style={styles.modalTitle}>Chief Complaint(s)</Text>
-                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                    Select all symptoms that apply to the patient
+                  <Text style={[styles.checkboxText, formData.waiver_signature === 'UNABLE_TO_SIGN' && styles.checkboxTextActive]}>
+                    Patient is unable to sign waiver (e.g., Unconscious, Minor)
                   </Text>
-                </View>
-                {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
+                </TouchableOpacity>
+
+                {formData.waiver_signature === 'UNABLE_TO_SIGN' ? (
                   <TouchableOpacity
-                    onPress={() => setFormData(prev => ({ ...prev, chief_complaint: '' }))}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={[styles.signButton, { marginTop: 10 }]}
+                    onPress={() => {
+                      setFormData(prev => ({ ...prev, waiver_signature: 'UNABLE_TO_SIGN', patient_signature: 'UNABLE_TO_SIGN' }));
+                      setShowWaiverModal(false);
+                    }}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#ef4444' }}>Clear All</Text>
+                    <Text style={styles.signButtonText}>Confirm & Close</Text>
                   </TouchableOpacity>
+                ) : (
+                  <SignaturePad
+                    descriptionText="Please sign below:"
+                    onOK={(sig) => {
+                      setFormData(prev => ({ ...prev, waiver_signature: sig, patient_signature: sig }));
+                      setShowWaiverModal(false);
+                    }}
+                    onEmpty={() => { }}
+                  />
                 )}
-              </View>
 
-              {/* Search Bar with Clear Button */}
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: '#f8fafc',
-                borderWidth: 1,
-                borderColor: '#cbd5e1',
-                borderRadius: 8,
-                paddingHorizontal: 12,
-                marginTop: 12,
-                marginBottom: 8,
-              }}>
-                <Search size={18} color="#94a3b8" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={{ flex: 1, height: 44, fontSize: 15, color: '#0f172a' }}
-                  placeholder="Search symptoms or complaints..."
-                  placeholderTextColor="#94a3b8"
-                  value={complaintSearch}
-                  onChangeText={setComplaintSearch}
-                  autoCorrect={false}
-                />
-                {complaintSearch.length > 0 && (
-                  <TouchableOpacity onPress={() => setComplaintSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <X size={16} color="#94a3b8" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Selected Complaints Chips Preview */}
-              {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
-                <View style={{ marginBottom: 10 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
-                    Selected ({parseSelectedComplaints(formData.chief_complaint).length}):
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                    {parseSelectedComplaints(formData.chief_complaint).map((c, i) => (
-                      <View
-                        key={i}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          backgroundColor: '#0284c7',
-                          borderRadius: 16,
-                          paddingVertical: 4,
-                          paddingLeft: 10,
-                          paddingRight: 6,
-                        }}
-                      >
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#ffffff', marginRight: 4 }}>
-                          {c}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => removeChiefComplaint(c)}
-                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                        >
-                          <X size={13} color="#ffffff" />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {/* Complaints List */}
-              <ScrollView style={{ marginTop: 4, maxHeight: 320 }} showsVerticalScrollIndicator={true}>
-                {complaintSearch.trim().length > 0 &&
-                  !availableComplaints.some(c => c.toLowerCase() === complaintSearch.trim().toLowerCase()) && (
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingVertical: 12,
-                        paddingHorizontal: 12,
-                        borderRadius: 8,
-                        backgroundColor: '#f0fdf4',
-                        borderWidth: 1,
-                        borderColor: '#86efac',
-                        borderStyle: 'dashed',
-                        marginBottom: 8,
-                      }}
-                      onPress={() => {
-                        toggleChiefComplaint(complaintSearch.trim());
-                        setComplaintSearch('');
-                      }}
-                    >
-                      <Plus size={16} color="#16a34a" style={{ marginRight: 8 }} />
-                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#16a34a', flex: 1 }}>
-                        Add custom: "{complaintSearch.trim()}"
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                {availableComplaints
-                  .filter(c => c.toLowerCase().includes(complaintSearch.toLowerCase().trim()))
-                  .map((complaint, index) => {
-                    const isSelected = parseSelectedComplaints(formData.chief_complaint).some(
-                      c => c.toLowerCase() === complaint.toLowerCase()
-                    );
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          paddingVertical: 12,
-                          paddingHorizontal: 12,
-                          borderRadius: 8,
-                          marginBottom: 4,
-                          backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
-                          borderWidth: 1,
-                          borderColor: isSelected ? '#bae6fd' : '#f1f5f9',
-                        }}
-                        onPress={() => toggleChiefComplaint(complaint)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
-                          <View
-                            style={{
-                              width: 22,
-                              height: 22,
-                              borderRadius: 5,
-                              borderWidth: isSelected ? 0 : 1.5,
-                              borderColor: '#94a3b8',
-                              backgroundColor: isSelected ? '#0284c7' : '#ffffff',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginRight: 10,
-                            }}
-                          >
-                            {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
-                          </View>
-                          <Text
-                            style={{
-                              fontSize: 15,
-                              fontWeight: isSelected ? '700' : '400',
-                              color: isSelected ? '#0369a1' : '#334155',
-                              flex: 1,
-                            }}
-                          >
-                            {complaint}
-                          </Text>
-                        </View>
-                        {isSelected && (
-                          <View style={{ backgroundColor: '#e0f2fe', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#0284c7' }}>Selected</Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-              </ScrollView>
-
-              {/* Bottom Actions */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
                 <TouchableOpacity
-                  style={[styles.modalCancelBtn, { flex: 1, marginTop: 0 }]}
+                  style={styles.modalCancelBtn}
                   onPress={() => {
-                    setShowComplaintModal(false);
-                    setComplaintSearch('');
+                    setShowWaiverModal(false);
                   }}
                 >
                   <Text style={styles.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={{
-                    flex: 1.5,
-                    backgroundColor: '#0284c7',
-                    borderRadius: 8,
-                    paddingVertical: 12,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  onPress={() => {
-                    setShowComplaintModal(false);
-                    setComplaintSearch('');
-                  }}
-                >
-                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 15 }}>
-                    Done ({parseSelectedComplaints(formData.chief_complaint).length})
-                  </Text>
-                </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
 
-        {/* Full-Screen PCR Print Preview Modal */}
-        <Modal
-          animationType="slide"
-          transparent={false}
-          visible={pcrPreviewVisible}
-          onRequestClose={() => setPcrPreviewVisible(false)}
-        >
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }} edges={['top', 'bottom', 'left', 'right']}>
-            {/* Modal Header */}
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              backgroundColor: '#1e293b',
-              borderBottomWidth: 1,
-              borderBottomColor: '#334155',
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
-                <View style={{ backgroundColor: '#2563eb', width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <Printer size={18} color="#ffffff" />
+          {/* Witness Modal */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={showWitnessModal}
+            onRequestClose={() => setShowWitnessModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <View style={[styles.modalIconBg, { backgroundColor: '#F0F7FF' }]}>
+                    <User size={28} color="#208AEF" />
+                  </View>
+                  <Text style={styles.modalTitle}>Witness Information</Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#ffffff' }} numberOfLines={1}>
-                    PCR Print Preview
-                  </Text>
-                  <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500' }} numberOfLines={1}>
-                    MDRRMO Official Patient Care Record
-                  </Text>
-                </View>
-              </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <TouchableOpacity
-                  onPress={handleSharePcr}
-                  activeOpacity={0.7}
-                  style={{
-                    backgroundColor: '#2563eb',
-                    paddingHorizontal: 12,
-                    paddingVertical: 7,
-                    borderRadius: 8,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 5,
-                  }}
-                >
-                  <Share2 size={14} color="#ffffff" />
-                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>Share</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setPcrPreviewVisible(false)}
-                  activeOpacity={0.7}
-                  style={{
-                    backgroundColor: '#334155',
-                    width: 34,
-                    height: 34,
-                    borderRadius: 8,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <X size={18} color="#cbd5e1" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Document WebView */}
-            <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-              {pcrPreviewHtml ? (
-                <WebView
-                  originWhitelist={['*']}
-                  source={{ html: pcrPreviewHtml }}
-                  style={{ flex: 1 }}
-                  javaScriptEnabled={true}
-                  domStorageEnabled={true}
-                  scalesPageToFit={true}
-                  startInLoadingState={true}
-                  renderLoading={() => (
-                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
-                      <ActivityIndicator size="large" color="#2563eb" />
-                      <Text style={{ marginTop: 10, fontSize: 13, color: '#64748b', fontWeight: '600' }}>
-                        Rendering PCR Document...
-                      </Text>
-                    </View>
-                  )}
+                <Text style={styles.label}>Name (Optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Witness Name / Relationship"
+                  value={formData.witness_name}
+                  onChangeText={(v) => setFormData({ ...formData, witness_name: v })}
                 />
-              ) : (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <ActivityIndicator size="large" color="#2563eb" />
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                  <Text style={[styles.label, { marginTop: 0, marginRight: 8, marginBottom: 0 }]}>Date:</Text>
+                  <Text style={{ fontSize: 16, color: '#0f172a', fontWeight: '600' }}>
+                    {new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </Text>
                 </View>
-              )}
+
+                <SignaturePad
+                  descriptionText="Please sign below:"
+                  onOK={(sig) => {
+                    setFormData({ ...formData, witness_signature: sig });
+                    setShowWitnessModal(false);
+                  }}
+                  onEmpty={() => { }}
+                />
+
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setShowWitnessModal(false)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </SafeAreaView>
-        </Modal>
+          </Modal>
 
-        {/* Professional PCR Submission & Completion Modal */}
-        {renderSuccessModal()}
+          {/* Chief Complaint Multi-Select Modal */}
+          <Modal
+            animationType="slide"
+            transparent={true}
+            visible={showComplaintModal}
+            onRequestClose={() => {
+              setShowComplaintModal(false);
+              setComplaintSearch('');
+            }}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { maxHeight: '85%', paddingBottom: 16 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <View>
+                    <Text style={styles.modalTitle}>Chief Complaint(s)</Text>
+                    <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                      Select all symptoms that apply to the patient
+                    </Text>
+                  </View>
+                  {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setFormData(prev => ({ ...prev, chief_complaint: '' }))}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#ef4444' }}>Clear All</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
-      </KeyboardAvoidingView>
+                {/* Search Bar with Clear Button */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#f8fafc',
+                  borderWidth: 1,
+                  borderColor: '#cbd5e1',
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  marginTop: 12,
+                  marginBottom: 8,
+                }}>
+                  <Search size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+                  <TextInput
+                    style={{ flex: 1, height: 44, fontSize: 15, color: '#0f172a' }}
+                    placeholder="Search symptoms or complaints..."
+                    placeholderTextColor="#94a3b8"
+                    value={complaintSearch}
+                    onChangeText={setComplaintSearch}
+                    autoCorrect={false}
+                  />
+                  {complaintSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setComplaintSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <X size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Selected Complaints Chips Preview */}
+                {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
+                  <View style={{ marginBottom: 10 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                      Selected ({parseSelectedComplaints(formData.chief_complaint).length}):
+                    </Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                      {parseSelectedComplaints(formData.chief_complaint).map((c, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: '#0284c7',
+                            borderRadius: 16,
+                            paddingVertical: 4,
+                            paddingLeft: 10,
+                            paddingRight: 6,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: '#ffffff', marginRight: 4 }}>
+                            {c}
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => removeChiefComplaint(c)}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          >
+                            <X size={13} color="#ffffff" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Complaints List */}
+                <ScrollView style={{ marginTop: 4, maxHeight: 320 }} showsVerticalScrollIndicator={true}>
+                  {complaintSearch.trim().length > 0 &&
+                    !availableComplaints.some(c => c.toLowerCase() === complaintSearch.trim().toLowerCase()) && (
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          backgroundColor: '#f0fdf4',
+                          borderWidth: 1,
+                          borderColor: '#86efac',
+                          borderStyle: 'dashed',
+                          marginBottom: 8,
+                        }}
+                        onPress={() => {
+                          toggleChiefComplaint(complaintSearch.trim());
+                          setComplaintSearch('');
+                        }}
+                      >
+                        <Plus size={16} color="#16a34a" style={{ marginRight: 8 }} />
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#16a34a', flex: 1 }}>
+                          Add custom: "{complaintSearch.trim()}"
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                  {availableComplaints
+                    .filter(c => c.toLowerCase().includes(complaintSearch.toLowerCase().trim()))
+                    .map((complaint, index) => {
+                      const isSelected = parseSelectedComplaints(formData.chief_complaint).some(
+                        c => c.toLowerCase() === complaint.toLowerCase()
+                      );
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
+                            marginBottom: 4,
+                            backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
+                            borderWidth: 1,
+                            borderColor: isSelected ? '#bae6fd' : '#f1f5f9',
+                          }}
+                          onPress={() => toggleChiefComplaint(complaint)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                            <View
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: 5,
+                                borderWidth: isSelected ? 0 : 1.5,
+                                borderColor: '#94a3b8',
+                                backgroundColor: isSelected ? '#0284c7' : '#ffffff',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginRight: 10,
+                              }}
+                            >
+                              {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                            </View>
+                            <Text
+                              style={{
+                                fontSize: 15,
+                                fontWeight: isSelected ? '700' : '400',
+                                color: isSelected ? '#0369a1' : '#334155',
+                                flex: 1,
+                              }}
+                            >
+                              {complaint}
+                            </Text>
+                          </View>
+                          {isSelected && (
+                            <View style={{ backgroundColor: '#e0f2fe', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: '#0284c7' }}>Selected</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                </ScrollView>
+
+                {/* Bottom Actions */}
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                  <TouchableOpacity
+                    style={[styles.modalCancelBtn, { flex: 1, marginTop: 0 }]}
+                    onPress={() => {
+                      setShowComplaintModal(false);
+                      setComplaintSearch('');
+                    }}
+                  >
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      flex: 1.5,
+                      backgroundColor: '#0284c7',
+                      borderRadius: 8,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onPress={() => {
+                      setShowComplaintModal(false);
+                      setComplaintSearch('');
+                    }}
+                  >
+                    <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 15 }}>
+                      Done ({parseSelectedComplaints(formData.chief_complaint).length})
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Full-Screen PCR Print Preview Modal */}
+          <Modal
+            animationType="slide"
+            transparent={false}
+            visible={pcrPreviewVisible}
+            onRequestClose={() => setPcrPreviewVisible(false)}
+          >
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }} edges={['top', 'bottom', 'left', 'right']}>
+              {/* Modal Header */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                backgroundColor: '#1e293b',
+                borderBottomWidth: 1,
+                borderBottomColor: '#334155',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 8 }}>
+                  <View style={{ backgroundColor: '#2563eb', width: 34, height: 34, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                    <Printer size={18} color="#ffffff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: '#ffffff' }} numberOfLines={1}>
+                      PCR Print Preview
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#94a3b8', fontWeight: '500' }} numberOfLines={1}>
+                      MDRRMO Official Patient Care Record
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={handleSharePcr}
+                    activeOpacity={0.7}
+                    style={{
+                      backgroundColor: '#2563eb',
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Share2 size={14} color="#ffffff" />
+                    <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>Share</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setPcrPreviewVisible(false)}
+                    activeOpacity={0.7}
+                    style={{
+                      backgroundColor: '#334155',
+                      width: 34,
+                      height: 34,
+                      borderRadius: 8,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <X size={18} color="#cbd5e1" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Document WebView */}
+              <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
+                {pcrPreviewHtml ? (
+                  <WebView
+                    originWhitelist={['*']}
+                    source={{ html: pcrPreviewHtml }}
+                    style={{ flex: 1 }}
+                    javaScriptEnabled={true}
+                    domStorageEnabled={true}
+                    scalesPageToFit={true}
+                    startInLoadingState={true}
+                    renderLoading={() => (
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' }}>
+                        <ActivityIndicator size="large" color="#2563eb" />
+                        <Text style={{ marginTop: 10, fontSize: 13, color: '#64748b', fontWeight: '600' }}>
+                          Rendering PCR Document...
+                        </Text>
+                      </View>
+                    )}
+                  />
+                ) : (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="large" color="#2563eb" />
+                  </View>
+                )}
+              </View>
+            </SafeAreaView>
+          </Modal>
+
+          {/* Professional PCR Submission & Completion Modal */}
+          {renderSuccessModal()}
+
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
