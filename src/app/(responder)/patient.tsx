@@ -379,6 +379,38 @@ export default function PatientCareRecordScreen() {
     };
   }, []);
 
+  // Multi-select helpers for Chief Complaints
+  const parseSelectedComplaints = (val: string | string[] | undefined | null): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.filter(Boolean).map(s => String(s).trim()).filter(Boolean);
+    return String(val)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  };
+
+  const toggleChiefComplaint = (complaint: string) => {
+    const clean = complaint.trim();
+    if (!clean) return;
+    const currentList = parseSelectedComplaints(formData.chief_complaint);
+    const exists = currentList.some(c => c.toLowerCase() === clean.toLowerCase());
+    const updated = exists
+      ? currentList.filter(c => c.toLowerCase() !== clean.toLowerCase())
+      : [...currentList, clean];
+
+    const joined = updated.join(', ');
+    setFormData(prev => ({ ...prev, chief_complaint: joined }));
+    if (updated.length > 0) {
+      setErrors(prev => ({ ...prev, chief_complaint: '' }));
+    }
+  };
+
+  const removeChiefComplaint = (complaint: string) => {
+    const currentList = parseSelectedComplaints(formData.chief_complaint);
+    const updated = currentList.filter(c => c.toLowerCase() !== complaint.trim().toLowerCase());
+    setFormData(prev => ({ ...prev, chief_complaint: updated.join(', ') }));
+  };
+
   // Unidentified Patient selection modal state
   const [showUnidentifiedModal, setShowUnidentifiedModal] = useState(false);
   const [isCreatingUnidentified, setIsCreatingUnidentified] = useState(false);
@@ -2308,16 +2340,72 @@ export default function PatientCareRecordScreen() {
         </Text>
         {renderError('place_of_incident')}
 
-        <Text style={styles.label}>Chief Complaint</Text>
-        <TouchableOpacity
-          style={[styles.input, { justifyContent: 'center', height: 56, marginBottom: 16 }, errors.chief_complaint ? styles.inputError : null]}
-          onPress={() => setShowComplaintModal(true)}
-        >
-          <Text style={{ color: formData.chief_complaint ? '#0f172a' : '#94a3b8', fontSize: 16 }}>
-            {formData.chief_complaint || 'Select Chief Complaint'}
-          </Text>
-        </TouchableOpacity>
-        {renderError('chief_complaint')}
+        <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <Text style={[styles.label, { marginBottom: 0, marginTop: 0 }]}>Chief Complaint(s)</Text>
+            {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
+              <View style={{ backgroundColor: '#eff6ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1, borderColor: '#bfdbfe' }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#1d4ed8' }}>
+                  {parseSelectedComplaints(formData.chief_complaint).length} Selected
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.input,
+              {
+                minHeight: 56,
+                height: 'auto',
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                justifyContent: 'center',
+                backgroundColor: '#ffffff',
+                marginBottom: 0,
+              },
+              errors.chief_complaint ? styles.inputError : null,
+            ]}
+            onPress={() => setShowComplaintModal(true)}
+            activeOpacity={0.8}
+          >
+            {parseSelectedComplaints(formData.chief_complaint).length === 0 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#94a3b8', fontSize: 15 }}>Select Chief Complaint(s)...</Text>
+                <ChevronRight size={18} color="#94a3b8" />
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {parseSelectedComplaints(formData.chief_complaint).map((item, idx) => (
+                  <View
+                    key={idx}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#e0f2fe',
+                      borderColor: '#7dd3fc',
+                      borderWidth: 1,
+                      borderRadius: 8,
+                      paddingVertical: 5,
+                      paddingHorizontal: 9,
+                    }}
+                  >
+                    <Text style={{ color: '#0369a1', fontSize: 13, fontWeight: '600', marginRight: 6 }}>
+                      {item}
+                    </Text>
+                    <TouchableOpacity
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={() => removeChiefComplaint(item)}
+                    >
+                      <X size={14} color="#0284c7" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </TouchableOpacity>
+          {renderError('chief_complaint')}
+        </View>
       </View>
     </View>
   );
@@ -4534,41 +4622,219 @@ export default function PatientCareRecordScreen() {
           </View>
         </Modal>
 
-        {/* Chief Complaint Modal */}
+        {/* Chief Complaint Multi-Select Modal */}
         <Modal
           animationType="slide"
           transparent={true}
           visible={showComplaintModal}
-          onRequestClose={() => setShowComplaintModal(false)}
+          onRequestClose={() => {
+            setShowComplaintModal(false);
+            setComplaintSearch('');
+          }}
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-              <Text style={styles.modalTitle}>Select Chief Complaint</Text>
-              <TextInput
-                style={[styles.input, { marginTop: 16 }]}
-                placeholder="Search complaint..."
-                value={complaintSearch}
-                onChangeText={setComplaintSearch}
-              />
-              <ScrollView style={{ marginTop: 8 }}>
-                {availableComplaints.filter(c => c.toLowerCase().includes(complaintSearch.toLowerCase())).map((complaint, index) => (
+            <View style={[styles.modalContent, { maxHeight: '85%', paddingBottom: 16 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <View>
+                  <Text style={styles.modalTitle}>Chief Complaint(s)</Text>
+                  <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    Select all symptoms that apply to the patient
+                  </Text>
+                </View>
+                {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
                   <TouchableOpacity
-                    key={index}
-                    style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}
-                    onPress={() => {
-                      setFormData({ ...formData, chief_complaint: complaint });
-                      setErrors({ ...errors, chief_complaint: '' });
-                      setShowComplaintModal(false);
-                      setComplaintSearch('');
-                    }}
+                    onPress={() => setFormData(prev => ({ ...prev, chief_complaint: '' }))}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={{ fontSize: 16, color: '#334155' }}>{complaint}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#ef4444' }}>Clear All</Text>
                   </TouchableOpacity>
-                ))}
+                )}
+              </View>
+
+              {/* Search Bar with Clear Button */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#f8fafc',
+                borderWidth: 1,
+                borderColor: '#cbd5e1',
+                borderRadius: 8,
+                paddingHorizontal: 12,
+                marginTop: 12,
+                marginBottom: 8,
+              }}>
+                <Search size={18} color="#94a3b8" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={{ flex: 1, height: 44, fontSize: 15, color: '#0f172a' }}
+                  placeholder="Search symptoms or complaints..."
+                  placeholderTextColor="#94a3b8"
+                  value={complaintSearch}
+                  onChangeText={setComplaintSearch}
+                  autoCorrect={false}
+                />
+                {complaintSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setComplaintSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={16} color="#94a3b8" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Selected Complaints Chips Preview */}
+              {parseSelectedComplaints(formData.chief_complaint).length > 0 && (
+                <View style={{ marginBottom: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Selected ({parseSelectedComplaints(formData.chief_complaint).length}):
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                    {parseSelectedComplaints(formData.chief_complaint).map((c, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#0284c7',
+                          borderRadius: 16,
+                          paddingVertical: 4,
+                          paddingLeft: 10,
+                          paddingRight: 6,
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#ffffff', marginRight: 4 }}>
+                          {c}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => removeChiefComplaint(c)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <X size={13} color="#ffffff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Complaints List */}
+              <ScrollView style={{ marginTop: 4, maxHeight: 320 }} showsVerticalScrollIndicator={true}>
+                {complaintSearch.trim().length > 0 &&
+                  !availableComplaints.some(c => c.toLowerCase() === complaintSearch.trim().toLowerCase()) && (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        borderRadius: 8,
+                        backgroundColor: '#f0fdf4',
+                        borderWidth: 1,
+                        borderColor: '#86efac',
+                        borderStyle: 'dashed',
+                        marginBottom: 8,
+                      }}
+                      onPress={() => {
+                        toggleChiefComplaint(complaintSearch.trim());
+                        setComplaintSearch('');
+                      }}
+                    >
+                      <Plus size={16} color="#16a34a" style={{ marginRight: 8 }} />
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: '#16a34a', flex: 1 }}>
+                        Add custom: "{complaintSearch.trim()}"
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                {availableComplaints
+                  .filter(c => c.toLowerCase().includes(complaintSearch.toLowerCase().trim()))
+                  .map((complaint, index) => {
+                    const isSelected = parseSelectedComplaints(formData.chief_complaint).some(
+                      c => c.toLowerCase() === complaint.toLowerCase()
+                    );
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingVertical: 12,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          marginBottom: 4,
+                          backgroundColor: isSelected ? '#f0f9ff' : 'transparent',
+                          borderWidth: 1,
+                          borderColor: isSelected ? '#bae6fd' : '#f1f5f9',
+                        }}
+                        onPress={() => toggleChiefComplaint(complaint)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                          <View
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: 5,
+                              borderWidth: isSelected ? 0 : 1.5,
+                              borderColor: '#94a3b8',
+                              backgroundColor: isSelected ? '#0284c7' : '#ffffff',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginRight: 10,
+                            }}
+                          >
+                            {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                          </View>
+                          <Text
+                            style={{
+                              fontSize: 15,
+                              fontWeight: isSelected ? '700' : '400',
+                              color: isSelected ? '#0369a1' : '#334155',
+                              flex: 1,
+                            }}
+                          >
+                            {complaint}
+                          </Text>
+                        </View>
+                        {isSelected && (
+                          <View style={{ backgroundColor: '#e0f2fe', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: '#0284c7' }}>Selected</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
               </ScrollView>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowComplaintModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
+
+              {/* Bottom Actions */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+                <TouchableOpacity
+                  style={[styles.modalCancelBtn, { flex: 1, marginTop: 0 }]}
+                  onPress={() => {
+                    setShowComplaintModal(false);
+                    setComplaintSearch('');
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1.5,
+                    backgroundColor: '#0284c7',
+                    borderRadius: 8,
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => {
+                    setShowComplaintModal(false);
+                    setComplaintSearch('');
+                  }}
+                >
+                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 15 }}>
+                    Done ({parseSelectedComplaints(formData.chief_complaint).length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
