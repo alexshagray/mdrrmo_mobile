@@ -615,14 +615,18 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const dispatchId = d?.id ? Number(d.id) : (e.dispatch_id ? Number(e.dispatch_id) : null);
 
       const crewUsers = d?.crew || [];
-      const crewIds = crewUsers.map((c: any) => c.id || c.user_id);
-      const userTeam = user?.responder_profile?.team || user?.team;
+      const crewIds = crewUsers.map((c: any) => Number(c.id || c.user_id));
+      const currentUserId = user?.id ? Number(user.id) : null;
+      const driverId = d?.driver_id ? Number(d.driver_id) : null;
+      const emtId = d?.emt_id ? Number(d.emt_id) : null;
+
+      // The mission is strictly for this user ONLY if they are explicitly assigned in the crew, as driver, or as emt.
+      // Unchecked members of the same team must NOT receive the mission or sound the alarm.
       const isForUser =
-        !user?.id ||
-        d?.driver_id === user.id ||
-        d?.emt_id === user.id ||
-        crewIds.includes(user.id) ||
-        (userTeam && d?.team && String(d.team).toLowerCase() === String(userTeam).toLowerCase());
+        currentUserId !== null &&
+        (driverId === currentUserId ||
+          emtId === currentUserId ||
+          crewIds.includes(currentUserId));
 
       if (isForUser && dispatchId) {
         if (!acknowledgedMissionIds.current.has(dispatchId)) {
