@@ -724,6 +724,11 @@ export default function PatientCareRecordScreen() {
       const res = await getActiveDispatches();
       if (res && res.data && res.data.length > 0) {
         const dispatch = res.data[0];
+        // If an active dispatch is loaded, clear any lingering success modal from a previous mission
+        if (showSuccessModal && successModalData?.incidentRef && !successModalData.incidentRef.includes(String(dispatch.id))) {
+          setShowSuccessModal(false);
+          setSuccessModalData(null);
+        }
         setActiveDispatch(dispatch);
         setIsWalkIn(false);
 
@@ -979,6 +984,8 @@ export default function PatientCareRecordScreen() {
   };
 
   const handleOpenWalkInModal = () => {
+    setShowSuccessModal(false);
+    setSuccessModalData(null);
     setShowWalkInModal(true);
     // Background pre-fetch position while user is viewing the confirmation modal
     Location.getLastKnownPositionAsync({})
@@ -994,6 +1001,8 @@ export default function PatientCareRecordScreen() {
   };
 
   const handleConfirmWalkIn = async () => {
+    setShowSuccessModal(false);
+    setSuccessModalData(null);
     setIsCreatingWalkIn(true);
     try {
       let coords = cachedWalkInLocRef.current || { latitude: 0, longitude: 0 };
@@ -3926,13 +3935,262 @@ export default function PatientCareRecordScreen() {
     );
   };
 
+  const renderSuccessModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={showSuccessModal}
+      onRequestClose={handleCloseSuccessModal}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleCloseSuccessModal}
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: 20,
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={(e) => e.stopPropagation()}
+          style={{
+            width: '100%',
+            maxWidth: 345,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 28,
+            paddingHorizontal: 22,
+            paddingVertical: 24,
+            alignItems: 'center',
+            shadowColor: '#0F172A',
+            shadowOffset: { width: 0, height: 16 },
+            shadowOpacity: 0.18,
+            shadowRadius: 24,
+            elevation: 10,
+            borderWidth: 1,
+            borderColor: '#F1F5F9',
+          }}
+        >
+          {/* Concentric Dual-Ring Icon Badge */}
+          <View
+            style={{
+              width: 68,
+              height: 68,
+              borderRadius: 34,
+              backgroundColor:
+                successModalData?.type === 'offline'
+                  ? '#EFF6FF'
+                  : successModalData?.type === 'unfounded'
+                  ? '#FEF2F2'
+                  : '#ECFDF5',
+              borderWidth: 1.5,
+              borderColor:
+                successModalData?.type === 'offline'
+                  ? '#BFDBFE'
+                  : successModalData?.type === 'unfounded'
+                  ? '#FECACA'
+                  : '#A7F3D0',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 12,
+            }}
+          >
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor:
+                  successModalData?.type === 'offline'
+                    ? '#2563EB'
+                    : successModalData?.type === 'unfounded'
+                    ? '#EF4444'
+                    : '#10B981',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor:
+                  successModalData?.type === 'offline'
+                    ? '#2563EB'
+                    : successModalData?.type === 'unfounded'
+                    ? '#EF4444'
+                    : '#10B981',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 3,
+              }}
+            >
+              {successModalData?.type === 'unfounded' ? (
+                <ShieldCheck size={26} color="#FFFFFF" strokeWidth={2.4} />
+              ) : (
+                <CheckCircle2 size={26} color="#FFFFFF" strokeWidth={2.4} />
+              )}
+            </View>
+          </View>
+
+          {/* Status Pill */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              backgroundColor:
+                successModalData?.type === 'offline'
+                  ? '#DBEAFE'
+                  : successModalData?.type === 'unfounded'
+                  ? '#FEE2E2'
+                  : '#D1FAE5',
+              paddingHorizontal: 12,
+              paddingVertical: 4.5,
+              borderRadius: 20,
+              marginBottom: 10,
+            }}
+          >
+            <View
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor:
+                  successModalData?.type === 'offline'
+                    ? '#2563EB'
+                    : successModalData?.type === 'unfounded'
+                    ? '#DC2626'
+                    : '#059669',
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '800',
+                letterSpacing: 0.8,
+                color:
+                  successModalData?.type === 'offline'
+                    ? '#1D4ED8'
+                    : successModalData?.type === 'unfounded'
+                    ? '#DC2626'
+                    : '#047857',
+                textTransform: 'uppercase',
+              }}
+            >
+              {successModalData?.statusBadge || 'MISSION COMPLETED'}
+            </Text>
+          </View>
+
+          {/* Modal Title */}
+          <Text
+            style={{
+              fontSize: 20,
+              fontWeight: '800',
+              color: '#0F172A',
+              textAlign: 'center',
+              letterSpacing: -0.3,
+              marginBottom: 6,
+            }}
+          >
+            {successModalData?.title || 'PCR Submitted Successfully'}
+          </Text>
+
+          {/* Description */}
+          <Text
+            style={{
+              fontSize: 13,
+              color: '#64748B',
+              textAlign: 'center',
+              lineHeight: 18,
+              marginBottom: 16,
+              paddingHorizontal: 6,
+            }}
+          >
+            {successModalData?.message ||
+              'Patient Care Report has been officially filed and recorded in the MDRRMO command system.'}
+          </Text>
+
+          {/* Mission Receipt / Summary Card */}
+          <View
+            style={{
+              width: '100%',
+              backgroundColor: '#F8FAFC',
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              marginBottom: 18,
+              gap: 8,
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Incident Ref</Text>
+              <Text style={{ fontSize: 12.5, color: '#0F172A', fontWeight: '700' }} numberOfLines={1}>
+                {successModalData?.incidentRef || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={{ height: 1, backgroundColor: '#E2E8F0' }} />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Patient</Text>
+              <Text style={{ fontSize: 12.5, color: '#0F172A', fontWeight: '700', maxWidth: '62%' }} numberOfLines={1}>
+                {successModalData?.patientName || 'Patient'}
+              </Text>
+            </View>
+
+            <View style={{ height: 1, backgroundColor: '#E2E8F0' }} />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Time</Text>
+              <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
+                {successModalData?.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          </View>
+
+          {/* Done / Back to Missions Action Button */}
+          <TouchableOpacity
+            onPress={handleCloseSuccessModal}
+            activeOpacity={0.85}
+            style={{
+              width: '100%',
+              height: 48,
+              backgroundColor: '#208AEF',
+              borderRadius: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              shadowColor: '#208AEF',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 4,
+              gap: 6,
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15, letterSpacing: 0.2 }}>
+              Back to Missions
+            </Text>
+            <ChevronRight size={17} color="#FFFFFF" strokeWidth={2.4} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   if (isLoading) {
-    return <SafeAreaView style={styles.center}><ActivityIndicator size="large" color="#208AEF" /></SafeAreaView>;
+    return (
+      <SafeAreaView style={styles.center}>
+        {renderSuccessModal()}
+        <ActivityIndicator size="large" color="#208AEF" />
+      </SafeAreaView>
+    );
   }
 
   if (!activeDispatch) {
     return (
       <View className="flex-1 bg-slate-50">
+        {renderSuccessModal()}
         {/* Background Elements (Same as Log in form) */}
         <View className="absolute top-0 left-0 right-0 h-[60%] bg-[#208AEF] rounded-b-[60px] overflow-hidden" pointerEvents="none">
           <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
@@ -4019,6 +4277,7 @@ export default function PatientCareRecordScreen() {
 
     return (
       <View className="flex-1 bg-slate-50">
+        {renderSuccessModal()}
         {/* Background Elements (Same as Log in form) */}
         <View className="absolute top-0 left-0 right-0 h-[60%] bg-[#208AEF] rounded-b-[60px] overflow-hidden" pointerEvents="none">
           <View className="absolute top-[-50px] left-[-50px] w-64 h-64 bg-[#3B9CF8] rounded-full opacity-40" />
@@ -5116,246 +5375,7 @@ export default function PatientCareRecordScreen() {
         </Modal>
 
         {/* Professional PCR Submission & Completion Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showSuccessModal}
-          onRequestClose={handleCloseSuccessModal}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={handleCloseSuccessModal}
-            style={{
-              flex: 1,
-              backgroundColor: 'rgba(15, 23, 42, 0.65)',
-              justifyContent: 'center',
-              alignItems: 'center',
-              paddingHorizontal: 20,
-            }}
-          >
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={(e) => e.stopPropagation()}
-              style={{
-                width: '100%',
-                maxWidth: 345,
-                backgroundColor: '#FFFFFF',
-                borderRadius: 28,
-                paddingHorizontal: 22,
-                paddingVertical: 24,
-                alignItems: 'center',
-                shadowColor: '#0F172A',
-                shadowOffset: { width: 0, height: 16 },
-                shadowOpacity: 0.18,
-                shadowRadius: 24,
-                elevation: 10,
-                borderWidth: 1,
-                borderColor: '#F1F5F9',
-              }}
-            >
-              {/* Concentric Dual-Ring Icon Badge */}
-              <View
-                style={{
-                  width: 68,
-                  height: 68,
-                  borderRadius: 34,
-                  backgroundColor:
-                    successModalData?.type === 'offline'
-                      ? '#EFF6FF'
-                      : successModalData?.type === 'unfounded'
-                      ? '#FEF2F2'
-                      : '#ECFDF5',
-                  borderWidth: 1.5,
-                  borderColor:
-                    successModalData?.type === 'offline'
-                      ? '#BFDBFE'
-                      : successModalData?.type === 'unfounded'
-                      ? '#FECACA'
-                      : '#A7F3D0',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 12,
-                }}
-              >
-                <View
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor:
-                      successModalData?.type === 'offline'
-                        ? '#2563EB'
-                        : successModalData?.type === 'unfounded'
-                        ? '#EF4444'
-                        : '#10B981',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    shadowColor:
-                      successModalData?.type === 'offline'
-                        ? '#2563EB'
-                        : successModalData?.type === 'unfounded'
-                        ? '#EF4444'
-                        : '#10B981',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 8,
-                    elevation: 3,
-                  }}
-                >
-                  {successModalData?.type === 'unfounded' ? (
-                    <ShieldCheck size={26} color="#FFFFFF" strokeWidth={2.4} />
-                  ) : (
-                    <CheckCircle2 size={26} color="#FFFFFF" strokeWidth={2.4} />
-                  )}
-                </View>
-              </View>
-
-              {/* Status Pill */}
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  backgroundColor:
-                    successModalData?.type === 'offline'
-                      ? '#DBEAFE'
-                      : successModalData?.type === 'unfounded'
-                      ? '#FEE2E2'
-                      : '#D1FAE5',
-                  paddingHorizontal: 12,
-                  paddingVertical: 4.5,
-                  borderRadius: 20,
-                  marginBottom: 10,
-                }}
-              >
-                <View
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor:
-                      successModalData?.type === 'offline'
-                        ? '#2563EB'
-                        : successModalData?.type === 'unfounded'
-                        ? '#DC2626'
-                        : '#059669',
-                  }}
-                />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: '800',
-                    letterSpacing: 0.8,
-                    color:
-                      successModalData?.type === 'offline'
-                        ? '#1D4ED8'
-                        : successModalData?.type === 'unfounded'
-                        ? '#DC2626'
-                        : '#047857',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {successModalData?.statusBadge || 'MISSION COMPLETED'}
-                </Text>
-              </View>
-
-              {/* Modal Title */}
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontWeight: '800',
-                  color: '#0F172A',
-                  textAlign: 'center',
-                  letterSpacing: -0.3,
-                  marginBottom: 6,
-                }}
-              >
-                {successModalData?.title || 'PCR Submitted Successfully'}
-              </Text>
-
-              {/* Description */}
-              <Text
-                style={{
-                  fontSize: 13,
-                  color: '#64748B',
-                  textAlign: 'center',
-                  lineHeight: 18,
-                  marginBottom: 16,
-                  paddingHorizontal: 6,
-                }}
-              >
-                {successModalData?.message ||
-                  'Patient Care Report has been officially filed and recorded in the MDRRMO command system.'}
-              </Text>
-
-              {/* Mission Receipt / Summary Card */}
-              <View
-                style={{
-                  width: '100%',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: '#E2E8F0',
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  marginBottom: 18,
-                  gap: 8,
-                }}
-              >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Incident Ref</Text>
-                  <Text style={{ fontSize: 12.5, color: '#0F172A', fontWeight: '700' }} numberOfLines={1}>
-                    {successModalData?.incidentRef || 'N/A'}
-                  </Text>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: '#E2E8F0' }} />
-
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Patient</Text>
-                  <Text style={{ fontSize: 12.5, color: '#0F172A', fontWeight: '700', maxWidth: '62%' }} numberOfLines={1}>
-                    {successModalData?.patientName || 'Patient'}
-                  </Text>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: '#E2E8F0' }} />
-
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '500' }}>Time</Text>
-                  <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
-                    {successModalData?.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Done / Back to Missions Action Button */}
-              <TouchableOpacity
-                onPress={handleCloseSuccessModal}
-                activeOpacity={0.85}
-                style={{
-                  width: '100%',
-                  height: 48,
-                  backgroundColor: '#208AEF',
-                  borderRadius: 16,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: '#208AEF',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 4,
-                  gap: 6,
-                }}
-              >
-                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 15, letterSpacing: 0.2 }}>
-                  Back to Missions
-                </Text>
-                <ChevronRight size={17} color="#FFFFFF" strokeWidth={2.4} />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
+        {renderSuccessModal()}
 
       </KeyboardAvoidingView>
       </SafeAreaView>
