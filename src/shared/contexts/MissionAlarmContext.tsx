@@ -495,6 +495,12 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
             router.replace('/(responder)/dispatch');
           }
         }, 150);
+      } else {
+        setTimeout(() => {
+          try {
+            router.navigate('/(responder)');
+          } catch (_) {}
+        }, 150);
       }
     });
 
@@ -510,9 +516,11 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       const isDispatchAlert =
         data?.type === 'dispatch_assigned' ||
         data?.type === 'dispatch_reassigned' ||
+        data?.type === 'dispatch_received' ||
         data?.type === 'new_mission' ||
         data?.event_type === 'dispatch_assigned' ||
-        data?.event_type === 'dispatch_reassigned';
+        data?.event_type === 'dispatch_reassigned' ||
+        data?.event_type === 'dispatch_received';
 
       const rawDispatchId = data?.dispatch_id || data?.id;
       const dispatchId = rawDispatchId ? Number(rawDispatchId) : null;
@@ -520,15 +528,6 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       if (isDispatchAlert && dispatchId) {
         if (!acknowledgedMissionIds.current.has(dispatchId)) {
           startLoopingAlarm(dispatchId, data);
-        }
-        // When user taps the notification banner: DIRECT IMMEDIATELY TO MISSION DETAILS
-        if (isTap) {
-          console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! Directing to /(responder)/dispatch for dispatch #${dispatchId}`);
-          try {
-            router.navigate('/(responder)/dispatch');
-          } catch (_) {
-            router.replace('/(responder)/dispatch');
-          }
         }
       } else if (data?.type === 'dispatch_cancelled' || data?.event_type === 'dispatch_cancelled') {
         stopSirenAndVibration();
@@ -546,8 +545,23 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         setMissionRefreshTrigger((prev) => prev + 1);
       } else if (data?.type === 'verified_incident_available') {
         handleVerifiedIncidentNotification(data);
-        if (isTap) {
-          router.navigate('/(responder)');
+      }
+
+      // When responder taps the notification banner from Android lockscreen or notification tray:
+      if (isTap) {
+        console.log(`[MissionAlarmContext] 🚀 Notification banner tapped! Directing responder... rawDispatchId:`, rawDispatchId);
+        if (dispatchId) {
+          try {
+            router.navigate('/(responder)/dispatch');
+          } catch (_) {
+            router.replace('/(responder)/dispatch');
+          }
+        } else {
+          try {
+            router.navigate('/(responder)');
+          } catch (_) {
+            router.replace('/(responder)');
+          }
         }
       }
     };
