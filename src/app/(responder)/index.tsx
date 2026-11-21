@@ -146,9 +146,6 @@ export default function DashboardScreen() {
         });
       } else if (!res?.is_offline) {
         setActiveDispatch(null);
-        if (typeof stopAlarm === 'function') {
-          stopAlarm();
-        }
       }
     } catch (error) {
       console.log('Error fetching dispatches:', error);

@@ -138,15 +138,6 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
     soundRef.current = null;
     setSound(null);
-
-    // Deactivate background audio session
-    try {
-      await setAudioModeAsync({
-        playsInSilentMode: false,
-        shouldPlayInBackground: false,
-        interruptionMode: 'mixWithOthers',
-      });
-    } catch (_) {}
   }, []);
 
   /**
@@ -154,15 +145,24 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
    * and Android MediaSession background capabilities.
    */
   const initOrRestartAudioPlayer = useCallback(async () => {
-    if (!isAlarmPlayingRef.current) {
-      return null;
-    }
-
     try {
-      await cleanupAllAudioPlayers();
+      if (playerSubRef.current) {
+        try { playerSubRef.current.remove(); } catch (_) {}
+        playerSubRef.current = null;
+      }
 
-      if (!isAlarmPlayingRef.current) {
-        return null;
+      if (soundRef.current) {
+        try {
+          soundRef.current.loop = false;
+          soundRef.current.pause();
+          if (typeof (soundRef.current as any).clearLockScreenControls === 'function') {
+            (soundRef.current as any).clearLockScreenControls();
+          }
+          if (typeof (soundRef.current as any).release === 'function') {
+            (soundRef.current as any).release();
+          }
+        } catch (_) {}
+        soundRef.current = null;
       }
 
       // Configure audio mode to guarantee background & lockscreen playback with exclusive focus
@@ -171,10 +171,6 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
         shouldPlayInBackground: true,
         interruptionMode: 'doNotMix',
       });
-
-      if (!isAlarmPlayingRef.current) {
-        return null;
-      }
 
       // Create new player with 250ms updateInterval for ultra-responsive loop detection
       const player = createAudioPlayer(
@@ -223,24 +219,15 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
       });
       playerSubRef.current = sub;
 
-      if (isAlarmPlayingRef.current) {
-        player.play();
-        soundRef.current = player;
-        setSound(player);
-        return player;
-      } else {
-        try {
-          player.loop = false;
-          player.volume = 0;
-          player.pause();
-        } catch (_) {}
-        return null;
-      }
+      player.play();
+      soundRef.current = player;
+      setSound(player);
+      return player;
     } catch (e) {
       console.warn('[MissionAlarmContext] Error initiating emergency sound playback:', e);
       return null;
     }
-  }, [cleanupAllAudioPlayers]);
+  }, []);
 
   /**
    * Stop the looping emergency siren, vibration, watchdog, and auto-off timer
@@ -308,19 +295,6 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
 
       // Do NOT alarm if this dispatch has already been acknowledged or silenced
       if (acknowledgedMissionIds.current.has(numId) || silencedDispatchIds.current.has(numId)) {
-        return;
-      }
-
-      // If responder is ALREADY active inside the app, do NOT sound the loud continuous siren!
-      // Simply show the high-priority emergency banner on screen with a light pulse
-      if (AppState.currentState === 'active') {
-        console.log(`[MissionAlarmContext] App is currently active foreground -> showing banner without loud siren for dispatch #${numId}`);
-        activeAlarmDispatchIdRef.current = numId;
-        setIsAlarmActive(true);
-        setIncomingMission(missionData);
-        try {
-          Vibration.vibrate([0, 400, 200, 400]);
-        } catch (_) {}
         return;
       }
 
@@ -840,20 +814,26 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
     };
   }, [echo, user, startLoopingAlarm, stopSirenAndVibration]);
 
-  // AppState change: when responder opens the app (app becomes 'active'),
+  // AppState change: when responder opens the app from background/lockscreen (app becomes 'active'),
   // automatically silence/turn off the alarm sound and vibration!
+  const previousAppStateRef = useRef<AppStateStatus>(AppState.currentState);
+
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      console.log(`[MissionAlarmContext] AppState changed to: ${nextAppState}, isAlarmPlaying:`, isAlarmPlayingRef.current);
-      if (nextAppState === 'active') {
-        // Responder opened the app: automatically stop the siren sound and vibration!
-        console.log('[MissionAlarmContext] 🔕 Responder opened the app -> automatically silencing alarm sound');
+      console.log(`[MissionAlarmContext] AppState changed from ${previousAppStateRef.current} to: ${nextAppState}, isAlarmPlaying:`, isAlarmPlayingRef.current);
+      if (
+        (previousAppStateRef.current === 'background' || previousAppStateRef.current === 'inactive') &&
+        nextAppState === 'active'
+      ) {
+        // Responder opened the app from background/lockscreen: automatically stop the siren sound and vibration!
+        console.log('[MissionAlarmContext] 🔕 Responder opened the app from background/lockscreen -> automatically silencing alarm sound');
         if (activeAlarmDispatchIdRef.current) {
           silencedDispatchIds.current.add(activeAlarmDispatchIdRef.current);
         }
         stopSirenAndVibration();
         Notifications.dismissAllNotificationsAsync().catch(() => {});
       }
+      previousAppStateRef.current = nextAppState;
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -882,6 +862,7 @@ export function MissionAlarmProvider({ children }: { children: React.ReactNode }
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={() => {
+              stopSirenAndVibration();
               try {
                 router.navigate('/(responder)/dispatch');
               } catch (_) {}
