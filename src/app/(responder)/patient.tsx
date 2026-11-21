@@ -1743,6 +1743,18 @@ export default function PatientCareRecordScreen() {
     }
   };
 
+  const handleCancelExtraPatient = () => {
+    if (missionPcrs.length > 0) {
+      const returnPcr = missionPcrs[0];
+      setFormData(populatePcrToForm(returnPcr, activeDispatch));
+      setActivePcrIndex(0);
+      setStep(8);
+      setReachedReview(true);
+      setErrors({});
+      triggerToast('Cancelled extra patient. Returned to Patient #1.');
+    }
+  };
+
   const handleDeleteOrResetPcr = () => {
     setShowDeleteModal(true);
   };
@@ -1750,6 +1762,20 @@ export default function PatientCareRecordScreen() {
   const executeDeleteOrResetPcr = async () => {
     try {
       setIsSaving(true);
+      // Case 1: Extra unsaved patient draft added by mistake while other patient(s) already recorded
+      if (!formData.pcr_id && missionPcrs.length > 0) {
+        const returnPcr = missionPcrs[0];
+        setFormData(populatePcrToForm(returnPcr, activeDispatch));
+        setActivePcrIndex(0);
+        setStep(8);
+        setReachedReview(true);
+        setErrors({});
+        setShowDeleteModal(false);
+        triggerToast('Extra patient draft discarded. Returned to Patient #1.');
+        return;
+      }
+
+      // Case 2: Deleting a saved PCR record from backend
       if (formData.pcr_id && activeDispatch?.id) {
         const res = await deletePcr(activeDispatch.id, formData.pcr_id);
         if (res?.all_pcrs) {
@@ -1758,6 +1784,8 @@ export default function PatientCareRecordScreen() {
             const nextPcr = res.all_pcrs[0];
             setFormData(populatePcrToForm(nextPcr, activeDispatch));
             setActivePcrIndex(0);
+            setStep(8);
+            setReachedReview(true);
           } else {
             if (activeDispatch?.id) {
               AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
@@ -1766,8 +1794,33 @@ export default function PatientCareRecordScreen() {
             setPcrPhotos([]);
             setFormData(initialFormData);
             setActivePcrIndex(0);
+            setStep(1);
+            setReachedReview(false);
           }
         }
+      } else {
+        // Case 3: Only 1 patient exists and was not saved yet
+        if (activeDispatch?.id) {
+          AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
+          AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
+        }
+        setPcrPhotos([]);
+        setFormData(initialFormData);
+        setActivePcrIndex(0);
+        setStep(1);
+        setReachedReview(false);
+      }
+      setErrors({});
+      setShowDeleteModal(false);
+      triggerToast('PCR record deleted and form reset.');
+    } catch (err: any) {
+      // If offline or network issue, still allow local draft clearing
+      if (missionPcrs.length > 0 && !formData.pcr_id) {
+        const returnPcr = missionPcrs[0];
+        setFormData(populatePcrToForm(returnPcr, activeDispatch));
+        setActivePcrIndex(0);
+        setStep(8);
+        setReachedReview(true);
       } else {
         if (activeDispatch?.id) {
           AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
@@ -1776,23 +1829,9 @@ export default function PatientCareRecordScreen() {
         setPcrPhotos([]);
         setFormData(initialFormData);
         setActivePcrIndex(0);
+        setStep(1);
+        setReachedReview(false);
       }
-      setStep(1);
-      setReachedReview(false);
-      setErrors({});
-      setShowDeleteModal(false);
-      triggerToast('PCR record deleted and form reset.');
-    } catch (err: any) {
-      // If offline or network issue, still allow local draft clearing
-      if (activeDispatch?.id) {
-        AsyncStorage.removeItem(`@pcr_draft_${activeDispatch.id}`).catch(() => { });
-        AsyncStorage.removeItem(`@pcr_photos_${activeDispatch.id}`).catch(() => { });
-      }
-      setPcrPhotos([]);
-      setFormData(initialFormData);
-      setActivePcrIndex(0);
-      setStep(1);
-      setReachedReview(false);
       setErrors({});
       setShowDeleteModal(false);
       triggerToast('Local draft cleared.');
@@ -2016,9 +2055,9 @@ export default function PatientCareRecordScreen() {
     }
   };
 
-  const renderError = (field: string) => {
+  const renderError = (field: string, customStyle?: any) => {
     if (errors[field]) {
-      return <Text style={styles.errorText}>{errors[field]}</Text>;
+      return <Text style={[styles.errorText, customStyle]}>{errors[field]}</Text>;
     }
     return null;
   };
@@ -2435,7 +2474,7 @@ export default function PatientCareRecordScreen() {
               </View>
             )}
           </TouchableOpacity>
-          {renderError('chief_complaint')}
+          {renderError('chief_complaint', { marginTop: 8, marginBottom: 4 })}
         </View>
       </View>
     </View>
@@ -3197,31 +3236,6 @@ export default function PatientCareRecordScreen() {
                 <Text style={{ fontSize: 11, fontWeight: '700', color: '#334155' }}>Reset Auto</Text>
               </TouchableOpacity>
             )}
-          </View>
-
-          {/* Elapsed Duration Breakdown Cards */}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {durationCards.map((item, idx) => (
-              <View
-                key={idx}
-                style={{
-                  width: '48.5%',
-                  backgroundColor: item.bg,
-                  borderColor: item.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                }}
-              >
-                <Text style={{ fontSize: 10.5, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.3 }} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <Text style={{ fontSize: 17, fontWeight: '900', color: item.color, marginTop: 3 }}>
-                  {item.value}
-                </Text>
-              </View>
-            ))}
           </View>
 
           {/* Editable Operational Timestamps */}
@@ -4390,34 +4404,99 @@ export default function PatientCareRecordScreen() {
           />
           {renderStepIndicator()}
 
-          {/* Quick Option if Arrived but No Patient / False Alarm on Scene */}
-          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <TouchableOpacity
-              onPress={() => setShowUnfoundedModal(true)}
-              activeOpacity={0.8}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: '#FEF3C7',
-                borderColor: '#FDE68A',
-                borderWidth: 1,
-                borderRadius: 12,
-                paddingVertical: 9,
-                paddingHorizontal: 14,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={15} color="#D97706" />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400E' }}>
-                  No Patient Found / False Alarm?
+          {/* Quick Option if Arrived but No Patient / False Alarm on Scene (Only before any patient has been saved) */}
+          {activeDispatch && !isWalkIn && missionPcrs.length === 0 && (
+            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+              <TouchableOpacity
+                onPress={() => setShowUnfoundedModal(true)}
+                activeOpacity={0.8}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#FEF3C7',
+                  borderColor: '#FDE68A',
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  paddingVertical: 9,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={15} color="#D97706" />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#92400E' }}>
+                    No Patient Found / False Alarm?
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
+                  Report & Free Unit →
                 </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Multi-Patient Active Navigation Banner across Step 1 to 7 */}
+          {missionPcrs.length > 0 && step < 8 && (
+            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: '#EFF6FF',
+                  borderColor: '#BFDBFE',
+                  borderWidth: 1.5,
+                  borderRadius: 12,
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
+                  <Users size={15} color="#2563EB" />
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#1E40AF' }} numberOfLines={1}>
+                    {activePcrIndex >= missionPcrs.length
+                      ? `Adding Patient #${activePcrIndex + 1} (${missionPcrs.length} Saved)`
+                      : `Patient #${activePcrIndex + 1} of ${missionPcrs.length}`}
+                  </Text>
+                </View>
+                {activePcrIndex >= missionPcrs.length ? (
+                  <TouchableOpacity
+                    onPress={handleCancelExtraPatient}
+                    activeOpacity={0.8}
+                    style={{
+                      backgroundColor: '#FEE2E2',
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#FCA5A5',
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#DC2626' }}>
+                      Cancel & Return to Pt #1
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    onPress={() => setStep(8)}
+                    activeOpacity={0.8}
+                    style={{
+                      backgroundColor: '#DBEAFE',
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#BFDBFE',
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#1D4ED8' }}>
+                      Go to Review →
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: '#B45309' }}>
-                Report & Free Unit →
-              </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
+          )}
 
           <ScrollView style={styles.flex1} contentContainerStyle={styles.scroll}>
             {step === 1 && renderStep1()}
@@ -4431,8 +4510,29 @@ export default function PatientCareRecordScreen() {
           </ScrollView>
 
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 85) + 16 }]}>
-            <TouchableOpacity style={[styles.navBtn, step === 1 && styles.navBtnDisabled]} disabled={step === 1} onPress={() => setStep(step - 1)}>
-              <Text style={styles.navText}>Back</Text>
+            <TouchableOpacity
+              style={[
+                styles.navBtn,
+                step === 1 && !(activePcrIndex >= missionPcrs.length && missionPcrs.length > 0) && styles.navBtnDisabled,
+                activePcrIndex >= missionPcrs.length && missionPcrs.length > 0 && { backgroundColor: '#fee2e2', borderColor: '#fca5a5' },
+              ]}
+              disabled={step === 1 && !(activePcrIndex >= missionPcrs.length && missionPcrs.length > 0)}
+              onPress={() => {
+                if (step === 1 && activePcrIndex >= missionPcrs.length && missionPcrs.length > 0) {
+                  handleCancelExtraPatient();
+                } else {
+                  setStep(step - 1);
+                }
+              }}
+            >
+              <Text
+                style={[
+                  styles.navText,
+                  activePcrIndex >= missionPcrs.length && missionPcrs.length > 0 && { color: '#dc2626', fontWeight: '800' },
+                ]}
+              >
+                {step === 1 && activePcrIndex >= missionPcrs.length && missionPcrs.length > 0 ? 'Cancel Patient' : 'Back'}
+              </Text>
             </TouchableOpacity>
             {reachedReview && step < TOTAL_STEPS && (
               <TouchableOpacity
@@ -4848,11 +4948,17 @@ export default function PatientCareRecordScreen() {
                     <Trash2 size={28} color="#DC2626" strokeWidth={2.2} />
                   </View>
                   <Text style={{ fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center', letterSpacing: -0.3 }}>
-                    {formData.pcr_id ? 'Delete Patient Record?' : 'Discard PCR Form?'}
+                    {formData.pcr_id
+                      ? 'Delete Patient Record?'
+                      : missionPcrs.length > 0 && activePcrIndex >= missionPcrs.length
+                      ? `Discard Patient #${activePcrIndex + 1}?`
+                      : 'Discard PCR Form?'}
                   </Text>
                   <Text style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
                     {formData.pcr_id
                       ? 'This medical record will be permanently deleted from this incident mission.'
+                      : missionPcrs.length > 0 && activePcrIndex >= missionPcrs.length
+                      ? 'This extra patient draft will be discarded and you will safely return to Patient #1 with all previous patient data intact.'
                       : 'All unsaved medical data and clinical inputs for this form will be discarded.'}
                   </Text>
                 </View>
@@ -4930,7 +5036,11 @@ export default function PatientCareRecordScreen() {
                       <>
                         <Trash2 size={16} color="#FFFFFF" strokeWidth={2.2} />
                         <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF' }}>
-                          Yes, Delete
+                          {formData.pcr_id
+                            ? 'Yes, Delete'
+                            : missionPcrs.length > 0 && activePcrIndex >= missionPcrs.length
+                            ? 'Yes, Discard & Return'
+                            : 'Yes, Discard'}
                         </Text>
                       </>
                     )}
