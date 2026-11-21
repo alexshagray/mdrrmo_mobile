@@ -45,6 +45,7 @@ class NotificationService {
     };
 
     try {
+      await Notifications.setNotificationChannelAsync('emergency_dispatch_v3', emergencyChannelOptions);
       await Notifications.setNotificationChannelAsync('emergency_dispatch', emergencyChannelOptions);
       // Backwards compatibility alias
       await Notifications.setNotificationChannelAsync('mission_alarm_v2', emergencyChannelOptions);
@@ -63,6 +64,7 @@ class NotificationService {
           },
         },
       ];
+      await Notifications.setNotificationCategoryAsync('emergency_dispatch_v3', emergencyActions);
       await Notifications.setNotificationCategoryAsync('emergency_dispatch', emergencyActions);
       await Notifications.setNotificationCategoryAsync('mission_alarm_v2', emergencyActions);
     } catch (e) {
