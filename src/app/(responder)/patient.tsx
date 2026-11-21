@@ -1746,9 +1746,9 @@ export default function PatientCareRecordScreen() {
             : `Are you sure you want to permanently delete this Patient Care Record (${patientName})? All entered clinical data will be erased from this mission.`)
         : 'Are you sure you want to discard all entered data and reset this form to empty?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'No, Cancel', style: 'cancel' },
         {
-          text: isExistingSaved ? 'Delete Record' : 'Discard / Reset',
+          text: isExistingSaved ? 'Yes, Delete' : 'Yes, Discard',
           style: 'destructive',
           onPress: async () => {
             try {
