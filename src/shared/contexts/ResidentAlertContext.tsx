@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Vibration, Linkin
 import * as Notifications from 'expo-notifications';
 import { createAudioPlayer, setAudioModeAsync, AudioPlayer } from 'expo-audio';
 import { useRouter } from 'expo-router';
-import { ShieldAlert, CheckCircle, X, MapPin, Ambulance, PhoneCall, AlertCircle } from 'lucide-react-native';
+import { ShieldAlert, CheckCircle, X, MapPin, Ambulance, PhoneCall, AlertCircle, Info } from 'lucide-react-native';
 import { useAuth } from '../auth/authContext';
 import { useRealtime } from '../hooks/useRealtime';
 
@@ -57,13 +57,46 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
     const handleIncidentRejected = (e: any) => {
       console.log('IncidentRejected received on resident channel:', e);
       setResidentRefreshTrigger(prev => prev + 1);
-      const reason = e.incident?.rejection_reason;
+      const inc = e.incident;
+      const category = inc?.rejection_category || 'other';
+      const reason = inc?.rejection_reason ? ` Note: ${inc.rejection_reason}` : '';
+      
+      let title = 'INCIDENT NOT APPROVED';
+      let subtitle = `Your emergency report was not approved for dispatch.${reason}`;
+
+      if (category === 'duplicate') {
+        title = '📋 DUPLICATE INCIDENT REPORT';
+        subtitle = `Your emergency report was merged as a duplicate of an existing active incident. Responders are already actively handling this location. No violation was recorded on your account.${reason}`;
+      } else if (category === 'no_patient_found') {
+        title = 'ℹ️ NO PATIENT ON SCENE';
+        subtitle = `Responders arrived on scene and surveyed the area. Zero patients found or parties already left. No penalty was recorded on your account.${reason}`;
+      } else if (category === 'false_alarm') {
+        title = '⚠️ FALSE ALARM LOGGED';
+        subtitle = `Your emergency report was recorded as a false alarm or accidental call. No penalty was recorded.${reason}`;
+      } else if (category === 'prank') {
+        title = '🚨 REPORT FLAGGED AS PRANK';
+        subtitle = `Your emergency report was investigated and flagged as an unfounded or prank call.${reason}`;
+      } else if (category === 'out_of_jurisdiction') {
+        title = '🗺️ OUTSIDE OPOL JURISDICTION';
+        subtitle = `The reported incident location is outside MDRRMO Opol coverage.${reason}`;
+      }
+
+      // Schedule local notification with sound so user receives a system alert banner
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body: subtitle,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: null,
+      }).catch(() => {});
+
       setActiveAlert({
         type: 'rejected',
-        title: 'INCIDENT NOT APPROVED',
-        subtitle: reason 
-          ? `Your emergency report was not approved for dispatch. Reason: ${reason}`
-          : 'Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.',
+        category,
+        title,
+        subtitle,
         incident: e.incident,
       });
     };
@@ -268,6 +301,10 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
 
   const isCancelled = activeAlert?.type === 'cancelled';
   const isRejected = activeAlert?.type === 'rejected';
+  const isPrankViolation = isRejected && activeAlert?.category === 'prank';
+  const isDuplicateNotice = isRejected && activeAlert?.category === 'duplicate';
+  const isNoPatientNotice = isRejected && (activeAlert?.category === 'no_patient_found' || activeAlert?.category === 'false_alarm');
+  const isInfoRejection = isDuplicateNotice || isNoPatientNotice;
   const isEnRouteOrArrived = activeAlert?.type === 'en_route' || activeAlert?.type === 'arrived';
   const isApprovalOrAssigned = activeAlert?.type === 'verified' || activeAlert?.type === 'assigned' || activeAlert?.type === 'accepted';
   const dispatch = activeAlert?.dispatch;
@@ -284,15 +321,39 @@ export function ResidentAlertProvider({ children }: { children: React.ReactNode 
               <X size={20} color="#94A3B8" />
             </TouchableOpacity>
 
-            <View style={[styles.iconContainer, (isCancelled || isRejected) ? styles.iconCancelled : styles.iconSuccess]}>
-              {(isCancelled || isRejected) ? (
+            <View style={[
+              styles.iconContainer, 
+              (isCancelled || isPrankViolation) 
+                ? styles.iconCancelled 
+                : isInfoRejection 
+                ? { backgroundColor: isDuplicateNotice ? '#DBEAFE' : '#FEF3C7' } 
+                : styles.iconSuccess
+            ]}>
+              {(isCancelled || isPrankViolation) ? (
                 <ShieldAlert size={44} color="#DC2626" />
+              ) : isDuplicateNotice ? (
+                <Info size={44} color="#2563EB" />
+              ) : isNoPatientNotice ? (
+                <Info size={44} color="#D97706" />
+              ) : isRejected ? (
+                <AlertCircle size={44} color="#DC2626" />
               ) : (
                 <CheckCircle size={44} color="#16A34A" />
               )}
             </View>
 
-            <Text style={[styles.title, (isCancelled || isRejected) && { color: '#DC2626' }]}>
+            <Text style={[
+              styles.title, 
+              (isCancelled || isPrankViolation) 
+                ? { color: '#DC2626' } 
+                : isDuplicateNotice 
+                ? { color: '#1D4ED8' } 
+                : isNoPatientNotice 
+                ? { color: '#B45309' } 
+                : isRejected 
+                ? { color: '#DC2626' } 
+                : null
+            ]}>
               {activeAlert.title}
             </Text>
             <Text style={styles.subtitle}>

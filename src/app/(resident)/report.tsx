@@ -22,6 +22,7 @@ import {
 import {
   AlertCircle,
   Camera,
+  Info,
   MapPin,
   Clock,
   Stethoscope,
@@ -1033,86 +1034,200 @@ export default function ReportScreen() {
             }
           />
         <ScrollView contentContainerStyle={styles.standbyScrollContent} showsVerticalScrollIndicator={false}>
-          {/* Main Status Header Card */}
-          <View style={[
-            styles.statusHeroCard,
-            isRejected ? styles.statusHeroCardRejected : (isPending ? styles.statusHeroCardPending : styles.statusHeroCardActive)
-          ]}>
-            <View style={[
-              styles.statusHeroIconRing,
-              isRejected ? styles.iconRingRejected : (isPending ? styles.iconRingPending : styles.iconRingActive)
-            ]}>
-              {isRejected ? (
-                <XCircle size={38} color="#DC2626" strokeWidth={2.25} />
-              ) : isPending ? (
-                <Clock size={38} color="#D97706" strokeWidth={2.25} />
-              ) : isVerified ? (
-                <ShieldCheck size={38} color="#2563EB" strokeWidth={2.25} />
-              ) : isAssigned ? (
-                <Ambulance size={38} color="#4F46E5" strokeWidth={2.25} />
-              ) : (
-                <Navigation size={38} color="#059669" strokeWidth={2.25} />
-              )}
-            </View>
+          {(() => {
+            const rejCat = activeIncident?.rejection_category;
+            const isDuplicateReport = isRejected && rejCat === 'duplicate';
+            const isNoPatientReport = isRejected && (rejCat === 'no_patient_found' || rejCat === 'false_alarm');
+            const isPrankReport = isRejected && rejCat === 'prank';
 
-            <View style={styles.statusBadgeRow}>
-              <View style={[
-                styles.pillBadge,
-                isRejected ? styles.pillBadgeRed : (isPending ? styles.pillBadgeAmber : (isEnRoute || isArrived ? styles.pillBadgeGreen : styles.pillBadgeBlue))
-              ]}>
-                <Text style={[
-                  styles.pillBadgeText,
-                  isRejected ? styles.pillTextRed : (isPending ? styles.pillTextAmber : (isEnRoute || isArrived ? styles.pillTextGreen : styles.pillTextBlue))
+            return (
+              <>
+                {/* Main Status Header Card */}
+                <View style={[
+                  styles.statusHeroCard,
+                  isDuplicateReport
+                    ? { borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }
+                    : isNoPatientReport
+                    ? { borderColor: '#BAE6FD', backgroundColor: '#F0F9FF' }
+                    : isRejected
+                    ? styles.statusHeroCardRejected
+                    : (isPending ? styles.statusHeroCardPending : styles.statusHeroCardActive)
                 ]}>
-                  {isRejected ? 'NOT APPROVED' : (isPending ? 'PENDING VERIFICATION' : (isVerified ? 'VERIFIED • ASSIGNING' : (isAssigned ? 'RESPONDER ASSIGNED' : (isArrived ? 'ON SCENE' : 'EN ROUTE'))))}
-                </Text>
-              </View>
-            </View>
+                  <View style={[
+                    styles.statusHeroIconRing,
+                    isDuplicateReport
+                      ? { backgroundColor: '#DBEAFE' }
+                      : isNoPatientReport
+                      ? { backgroundColor: '#E0F2FE' }
+                      : isRejected
+                      ? styles.iconRingRejected
+                      : (isPending ? styles.iconRingPending : styles.iconRingActive)
+                  ]}>
+                    {isDuplicateReport ? (
+                      <Info size={38} color="#2563EB" strokeWidth={2.25} />
+                    ) : isNoPatientReport ? (
+                      <Info size={38} color="#0284C7" strokeWidth={2.25} />
+                    ) : isPrankReport ? (
+                      <AlertTriangle size={38} color="#DC2626" strokeWidth={2.25} />
+                    ) : isRejected ? (
+                      <XCircle size={38} color="#DC2626" strokeWidth={2.25} />
+                    ) : isPending ? (
+                      <Clock size={38} color="#D97706" strokeWidth={2.25} />
+                    ) : isVerified ? (
+                      <ShieldCheck size={38} color="#2563EB" strokeWidth={2.25} />
+                    ) : isAssigned ? (
+                      <Ambulance size={38} color="#4F46E5" strokeWidth={2.25} />
+                    ) : (
+                      <Navigation size={38} color="#059669" strokeWidth={2.25} />
+                    )}
+                  </View>
 
-            <Text style={[styles.statusHeroTitle, isRejected && { color: '#B91C1C' }]}>
-              {isRejected 
-                ? 'Incident Report Not Approved' 
-                : isPending 
-                ? 'Waiting for Dispatcher' 
-                : isVerified 
-                ? 'Incident Approved' 
-                : isAssigned 
-                ? 'Responder Assigned' 
-                : isArrived 
-                ? 'Responders on Scene' 
-                : 'Responder is on the way'}
-            </Text>
+                  <View style={styles.statusBadgeRow}>
+                    <View style={[
+                      styles.pillBadge,
+                      isDuplicateReport
+                        ? styles.pillBadgeBlue
+                        : isNoPatientReport
+                        ? { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD' }
+                        : isRejected
+                        ? styles.pillBadgeRed
+                        : (isPending ? styles.pillBadgeAmber : (isEnRoute || isArrived ? styles.pillBadgeGreen : styles.pillBadgeBlue))
+                    ]}>
+                      <Text style={[
+                        styles.pillBadgeText,
+                        isDuplicateReport
+                          ? styles.pillTextBlue
+                          : isNoPatientReport
+                          ? { color: '#0369A1' }
+                          : isRejected
+                          ? styles.pillTextRed
+                          : (isPending ? styles.pillTextAmber : (isEnRoute || isArrived ? styles.pillTextGreen : styles.pillTextBlue))
+                      ]}>
+                        {isDuplicateReport
+                          ? 'DUPLICATE REPORT • NO VIOLATION'
+                          : isNoPatientReport
+                          ? 'NO PATIENT ON SCENE'
+                          : isPrankReport
+                          ? 'FLAGGED AS PRANK'
+                          : isRejected
+                          ? 'NOT APPROVED'
+                          : (isPending ? 'PENDING VERIFICATION' : (isVerified ? 'VERIFIED • ASSIGNING' : (isAssigned ? 'RESPONDER ASSIGNED' : (isArrived ? 'ON SCENE' : 'EN ROUTE'))))}
+                      </Text>
+                    </View>
+                  </View>
 
-            <Text style={styles.statusHeroSubtitle}>
-              {isRejected
-                ? 'Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.'
-                : isPending
-                ? 'Your emergency report has been submitted and is currently being reviewed by the Dispatcher. Please keep your phone accessible.'
-                : isVerified
-                ? 'Your emergency report has been verified by the Dispatcher. A responder is being assigned to your incident.'
-                : isAssigned
-                ? 'A response team has been assigned to your emergency report and is preparing for departure.'
-                : isArrived
-                ? 'The emergency medical responders have arrived at your reported location.'
-                : 'Your assigned responder is currently traveling to your location. Live tracking is active.'}
-            </Text>
-          </View>
+                  <Text style={[
+                    styles.statusHeroTitle,
+                    isDuplicateReport
+                      ? { color: '#1D4ED8' }
+                      : isNoPatientReport
+                      ? { color: '#0369A1' }
+                      : isRejected
+                      ? { color: '#B91C1C' }
+                      : null
+                  ]}>
+                    {isDuplicateReport
+                      ? 'Duplicate Emergency Report'
+                      : isNoPatientReport
+                      ? 'No Patient Found on Scene'
+                      : isPrankReport
+                      ? 'Report Flagged as Prank'
+                      : isRejected 
+                      ? 'Incident Report Not Approved' 
+                      : isPending 
+                      ? 'Waiting for Dispatcher' 
+                      : isVerified 
+                      ? 'Incident Approved' 
+                      : isAssigned 
+                      ? 'Responder Assigned' 
+                      : isArrived 
+                      ? 'Responders on Scene' 
+                      : 'Responder is on the way'}
+                  </Text>
 
-          {/* Rejection Details Box */}
-          {isRejected && (
-            <View style={styles.rejectionDetailCard}>
-              <View style={styles.rejectionHeaderRow}>
-                <AlertCircle size={18} color="#DC2626" />
-                <Text style={styles.rejectionHeaderTitle}>REJECTION REASON</Text>
-              </View>
-              <Text style={styles.rejectionReasonText}>
-                {activeIncident.rejection_reason || 'No specific reason provided by the dispatcher.'}
-              </Text>
-              <Text style={styles.rejectionHelpText}>
-                If your condition is an immediate life-threatening emergency, please call the emergency hotline directly.
-              </Text>
-            </View>
-          )}
+                  <Text style={styles.statusHeroSubtitle}>
+                    {isDuplicateReport
+                      ? 'Your emergency report was merged as a duplicate of an existing active incident. Emergency teams are already actively handling this location. No violation was recorded on your account.'
+                      : isNoPatientReport
+                      ? 'Responders arrived on scene and surveyed the area. Zero patients were found, or the incident was minor and parties already left. No penalty was recorded on your account.'
+                      : isPrankReport
+                      ? 'Your emergency report was investigated and confirmed as an unfounded or intentional prank call. Intentional prank calls may lead to account suspension.'
+                      : isRejected
+                      ? 'Your emergency report was reviewed by the Dispatcher and was not approved for dispatch.'
+                      : isPending
+                      ? 'Your emergency report has been submitted and is currently being reviewed by the Dispatcher. Please keep your phone accessible.'
+                      : isVerified
+                      ? 'Your emergency report has been verified by the Dispatcher. A responder is being assigned to your incident.'
+                      : isAssigned
+                      ? 'A response team has been assigned to your emergency report and is preparing for departure.'
+                      : isArrived
+                      ? 'The emergency medical responders have arrived at your reported location.'
+                      : 'Your assigned responder is currently traveling to your location. Live tracking is active.'}
+                  </Text>
+                </View>
+
+                {/* Rejection / Notice Details Box */}
+                {isRejected && (
+                  <View style={[
+                    styles.rejectionDetailCard,
+                    isDuplicateReport
+                      ? { borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }
+                      : isNoPatientReport
+                      ? { borderColor: '#BAE6FD', backgroundColor: '#F0F9FF' }
+                      : null
+                  ]}>
+                    <View style={styles.rejectionHeaderRow}>
+                      {isDuplicateReport ? (
+                        <Info size={18} color="#2563EB" />
+                      ) : isNoPatientReport ? (
+                        <Info size={18} color="#0284C7" />
+                      ) : (
+                        <AlertCircle size={18} color="#DC2626" />
+                      )}
+                      <Text style={[
+                        styles.rejectionHeaderTitle,
+                        isDuplicateReport
+                          ? { color: '#1E40AF' }
+                          : isNoPatientReport
+                          ? { color: '#0369A1' }
+                          : null
+                      ]}>
+                        {isDuplicateReport
+                          ? 'ACTIVE INCIDENT DISPATCH NOTICE'
+                          : isNoPatientReport
+                          ? 'RESPONDER ON-SCENE REPORT'
+                          : 'REJECTION REASON'}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.rejectionReasonText,
+                      isDuplicateReport
+                        ? { color: '#1E3A8A' }
+                        : isNoPatientReport
+                        ? { color: '#0C4A6E' }
+                        : null
+                    ]}>
+                      {activeIncident.rejection_reason || (isDuplicateReport ? 'Identical incident location already actively covered by dispatched units.' : 'No specific reason provided by the dispatcher.')}
+                    </Text>
+                    <Text style={[
+                      styles.rejectionHelpText,
+                      isDuplicateReport
+                        ? { color: '#3B82F6' }
+                        : isNoPatientReport
+                        ? { color: '#0284C7' }
+                        : null
+                    ]}>
+                      {isDuplicateReport
+                        ? 'Emergency response teams are already operating at this scene. No penalty was applied to your account.'
+                        : isNoPatientReport
+                        ? 'If medical assistance is still needed or conditions changed, please call the emergency hotline directly.'
+                        : 'If your condition is an immediate life-threatening emergency, please call the emergency hotline directly.'}
+                    </Text>
+                  </View>
+                )}
+              </>
+            );
+          })()}
 
           {/* Assigned Unit Card */}
           {(isAssigned || isEnRoute || isArrived) && activeDispatch && (

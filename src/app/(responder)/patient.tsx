@@ -596,7 +596,7 @@ export default function PatientCareRecordScreen() {
   // Negative on Scene / False Alarm State
   const [showUnfoundedModal, setShowUnfoundedModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [unfoundedCategory, setUnfoundedCategory] = useState<'false_alarm' | 'prank'>('false_alarm');
+  const [unfoundedCategory, setUnfoundedCategory] = useState<'no_patient_found' | 'false_alarm' | 'duplicate' | 'prank'>('no_patient_found');
   const [unfoundedReason, setUnfoundedReason] = useState('');
   const [isSubmittingUnfounded, setIsSubmittingUnfounded] = useState(false);
 
@@ -4824,12 +4824,48 @@ export default function PatientCareRecordScreen() {
                   </Text>
                 </View>
 
-                {/* Selection Category */}
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {/* Selection Category Grid */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                  <TouchableOpacity
+                    onPress={() => setUnfoundedCategory('no_patient_found')}
+                    style={{
+                      width: '48%',
+                      padding: 10,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      alignItems: 'center',
+                      backgroundColor: unfoundedCategory === 'no_patient_found' ? '#EFF6FF' : '#F8FAFC',
+                      borderColor: unfoundedCategory === 'no_patient_found' ? '#3B82F6' : '#E2E8F0',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'no_patient_found' ? '#1D4ED8' : '#475569' }}>
+                      👤 No Patient on Scene
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Left scene / Minor</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setUnfoundedCategory('duplicate')}
+                    style={{
+                      width: '48%',
+                      padding: 10,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      alignItems: 'center',
+                      backgroundColor: unfoundedCategory === 'duplicate' ? '#EFF6FF' : '#F8FAFC',
+                      borderColor: unfoundedCategory === 'duplicate' ? '#3B82F6' : '#E2E8F0',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'duplicate' ? '#1D4ED8' : '#475569' }}>
+                      📋 Duplicate Call
+                    </Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Already handled</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     onPress={() => setUnfoundedCategory('false_alarm')}
                     style={{
-                      flex: 1,
+                      width: '48%',
                       padding: 10,
                       borderRadius: 12,
                       borderWidth: 1,
@@ -4841,13 +4877,13 @@ export default function PatientCareRecordScreen() {
                     <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'false_alarm' ? '#B45309' : '#475569' }}>
                       ⚠️ False Alarm
                     </Text>
-                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Good faith / Left scene</Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Accidental dial</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     onPress={() => setUnfoundedCategory('prank')}
                     style={{
-                      flex: 1,
+                      width: '48%',
                       padding: 10,
                       borderRadius: 12,
                       borderWidth: 1,
@@ -4859,7 +4895,7 @@ export default function PatientCareRecordScreen() {
                     <Text style={{ fontSize: 12, fontWeight: '800', color: unfoundedCategory === 'prank' ? '#DC2626' : '#475569' }}>
                       🚨 Intentional Prank
                     </Text>
-                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Fabricated hoax</Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 2, textAlign: 'center' }}>Fabricated hoax (Strike)</Text>
                   </TouchableOpacity>
                 </View>
 

@@ -209,7 +209,7 @@ export default function NavigationScreen() {
 
   // Report No Incident Found / False Alarm on Scene
   const [showUnfoundedModal, setShowUnfoundedModal] = useState(false);
-  const [unfoundedCategory, setUnfoundedCategory] = useState<'false_alarm' | 'prank'>('false_alarm');
+  const [unfoundedCategory, setUnfoundedCategory] = useState<'no_patient_found' | 'false_alarm' | 'duplicate' | 'prank'>('no_patient_found');
   const [unfoundedReason, setUnfoundedReason] = useState('');
   const [isSubmittingUnfounded, setIsSubmittingUnfounded] = useState(false);
 
@@ -973,12 +973,51 @@ export default function NavigationScreen() {
               </Text>
             </View>
 
-            {/* Selection Category */}
-            <View style={styles.unfoundedCategoryRow}>
+            {/* Selection Category Grid */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <TouchableOpacity
+                onPress={() => setUnfoundedCategory('no_patient_found')}
+                style={[
+                  styles.categoryCard,
+                  { width: '48%', marginBottom: 0 },
+                  unfoundedCategory === 'no_patient_found' ? styles.categoryCardActiveBlue : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.categoryCardTitle,
+                    unfoundedCategory === 'no_patient_found' ? styles.categoryCardTitleActiveBlue : null,
+                  ]}
+                >
+                  👤 No Patient on Scene
+                </Text>
+                <Text style={styles.categoryCardSubtitle}>Left scene / Minor</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setUnfoundedCategory('duplicate')}
+                style={[
+                  styles.categoryCard,
+                  { width: '48%', marginBottom: 0 },
+                  unfoundedCategory === 'duplicate' ? styles.categoryCardActiveBlue : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.categoryCardTitle,
+                    unfoundedCategory === 'duplicate' ? styles.categoryCardTitleActiveBlue : null,
+                  ]}
+                >
+                  📋 Duplicate Call
+                </Text>
+                <Text style={styles.categoryCardSubtitle}>Already handled</Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 onPress={() => setUnfoundedCategory('false_alarm')}
                 style={[
                   styles.categoryCard,
+                  { width: '48%', marginBottom: 0 },
                   unfoundedCategory === 'false_alarm' ? styles.categoryCardActiveAmber : null,
                 ]}
               >
@@ -990,13 +1029,14 @@ export default function NavigationScreen() {
                 >
                   ⚠️ False Alarm
                 </Text>
-                <Text style={styles.categoryCardSubtitle}>Good faith / Left scene</Text>
+                <Text style={styles.categoryCardSubtitle}>Accidental / Good faith</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={() => setUnfoundedCategory('prank')}
                 style={[
                   styles.categoryCard,
+                  { width: '48%', marginBottom: 0 },
                   unfoundedCategory === 'prank' ? styles.categoryCardActiveRed : null,
                 ]}
               >
@@ -1008,7 +1048,7 @@ export default function NavigationScreen() {
                 >
                   🚨 Intentional Prank
                 </Text>
-                <Text style={styles.categoryCardSubtitle}>Fabricated hoax</Text>
+                <Text style={styles.categoryCardSubtitle}>Fabricated hoax (Strike)</Text>
               </TouchableOpacity>
             </View>
 
@@ -1542,6 +1582,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
     alignItems: 'center',
+  },
+  categoryCardActiveBlue: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderColor: '#3B82F6',
+  },
+  categoryCardTitleActiveBlue: {
+    color: '#3B82F6',
   },
   categoryCardActiveAmber: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',

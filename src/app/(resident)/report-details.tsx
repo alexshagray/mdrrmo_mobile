@@ -170,11 +170,11 @@ export default function ReportDetailsScreen() {
     'Incident does not meet emergency dispatch criteria or is duplicate.';
 
   const rejectionCategory = report.rejection_category || 'other';
-  const categoryMeta = {
+  const categoryMetaMap: Record<string, any> = {
     duplicate: {
       badge: 'DUPLICATE INCIDENT REPORT',
       title: 'Duplicate Report Logged',
-      description: 'An emergency report for this exact incident has already been received and acknowledged by the MDRRMO Command Center. Responders are already coordinating for this location.',
+      description: 'An emergency report for this exact incident has already been received and acknowledged by the MDRRMO Command Center. Responders are already coordinating for this location. Your report was merged and no violation was recorded on your account.',
       badgeBg: '#EFF6FF',
       badgeBorder: '#BFDBFE',
       badgeText: '#1D4ED8',
@@ -183,6 +183,19 @@ export default function ReportDetailsScreen() {
       boxBorder: '#DBEAFE',
       labelColor: '#1E40AF',
       textColor: '#1E3A8A',
+    },
+    no_patient_found: {
+      badge: 'NO PATIENT ON SCENE',
+      title: 'No Patient Found on Scene',
+      description: 'Emergency responders arrived on scene and conducted an area sweep. No patient or emergency was found (parties involved may have already cleared the area). No violation or penalty was applied to your account.',
+      badgeBg: '#EFF6FF',
+      badgeBorder: '#BFDBFE',
+      badgeText: '#1D4ED8',
+      iconColor: '#2563EB',
+      boxBg: '#F8FAFC',
+      boxBorder: '#E2E8F0',
+      labelColor: '#475569',
+      textColor: '#1E293B',
     },
     out_of_jurisdiction: {
       badge: 'OUT OF JURISDICTION',
@@ -249,7 +262,9 @@ export default function ReportDetailsScreen() {
       labelColor: '#991B1B',
       textColor: '#7F1D1D',
     },
-  }[rejectionCategory] || {
+  };
+
+  const categoryMeta = categoryMetaMap[rejectionCategory] || {
     badge: 'REJECTED · NOT APPROVED',
     title: 'Dispatch Request Declined',
     description: 'This emergency report was reviewed by the MDRRMO Command Center and was not approved for dispatch.',

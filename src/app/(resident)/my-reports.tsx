@@ -87,6 +87,15 @@ export default function MyReportsScreen() {
           icon: XCircle,
         };
       }
+      if (category === 'no_patient_found') {
+        return {
+          label: 'NO PATIENT ON SCENE',
+          dotColor: 'bg-sky-500',
+          textColor: 'text-sky-700',
+          badgeBg: 'bg-sky-50 border-sky-200',
+          icon: XCircle,
+        };
+      }
       if (category === 'out_of_jurisdiction') {
         return {
           label: 'OUT OF JURISDICTION',

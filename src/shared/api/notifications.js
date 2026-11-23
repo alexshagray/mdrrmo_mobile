@@ -113,16 +113,19 @@ export const generateNotificationsFromReports = (reportsList, readMap = new Map(
 
       if (category === 'duplicate') {
         title = `Duplicate Report (${idCode})`;
-        message = `Marked as Duplicate Report. An emergency team is already responding to this incident. ${reason ? 'Note: ' + reason : ''}`;
+        message = `Marked as Duplicate Report. An emergency team is already actively responding to this incident. No violation was recorded on your account. ${reason ? 'Note: ' + reason : ''}`;
+      } else if (category === 'no_patient_found') {
+        title = `No Patient on Scene (${idCode})`;
+        message = `Responders arrived on scene and surveyed the area. Zero patients found or parties already cleared the area. No penalty was recorded on your account. ${reason ? 'Note: ' + reason : ''}`;
       } else if (category === 'out_of_jurisdiction') {
         title = `Outside Opol Jurisdiction (${idCode})`;
         message = `Incident is outside the coverage of MDRRMO Opol. ${reason ? 'Note: ' + reason : ''}`;
       } else if (category === 'false_alarm') {
         title = `False Alarm Logged (${idCode})`;
-        message = `Recorded as a false alarm or accidental call. ${reason ? 'Note: ' + reason : ''}`;
+        message = `Recorded as a false alarm or accidental call. No penalty was recorded. ${reason ? 'Note: ' + reason : ''}`;
       } else if (category === 'prank') {
         title = `Report Flagged as Prank (${idCode})`;
-        message = `Declined and flagged as an unfounded or prank call. ${reason ? 'Note: ' + reason : ''}`;
+        message = `Declined and flagged as an unfounded or prank call. Intentional prank calls may lead to account suspension. ${reason ? 'Note: ' + reason : ''}`;
       } else if (category === 'test_drill') {
         title = `System Test (${idCode})`;
         message = `Recorded as a drill or system verification. ${reason ? 'Note: ' + reason : ''}`;
