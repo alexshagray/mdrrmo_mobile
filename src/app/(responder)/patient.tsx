@@ -639,6 +639,7 @@ export default function PatientCareRecordScreen() {
   formDataRef.current = formData;
   const activeDispatchRef = useRef(activeDispatch);
   activeDispatchRef.current = activeDispatch;
+  const draftPatientRef = useRef<any>(null);
 
   // Auto-persist draft to AsyncStorage on every change
   useEffect(() => {
@@ -1729,7 +1730,15 @@ export default function PatientCareRecordScreen() {
   const handleSwitchPatient = async (targetIdx: number) => {
     if (targetIdx === activePcrIndex) return;
 
-    if (formData.patient_id && activeDispatch?.id) {
+    // If currently encoding a new patient draft (e.g. Patient #3) that is not yet saved in missionPcrs, preserve in-progress work!
+    if (activePcrIndex >= missionPcrs.length) {
+      draftPatientRef.current = {
+        formData: { ...formData },
+        photos: [...pcrPhotos],
+        step: step,
+      };
+    } else if (formData.patient_id && activeDispatch?.id) {
+      // Auto-save changes made to current saved patient before switching away
       await saveCurrentStep().catch(() => { });
     }
 
@@ -1740,6 +1749,33 @@ export default function PatientCareRecordScreen() {
       setActivePcrIndex(targetIdx);
       setStep(1);
       triggerToast(`Switched to Patient #${targetIdx + 1}`);
+    }
+  };
+
+  const handleSwitchToDraftPatient = async () => {
+    if (activePcrIndex >= missionPcrs.length) return;
+
+    // Auto-save changes made to current saved patient before switching
+    if (formData.patient_id && activeDispatch?.id) {
+      await saveCurrentStep().catch(() => { });
+    }
+
+    if (draftPatientRef.current) {
+      setFormData(draftPatientRef.current.formData);
+      setPcrPhotos(draftPatientRef.current.photos || []);
+      setStep(draftPatientRef.current.step || 1);
+      setActivePcrIndex(missionPcrs.length);
+      triggerToast(`Returned to Patient #${missionPcrs.length + 1} draft`);
+    } else {
+      const incB = activeDispatch?.incident?.barangay || activeDispatch?.incident?.barangay_name || '';
+      setFormData({
+        ...initialFormData,
+        nature_of_call: activeDispatch?.incident?.incident_type?.incident_type_name || 'Medical Emergency',
+        place_of_incident: formatPlaceOfIncident(activeDispatch?.incident?.place_of_incident, incB),
+      });
+      setActivePcrIndex(missionPcrs.length);
+      setStep(1);
+      triggerToast(`Encoding Patient #${missionPcrs.length + 1}`);
     }
   };
 
@@ -4436,64 +4472,91 @@ export default function PatientCareRecordScreen() {
           )}
 
           {/* Multi-Patient Active Navigation Banner across Step 1 to 7 */}
-          {missionPcrs.length > 0 && step < 8 && (
-            <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          {(missionPcrs.length > 0 || activePcrIndex > 0) && step < 8 && (
+            <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
               <View
                 style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: '#EFF6FF',
+                  backgroundColor: '#FFFFFF',
                   borderColor: '#BFDBFE',
                   borderWidth: 1.5,
-                  borderRadius: 12,
-                  paddingVertical: 8,
-                  paddingHorizontal: 12,
+                  borderRadius: 16,
+                  padding: 10,
+                  shadowColor: '#2563EB',
+                  shadowOpacity: 0.06,
+                  shadowRadius: 6,
+                  elevation: 2,
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
-                  <Users size={15} color="#2563EB" />
-                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#1E40AF' }} numberOfLines={1}>
-                    {activePcrIndex >= missionPcrs.length
-                      ? `Adding Patient #${activePcrIndex + 1} (${missionPcrs.length} Saved)`
-                      : `Patient #${activePcrIndex + 1} of ${missionPcrs.length}`}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 2 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Users size={15} color="#2563EB" />
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: '#1E40AF', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Mission Patients ({missionPcrs.length + (activePcrIndex >= missionPcrs.length ? 1 : 0)})
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748B' }}>
+                    Tap to switch & edit
                   </Text>
                 </View>
-                {activePcrIndex >= missionPcrs.length ? (
-                  <TouchableOpacity
-                    onPress={handleCancelExtraPatient}
-                    activeOpacity={0.8}
-                    style={{
-                      backgroundColor: '#FEE2E2',
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: '#FCA5A5',
-                    }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#DC2626' }}>
-                      Cancel & Return to Pt #1
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => setStep(8)}
-                    activeOpacity={0.8}
-                    style={{
-                      backgroundColor: '#DBEAFE',
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      borderColor: '#BFDBFE',
-                    }}
-                  >
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#1D4ED8' }}>
-                      Go to Review →
-                    </Text>
-                  </TouchableOpacity>
-                )}
+
+                {/* Horizontal Scrollable Tabs to switch immediately between patients */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, alignItems: 'center' }}>
+                  {missionPcrs.map((p, idx) => {
+                    const isSelected = activePcrIndex === idx;
+                    const patientName = [p.patient?.patient_first_name || p.patient?.first_name, p.patient?.patient_last_name || p.patient?.last_name].filter(Boolean).join(' ')
+                      || (p.patient?.is_unidentified ? 'Unidentified' : `Patient #${idx + 1}`);
+
+                    return (
+                      <TouchableOpacity
+                        key={`tab-banner-pcr-${p.id || idx}`}
+                        onPress={() => handleSwitchPatient(idx)}
+                        activeOpacity={0.8}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          paddingVertical: 7,
+                          paddingHorizontal: 11,
+                          borderRadius: 10,
+                          backgroundColor: isSelected ? '#2563EB' : '#F8FAFC',
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
+                        }}
+                      >
+                        <User size={13} color={isSelected ? '#FFFFFF' : '#64748B'} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: isSelected ? '#FFFFFF' : '#334155' }}>
+                          Pt #{idx + 1}: {patientName}
+                        </Text>
+                        <CheckCircle2 size={13} color={isSelected ? '#BFDBFE' : '#10B981'} />
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  {/* Active or Stored Draft Patient (e.g. Patient #3) */}
+                  {(activePcrIndex >= missionPcrs.length || draftPatientRef.current) && (
+                    <TouchableOpacity
+                      onPress={handleSwitchToDraftPatient}
+                      activeOpacity={0.8}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                        paddingVertical: 7,
+                        paddingHorizontal: 11,
+                        borderRadius: 10,
+                        backgroundColor: activePcrIndex >= missionPcrs.length ? '#2563EB' : '#EFF6FF',
+                        borderWidth: 1.5,
+                        borderColor: activePcrIndex >= missionPcrs.length ? '#1D4ED8' : '#93C5FD',
+                      }}
+                    >
+                      <User size={13} color={activePcrIndex >= missionPcrs.length ? '#FFFFFF' : '#2563EB'} />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: activePcrIndex >= missionPcrs.length ? '#FFFFFF' : '#1E40AF' }}>
+                        Pt #{missionPcrs.length + 1}: {activePcrIndex >= missionPcrs.length && formData.first_name ? `${formData.first_name}` : 'Drafting...'}
+                      </Text>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: activePcrIndex >= missionPcrs.length ? '#BFDBFE' : '#3B82F6' }} />
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
               </View>
             </View>
           )}
