@@ -77,6 +77,43 @@ export default function MyReportsScreen() {
     const dispatchStatus = activeDispatch?.dispatch_status;
 
     if (status === 'rejected') {
+      const category = item.rejection_category;
+      if (category === 'duplicate') {
+        return {
+          label: 'DUPLICATE REPORT',
+          dotColor: 'bg-blue-500',
+          textColor: 'text-blue-700',
+          badgeBg: 'bg-blue-50 border-blue-200',
+          icon: XCircle,
+        };
+      }
+      if (category === 'out_of_jurisdiction') {
+        return {
+          label: 'OUT OF JURISDICTION',
+          dotColor: 'bg-amber-500',
+          textColor: 'text-amber-800',
+          badgeBg: 'bg-amber-50 border-amber-200',
+          icon: XCircle,
+        };
+      }
+      if (category === 'false_alarm') {
+        return {
+          label: 'FALSE ALARM',
+          dotColor: 'bg-amber-500',
+          textColor: 'text-amber-800',
+          badgeBg: 'bg-amber-50 border-amber-200',
+          icon: XCircle,
+        };
+      }
+      if (category === 'prank') {
+        return {
+          label: 'FLAGGED PRANK',
+          dotColor: 'bg-red-500',
+          textColor: 'text-red-700',
+          badgeBg: 'bg-red-50 border-red-200',
+          icon: AlertTriangle,
+        };
+      }
       return {
         label: 'REJECTED',
         dotColor: 'bg-red-500',

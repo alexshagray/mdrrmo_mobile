@@ -169,6 +169,100 @@ export default function ReportDetailsScreen() {
     report.rejection_reason ||
     'Incident does not meet emergency dispatch criteria or is duplicate.';
 
+  const rejectionCategory = report.rejection_category || 'other';
+  const categoryMeta = {
+    duplicate: {
+      badge: 'DUPLICATE INCIDENT REPORT',
+      title: 'Duplicate Report Logged',
+      description: 'An emergency report for this exact incident has already been received and acknowledged by the MDRRMO Command Center. Responders are already coordinating for this location.',
+      badgeBg: '#EFF6FF',
+      badgeBorder: '#BFDBFE',
+      badgeText: '#1D4ED8',
+      iconColor: '#2563EB',
+      boxBg: '#EFF6FF',
+      boxBorder: '#DBEAFE',
+      labelColor: '#1E40AF',
+      textColor: '#1E3A8A',
+    },
+    out_of_jurisdiction: {
+      badge: 'OUT OF JURISDICTION',
+      title: 'Outside MDRRMO Coverage Area',
+      description: 'The reported incident location is outside the municipality of Opol. Please contact the emergency dispatch office of the respective city or municipality.',
+      badgeBg: '#FFFBEB',
+      badgeBorder: '#FDE68A',
+      badgeText: '#B45309',
+      iconColor: '#D97706',
+      boxBg: '#FFFBEB',
+      boxBorder: '#FDE68A',
+      labelColor: '#92400E',
+      textColor: '#78350F',
+    },
+    false_alarm: {
+      badge: 'FALSE ALARM / ACCIDENTAL',
+      title: 'Closed as False Alarm',
+      description: 'This emergency call was verified as an accidental dial or false alarm. No units were dispatched.',
+      badgeBg: '#FFFBEB',
+      badgeBorder: '#FDE68A',
+      badgeText: '#B45309',
+      iconColor: '#D97706',
+      boxBg: '#FFFBEB',
+      boxBorder: '#FDE68A',
+      labelColor: '#92400E',
+      textColor: '#78350F',
+    },
+    prank: {
+      badge: 'CONFIRMED PRANK CALL',
+      title: 'Report Declined as Prank',
+      description: 'This report was investigated and confirmed as an unfounded or intentional prank call.',
+      badgeBg: '#FEE2E2',
+      badgeBorder: '#FECACA',
+      badgeText: '#DC2626',
+      iconColor: '#DC2626',
+      boxBg: '#FEF2F2',
+      boxBorder: '#FECACA',
+      labelColor: '#991B1B',
+      textColor: '#7F1D1D',
+    },
+    test_drill: {
+      badge: 'DRILL / SYSTEM TEST',
+      title: 'Logged as System Test',
+      description: 'This report was logged as part of scheduled system verification or emergency drill.',
+      badgeBg: '#F0FDF4',
+      badgeBorder: '#BBF7D0',
+      badgeText: '#15803D',
+      iconColor: '#16A34A',
+      boxBg: '#F0FDF4',
+      boxBorder: '#BBF7D0',
+      labelColor: '#166534',
+      textColor: '#14532D',
+    },
+    other: {
+      badge: 'REJECTED · NOT APPROVED',
+      title: 'Dispatch Request Declined',
+      description: 'This emergency report was reviewed by the MDRRMO Command Center and was not approved for dispatch.',
+      badgeBg: '#FEE2E2',
+      badgeBorder: '#FECACA',
+      badgeText: '#DC2626',
+      iconColor: '#DC2626',
+      boxBg: '#FEF2F2',
+      boxBorder: '#FECACA',
+      labelColor: '#991B1B',
+      textColor: '#7F1D1D',
+    },
+  }[rejectionCategory] || {
+    badge: 'REJECTED · NOT APPROVED',
+    title: 'Dispatch Request Declined',
+    description: 'This emergency report was reviewed by the MDRRMO Command Center and was not approved for dispatch.',
+    badgeBg: '#FEE2E2',
+    badgeBorder: '#FECACA',
+    badgeText: '#DC2626',
+    iconColor: '#DC2626',
+    boxBg: '#FEF2F2',
+    boxBorder: '#FECACA',
+    labelColor: '#991B1B',
+    textColor: '#7F1D1D',
+  };
+
   const typeName =
     report.incident_type?.incident_type_name ||
     report.incident_type?.name ||
@@ -301,30 +395,33 @@ export default function ReportDetailsScreen() {
           {/* 1. STATUS CARD (Rejection / Pending / Resolved / Verified)     */}
           {/* ============================================================== */}
           {isRejected ? (
-            <View style={styles.rejectionCard}>
+            <View style={[styles.rejectionCard, { borderColor: categoryMeta.badgeBorder }]}>
               {/* Header Badge Row */}
               <View style={styles.statusHeaderRow}>
-                <View style={styles.rejectionIconBox}>
-                  <XCircle size={20} color="#DC2626" strokeWidth={2.4} />
+                <View style={[styles.rejectionIconBox, { backgroundColor: categoryMeta.badgeBg, borderColor: categoryMeta.badgeBorder }]}>
+                  <XCircle size={20} color={categoryMeta.iconColor} strokeWidth={2.4} />
                 </View>
-                <View style={styles.rejectionBadge}>
-                  <Text style={styles.rejectionBadgeText}>REJECTED · NOT APPROVED</Text>
+                <View style={[styles.rejectionBadge, { backgroundColor: categoryMeta.badgeBg, borderColor: categoryMeta.badgeBorder }]}>
+                  <Text style={[styles.rejectionBadgeText, { color: categoryMeta.badgeText }]}>{categoryMeta.badge}</Text>
                 </View>
               </View>
 
-              <Text style={styles.rejectionTitle}>Dispatch Request Declined</Text>
+              <Text style={styles.rejectionTitle}>{categoryMeta.title}</Text>
+              <Text style={[styles.rejectionNoticeText, { marginBottom: 12 }]}>
+                {categoryMeta.description}
+              </Text>
 
               {/* Inset Dispatcher Reason Container */}
-              <View style={styles.rejectionReasonBox}>
-                <Text style={styles.rejectionReasonLabel}>REASON PROVIDED BY DISPATCHER</Text>
-                <Text style={styles.rejectionReasonText}>{rejectionReason}</Text>
+              <View style={[styles.rejectionReasonBox, { backgroundColor: categoryMeta.boxBg, borderColor: categoryMeta.boxBorder }]}>
+                <Text style={[styles.rejectionReasonLabel, { color: categoryMeta.labelColor }]}>OFFICIAL DISPATCHER REMARKS</Text>
+                <Text style={[styles.rejectionReasonText, { color: categoryMeta.textColor }]}>{rejectionReason}</Text>
               </View>
 
               {/* Informational notice */}
               <View style={styles.rejectionNoticeRow}>
-                <Info size={16} color="#DC2626" strokeWidth={2.2} style={styles.noticeIcon} />
+                <Info size={16} color={categoryMeta.iconColor} strokeWidth={2.2} style={styles.noticeIcon} />
                 <Text style={styles.rejectionNoticeText}>
-                  Responder navigation and tracking are disabled for declined reports.
+                  Responder navigation and tracking are closed for this report.
                 </Text>
               </View>
             </View>

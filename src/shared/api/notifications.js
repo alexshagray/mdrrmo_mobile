@@ -105,16 +105,39 @@ export const generateNotificationsFromReports = (reportsList, readMap = new Map(
     // Verification or Rejection
     if (r.incident_status === 'rejected') {
       const rejectedId = `notif-${r.id}-rejected`;
-      const reason = r.verification_remarks || r.rejection_reason || 'Does not qualify for emergency vehicle dispatch.';
+      const category = r.rejection_category || 'other';
+      const reason = r.verification_remarks || r.rejection_reason || '';
+      
+      let title = `Report Not Approved (${idCode})`;
+      let message = `Dispatcher Review: Declined. ${reason ? 'Reason: ' + reason : ''}`;
+
+      if (category === 'duplicate') {
+        title = `Duplicate Report (${idCode})`;
+        message = `Marked as Duplicate Report. An emergency team is already responding to this incident. ${reason ? 'Note: ' + reason : ''}`;
+      } else if (category === 'out_of_jurisdiction') {
+        title = `Outside Opol Jurisdiction (${idCode})`;
+        message = `Incident is outside the coverage of MDRRMO Opol. ${reason ? 'Note: ' + reason : ''}`;
+      } else if (category === 'false_alarm') {
+        title = `False Alarm Logged (${idCode})`;
+        message = `Recorded as a false alarm or accidental call. ${reason ? 'Note: ' + reason : ''}`;
+      } else if (category === 'prank') {
+        title = `Report Flagged as Prank (${idCode})`;
+        message = `Declined and flagged as an unfounded or prank call. ${reason ? 'Note: ' + reason : ''}`;
+      } else if (category === 'test_drill') {
+        title = `System Test (${idCode})`;
+        message = `Recorded as a drill or system verification. ${reason ? 'Note: ' + reason : ''}`;
+      }
+
       generatedNotifs.push({
         id: rejectedId,
         reportId: r.id,
-        title: `Report Not Approved (${idCode})`,
-        message: `Dispatcher Review: Declined. Reason: ${reason}`,
+        title,
+        message: message.trim(),
         type: 'rejected',
         timestamp: r.updated_at || r.reported_at,
         read: Boolean(readMap.get(rejectedId)),
         rejectionReason: reason,
+        rejectionCategory: category,
       });
     } else if (['verified', 'assigned', 'responding', 'resolved'].includes(r.incident_status)) {
       const verifiedId = `notif-${r.id}-verified`;

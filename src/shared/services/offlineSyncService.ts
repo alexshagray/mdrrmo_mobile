@@ -341,6 +341,7 @@ class OfflineSyncService {
 
       case 'SUBMIT_PCR': {
         const payload = {
+          ...item.payload,
           operation_id: item.operationId,
           timestamp: item.timestamp,
         };
