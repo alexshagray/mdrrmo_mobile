@@ -1,4 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -293,25 +294,28 @@ function mapBackendHotlineToService(item: any): HotlineService {
 export function EmergencyHotlineGrid() {
   const [services, setServices] = useState<HotlineService[]>(SERVICES);
 
-  useEffect(() => {
-    let isMounted = true;
-    const fetchHotlines = async () => {
-      try {
-        const data = await getHotlinesApi();
-        if (Array.isArray(data) && data.length > 0 && isMounted) {
-          const mapped = data.map(mapBackendHotlineToService);
-          setServices(mapped);
+  // Automatically sync whenever resident opens the app or returns to Home screen
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const fetchHotlines = async () => {
+        try {
+          const data = await getHotlinesApi();
+          if (Array.isArray(data) && data.length > 0 && isMounted) {
+            const mapped = data.map(mapBackendHotlineToService);
+            setServices(mapped);
+          }
+        } catch (err) {
+          // Fallback to offline default SERVICES automatically
+          console.log('[Hotlines] Using offline fallback hotlines');
         }
-      } catch (err) {
-        // Fallback to offline default SERVICES automatically
-        console.log('[Hotlines] Using offline fallback hotlines');
-      }
-    };
-    fetchHotlines();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+      };
+      fetchHotlines();
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
 
   // Split items into 2-column rows
   const rows: HotlineService[][] = [];
