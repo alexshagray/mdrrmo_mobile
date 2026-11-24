@@ -301,9 +301,13 @@ export function EmergencyHotlineGrid() {
       const fetchHotlines = async () => {
         try {
           const data = await getHotlinesApi();
-          if (Array.isArray(data) && data.length > 0 && isMounted) {
-            const mapped = data.map(mapBackendHotlineToService);
-            setServices(mapped);
+          if (Array.isArray(data) && isMounted) {
+            if (data.length > 0) {
+              const mapped = data.map(mapBackendHotlineToService);
+              setServices(mapped);
+            } else {
+              setServices([]);
+            }
           }
         } catch (err) {
           // Fallback to offline default SERVICES automatically
@@ -311,8 +315,13 @@ export function EmergencyHotlineGrid() {
         }
       };
       fetchHotlines();
+
+      // Real-time polling every 8s so additions and deletions sync live automatically
+      const interval = setInterval(fetchHotlines, 8000);
+
       return () => {
         isMounted = false;
+        clearInterval(interval);
       };
     }, [])
   );
