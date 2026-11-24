@@ -542,13 +542,6 @@ export default function ReportDetailsScreen() {
                     </>
                   )}
                 </TouchableOpacity>
-              ) : isAssigned ? (
-                <View style={styles.lockedCancelNotice}>
-                  <Lock size={14} color="#64748B" />
-                  <Text style={styles.lockedCancelNoticeText}>
-                    Responders are assigned and en route. Direct cancellation is disabled. Please call the 911 hotline for urgent requests.
-                  </Text>
-                </View>
               ) : null}
             </View>
           )}

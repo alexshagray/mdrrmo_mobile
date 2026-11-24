@@ -502,15 +502,6 @@ const TrackingLockedState = ({
                   <Text style={styles.cancelReportBtnText}>Cancel Emergency Request</Text>
                 </TouchableOpacity>
               )}
-
-              {isAssigned && !isArrived && (
-                <View style={styles.lockedCancelNotice}>
-                  <Lock size={14} color="#64748B" />
-                  <Text style={styles.lockedCancelNoticeText}>
-                    Response team has been assigned. Direct cancellation is disabled. Please call the 911 hotline for urgent requests.
-                  </Text>
-                </View>
-              )}
             </View>
           </View>
         </ScrollView>

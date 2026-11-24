@@ -1446,60 +1446,6 @@ export default function ReportScreen() {
                 <Text style={styles.cancelIncidentBtnText}>Cancel Emergency Request</Text>
               </TouchableOpacity>
             )}
-
-            {!isRejected && (isAssigned || isEnRoute || isArrived) && (
-              <View style={styles.lockedCancelNotice}>
-                <Lock size={14} color="#64748B" />
-                <Text style={styles.lockedCancelNoticeText}>
-                  Responders are assigned and en route. Direct cancellation is disabled. Please call the 911 hotline for urgent requests.
-                </Text>
-              </View>
-            )}
-
-            {!isRejected && (
-              <TouchableOpacity
-                style={styles.dismissBtn}
-                onPress={() => {
-                  if (canCancel && activeIncident?.id) {
-                    Alert.alert(
-                      'Report New Emergency',
-                      'To report a new emergency, your current pending request will be cancelled. Do you want to cancel it and proceed to the report form?',
-                      [
-                        { text: 'Keep Current Report', style: 'cancel' },
-                        {
-                          text: 'Cancel & Report New',
-                          style: 'destructive',
-                          onPress: async () => {
-                            try {
-                              setIsLoading(true);
-                              await cancelEmergencyReport(activeIncident.id, 'Cancelled by resident to report new emergency');
-                              await fetchIncidents();
-                              setActiveIncident(null);
-                            } catch (err: any) {
-                              Alert.alert('Error', err?.response?.data?.message || 'Failed to cancel current request.');
-                            } finally {
-                              setIsLoading(false);
-                            }
-                          },
-                        },
-                      ]
-                    );
-                  } else {
-                    Alert.alert(
-                      'Active Response In Progress',
-                      'Responders are currently assigned or active on this emergency. Please track the live mission or contact the hotline.',
-                      [
-                        { text: 'Track Incident', onPress: () => router.push('/(resident)/track') },
-                        { text: 'Close', style: 'cancel' },
-                      ]
-                    );
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.dismissBtnText}>Cancel & Report New Emergency</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </ScrollView>
       </SafeAreaView>
