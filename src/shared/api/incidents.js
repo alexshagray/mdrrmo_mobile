@@ -103,3 +103,8 @@ export const callHotlineApi = async (latitude, longitude) => {
   });
   return response.data;
 };
+
+export const getHotlinesApi = async () => {
+  const response = await apiClient.get('/hotlines');
+  return response.data?.data || response.data || [];
+};

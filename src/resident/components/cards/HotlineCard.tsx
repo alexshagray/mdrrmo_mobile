@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,10 @@ import {
   HeartPulse,
   Siren,
   Phone,
+  Shield,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import { callHotlineApi } from '@/shared/api/incidents';
+import { callHotlineApi, getHotlinesApi } from '@/shared/api/incidents';
 import { LocationPermissionModal, CallConfirmationModal } from '@/shared/components';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -261,23 +262,74 @@ function ServiceCard({ service }: { service: HotlineService }) {
   );
 }
 
-// ─── 2×2 Grid ─────────────────────────────────────────────────────────────────
+function mapBackendHotlineToService(item: any): HotlineService {
+  let IconComponent = Siren;
+  const iconType = (item.icon_type || '').toLowerCase();
+  if (iconType === 'police') IconComponent = ShieldCheck;
+  else if (iconType === 'fire') IconComponent = Flame;
+  else if (iconType === 'medical') IconComponent = HeartPulse;
+  else if (iconType === 'shield') IconComponent = Shield;
+  else if (iconType === 'phone') IconComponent = Phone;
+
+  const accent = item.accent_color || '#208AEF';
+  const iconBg = `${accent}1A`; // 10% opacity in hex
+
+  return {
+    id: String(item.id || item.short_label || item.name),
+    name: item.name,
+    shortLabel: item.short_label || item.name,
+    description: item.description || 'Emergency assistance',
+    number: item.phone_number || item.number,
+    icon: IconComponent,
+    cardBg: '#FFFFFF',
+    accent: accent,
+    iconBg: iconBg,
+    iconColor: accent,
+    shadowColor: accent,
+  };
+}
+
+// ─── Dynamic Grid (2 Columns, Multi-Row, with Offline Fallback) ───────────────
 export function EmergencyHotlineGrid() {
-  const topRow = SERVICES.slice(0, 2);
-  const bottomRow = SERVICES.slice(2, 4);
+  const [services, setServices] = useState<HotlineService[]>(SERVICES);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchHotlines = async () => {
+      try {
+        const data = await getHotlinesApi();
+        if (Array.isArray(data) && data.length > 0 && isMounted) {
+          const mapped = data.map(mapBackendHotlineToService);
+          setServices(mapped);
+        }
+      } catch (err) {
+        // Fallback to offline default SERVICES automatically
+        console.log('[Hotlines] Using offline fallback hotlines');
+      }
+    };
+    fetchHotlines();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Split items into 2-column rows
+  const rows: HotlineService[][] = [];
+  for (let i = 0; i < services.length; i += 2) {
+    rows.push(services.slice(i, i + 2));
+  }
 
   return (
     <View style={styles.grid}>
-      <View style={styles.row}>
-        {topRow.map((s) => (
-          <ServiceCard key={s.id} service={s} />
-        ))}
-      </View>
-      <View style={styles.row}>
-        {bottomRow.map((s) => (
-          <ServiceCard key={s.id} service={s} />
-        ))}
-      </View>
+      {rows.map((row, rowIdx) => (
+        <View key={rowIdx} style={styles.row}>
+          {row.map((s) => (
+            <ServiceCard key={s.id} service={s} />
+          ))}
+          {/* If an odd number of items, insert an empty flex spacer so the single item maintains correct column width */}
+          {row.length === 1 && <View style={{ flex: 1 }} />}
+        </View>
+      ))}
     </View>
   );
 }
