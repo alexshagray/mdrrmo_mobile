@@ -87,7 +87,7 @@ const SERVICES: HotlineService[] = [
     name: 'OPOL RESQ',
     shortLabel: 'MDRRMO',
     description: '24/7 disaster & emergency response',
-    number: '0881234567',
+    number: '09670610573',
     icon: Siren,
     cardBg: '#FFFFFF',
     accent: '#208AEF',
@@ -167,7 +167,13 @@ function ServiceCard({ service }: { service: HotlineService }) {
 
   const handleCall = () => {
     // If it's the MDRRMO hotline, grab location and notify dispatcher first
-    if (service.id === 'mdrrmo') {
+    const isMdrrmo =
+      service.id === 'mdrrmo' ||
+      service.shortLabel?.toUpperCase() === 'MDRRMO' ||
+      service.name?.toUpperCase().includes('OPOL RESQ') ||
+      service.name?.toUpperCase().includes('MDRRMO');
+
+    if (isMdrrmo) {
       setIsLocationModalVisible(true);
       return;
     }
@@ -275,8 +281,13 @@ function mapBackendHotlineToService(item: any): HotlineService {
   const accent = item.accent_color || '#208AEF';
   const iconBg = `${accent}1A`; // 10% opacity in hex
 
+  const isMdrrmo =
+    (item.short_label && item.short_label.toUpperCase() === 'MDRRMO') ||
+    (item.name && item.name.toUpperCase().includes('OPOL RESQ')) ||
+    (item.name && item.name.toUpperCase().includes('MDRRMO'));
+
   return {
-    id: String(item.id || item.short_label || item.name),
+    id: isMdrrmo ? 'mdrrmo' : String(item.id || item.short_label || item.name),
     name: item.name,
     shortLabel: item.short_label || item.name,
     description: item.description || 'Emergency assistance',
