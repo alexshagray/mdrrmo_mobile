@@ -38,6 +38,11 @@ if (TaskManager && typeof TaskManager.defineTask === 'function') {
     const latest = locations[locations.length - 1];
     if (!latest?.coords) return;
 
+    // Filter clearly inaccurate background GPS readings (> 50m)
+    if (typeof latest.coords.accuracy === 'number' && latest.coords.accuracy > 50) {
+      return;
+    }
+
     try {
       const stateStr = await AsyncStorage.getItem(STORAGE_KEY);
       if (!stateStr) return;
@@ -57,6 +62,7 @@ if (TaskManager && typeof TaskManager.defineTask === 'function') {
         heading: typeof latest.coords.heading === 'number' && latest.coords.heading >= 0 ? latest.coords.heading : null,
         accuracy: typeof latest.coords.accuracy === 'number' && latest.coords.accuracy >= 0 ? latest.coords.accuracy : null,
         timestamp: new Date(latest.timestamp || Date.now()).toISOString(),
+        sequence: now,
       });
 
       lastBgSentTime = now;

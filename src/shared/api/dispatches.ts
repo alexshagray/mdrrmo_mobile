@@ -177,16 +177,19 @@ export const updateDispatchStatus = async (dispatchId: number | string, status: 
 
 /**
  * @param {string|number} dispatchId
- * @param {{ latitude: number, longitude: number, heading?: number|null, accuracy?: number|null, timestamp?: string|null }} locationData
+ * @param {{ latitude: number, longitude: number, heading?: number|null, accuracy?: number|null, timestamp?: string|null, sequence?: number|null }} locationData
  */
-export const updateDispatchLocation = async (dispatchId: number | string, { latitude, longitude, heading = null, accuracy = null, timestamp = null }: any) => {
-  const payload = {
+export const updateDispatchLocation = async (dispatchId: number | string, { latitude, longitude, heading = null, accuracy = null, timestamp = null, sequence = null }: any) => {
+  const payload: any = {
     latitude: Number(latitude),
     longitude: Number(longitude),
     heading: (typeof heading === 'number' && heading >= 0) ? heading : null,
     accuracy: (typeof accuracy === 'number' && accuracy >= 0) ? accuracy : null,
     timestamp: timestamp || new Date().toISOString()
   };
+  if (sequence) {
+    payload.sequence = Number(sequence);
+  }
 
   try {
     const response = await apiClient.post(`/responder/dispatches/${dispatchId}/location`, payload);

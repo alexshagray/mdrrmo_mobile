@@ -66,11 +66,14 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
         // Start TaskManager background location tracking for screen-off / app minimized states
         startBackgroundLocation(dispatchId, isDriver);
 
-        // 1. Check last known position immediately
+        // 1. Check last known position immediately (only if reasonably accurate)
         const lastKnown = await Location.getLastKnownPositionAsync();
-        if (lastKnown && !isCancelled) {
-          setCurrentLocation(lastKnown.coords);
-          transmitLocation(lastKnown.coords);
+        if (lastKnown && !isCancelled && lastKnown.coords) {
+          const initAcc = typeof lastKnown.coords.accuracy === 'number' ? lastKnown.coords.accuracy : null;
+          if (initAcc === null || initAcc <= 80) {
+            setCurrentLocation(lastKnown.coords);
+            transmitLocation(lastKnown.coords);
+          }
         }
 
         // 2. Watch position continuously: Driver is primary (fast & high accuracy), non-driver is standby
@@ -82,6 +85,19 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
           },
           (loc) => {
             if (isCancelled || !loc?.coords) return;
+
+            // GPS Accuracy Guard: filter out inaccurate readings
+            // If accuracy is worse than 50 meters, discard unless we have no valid position yet (and allow up to 100m for initial)
+            const accuracy = typeof loc.coords.accuracy === 'number' ? loc.coords.accuracy : null;
+            if (accuracy !== null) {
+              if (lastSentCoordsRef.current && accuracy > 50) {
+                return; // Suppress inaccurate GPS jitter
+              }
+              if (!lastSentCoordsRef.current && accuracy > 100) {
+                return; // Suppress coarse tower fix on initial acquisition
+              }
+            }
+
             setCurrentLocation(loc.coords);
 
             const now = Date.now();
@@ -99,6 +115,12 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
                 loc.coords.latitude,
                 loc.coords.longitude
               );
+
+              // Unrealistic Speed / Teleport Filter (~180 km/h)
+              const elapsedSec = timeSinceLastSent / 1000;
+              if (elapsedSec > 0 && distanceMoved > 100 && (distanceMoved / elapsedSec) > 50) {
+                return; // Discard teleport coordinate jump
+              }
 
               // Transmit if:
               // 1. Moved >= 10 meters and at least 4s elapsed
@@ -130,6 +152,7 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
     const transmitLocation = async (coords) => {
       if (isSendingRef.current || !dispatchId || isCancelled) return;
 
+      const sendTime = Date.now();
       isSendingRef.current = true;
       try {
         await updateDispatchLocation(dispatchId, {
@@ -138,14 +161,15 @@ export function useLiveDispatchTracking(dispatchId, dispatchStatus, options = {}
           heading: (typeof coords.heading === 'number' && coords.heading >= 0) ? coords.heading : null,
           accuracy: (typeof coords.accuracy === 'number' && coords.accuracy >= 0) ? coords.accuracy : null,
           timestamp: new Date().toISOString(),
+          sequence: sendTime,
         });
 
         lastSentCoordsRef.current = {
           latitude: coords.latitude,
           longitude: coords.longitude,
         };
-        lastSentTimeRef.current = Date.now();
-        setLastSentAt(new Date());
+        lastSentTimeRef.current = sendTime;
+        setLastSentAt(new Date(sendTime));
       } catch (err) {
         const isNetwork = err?.isNetworkError || !err.response || err.code === 'ERR_NETWORK';
         if (isNetwork) {
